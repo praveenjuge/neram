@@ -49,6 +49,13 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Spinner } from "@/components/ui/spinner"
@@ -67,15 +74,12 @@ function Dashboard() {
 
   return (
     <main className="min-h-svh bg-background">
-      <AppHeader actions={<NewProjectDialog />} title="Neram" />
+      <AppHeader
+        actions={<NewProjectDialog />}
+        crumb={<AllProjectsSwitcher />}
+        title="Neram"
+      />
       <section className="mx-auto grid max-w-6xl gap-6 p-5">
-        <div className="space-y-1">
-          <h1 className="font-heading text-2xl font-medium">Projects</h1>
-          <p className="text-sm text-muted-foreground">
-            Your personal boards, sorted by most recently updated.
-          </p>
-        </div>
-
         {projects === undefined ? (
           <div className="grid min-h-[40vh] place-items-center">
             <Spinner className="size-6 text-muted-foreground" />
@@ -101,6 +105,44 @@ function Dashboard() {
         )}
       </section>
     </main>
+  )
+}
+
+function AllProjectsSwitcher() {
+  const projects = useQuery(api.projects.names)
+  const prefetch = useProjectPrefetch()
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          className="font-heading"
+          data-testid="all-projects-switcher"
+          variant="ghost"
+        >
+          <span className="truncate">All Projects</span>
+          <ChevronsUpDown />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="start"
+        className="max-h-80 w-56 overflow-y-auto"
+      >
+        <DropdownMenuLabel>Go to project</DropdownMenuLabel>
+        {projects?.map((project) => (
+          <DropdownMenuItem asChild key={project._id}>
+            <Link
+              onFocus={() => prefetch(project._id)}
+              onMouseEnter={() => prefetch(project._id)}
+              params={{ projectId: project._id }}
+              to="/projects/$projectId"
+            >
+              <span className="truncate">{project.name}</span>
+            </Link>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 
