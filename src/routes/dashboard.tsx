@@ -11,6 +11,12 @@ import { ColorPicker } from "@/components/color-picker"
 import { IconPicker } from "@/components/icon-picker"
 import { messageFromError } from "@/lib/errors"
 import {
+  createProjectOptimistic,
+  removeProjectOptimistic,
+  updateProjectOptimistic,
+} from "@/lib/optimistic"
+import { useProjectPrefetch } from "@/lib/prefetch"
+import {
   DEFAULT_PROJECT_COLOR,
   getProjectColorBox,
   type ProjectColorName,
@@ -101,11 +107,14 @@ type ProjectCardProps = {
 }
 
 function ProjectCard(project: ProjectCardProps) {
+  const prefetch = useProjectPrefetch()
   return (
     <div className="group relative">
       <Link
         className="block rounded-[min(var(--radius-4xl),24px)] outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
         data-testid="project-card"
+        onFocus={() => prefetch(project.id)}
+        onMouseEnter={() => prefetch(project.id)}
         params={{ projectId: project.id }}
         to="/projects/$projectId"
       >
@@ -164,7 +173,9 @@ function IconPreview({
 }
 
 function NewProjectDialog() {
-  const createProject = useMutation(api.projects.create)
+  const createProject = useMutation(api.projects.create).withOptimisticUpdate(
+    createProjectOptimistic
+  )
   const [open, setOpen] = useState(false)
   const [name, setName] = useState("")
   const [icon, setIcon] = useState<ProjectIconName>(randomProjectIcon)
@@ -275,8 +286,12 @@ type EditProjectDialogProps = {
 }
 
 function EditProjectDialog({ id, name, icon, color }: EditProjectDialogProps) {
-  const updateProject = useMutation(api.projects.update)
-  const deleteProject = useMutation(api.projects.remove)
+  const updateProject = useMutation(api.projects.update).withOptimisticUpdate(
+    updateProjectOptimistic
+  )
+  const deleteProject = useMutation(api.projects.remove).withOptimisticUpdate(
+    removeProjectOptimistic
+  )
   const [open, setOpen] = useState(false)
   const [nextName, setNextName] = useState(name)
   const [nextIcon, setNextIcon] = useState<ProjectIconName>(

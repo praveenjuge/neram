@@ -1,18 +1,15 @@
 import { ConvexError, v } from "convex/values"
 
+import { internal } from "./_generated/api"
 import type { Doc } from "./_generated/dataModel"
 import {
+  internalMutation,
   mutation,
   query,
   type MutationCtx,
   type QueryCtx,
 } from "./_generated/server"
-
-const counts = {
-  todo: 0,
-  inProgress: 0,
-  done: 0,
-}
+import { owner, resolveCounts } from "./model"
 
 const projectSummary = v.object({
   _id: v.id("projects"),
@@ -40,14 +37,11 @@ function publicProject(project: Doc<"projects">) {
   }
 }
 
-async function subject(ctx: QueryCtx | MutationCtx) {
-  const identity = await ctx.auth.getUserIdentity()
-  if (!identity)
-    throw new ConvexError({
-      code: "UNAUTHENTICATED",
-      message: "Sign in required.",
-    })
-  return identity.subject
+async function summarize(
+  ctx: QueryCtx | MutationCtx,
+  project: Doc<"projects">
+) {
+  return { ...publicProject(project), ...(await resolveCounts(ctx, project)) }
 }
 
 function cleanName(name: string) {
@@ -87,32 +81,14 @@ export const list = query({
   args: {},
   returns: v.array(projectSummary),
   handler: async (ctx) => {
-    const ownerSubject = await subject(ctx)
+    const ownerSubject = await owner(ctx)
     const projects = await ctx.db
       .query("projects")
       .withIndex("by_owner_updated", (q) => q.eq("ownerSubject", ownerSubject))
       .order("desc")
       .collect()
 
-    return await Promise.all(
-      projects.map(async (project) => {
-        const taskCounts = { ...counts }
-        const tasks = await ctx.db
-          .query("tasks")
-          .withIndex("by_owner_project", (q) =>
-            q.eq("ownerSubject", ownerSubject).eq("projectId", project._id)
-          )
-          .collect()
-        for (const task of tasks) taskCounts[task.status] += 1
-        return {
-          ...publicProject(project),
-          taskCount: tasks.length,
-          todoCount: taskCounts.todo,
-          inProgressCount: taskCounts.inProgress,
-          doneCount: taskCounts.done,
-        }
-      })
-    )
+    return await Promise.all(projects.map((project) => summarize(ctx, project)))
   },
 })
 
@@ -120,24 +96,10 @@ export const get = query({
   args: { projectId: v.id("projects") },
   returns: v.union(v.null(), projectSummary),
   handler: async (ctx, args) => {
-    const ownerSubject = await subject(ctx)
+    const ownerSubject = await owner(ctx)
     const project = await ctx.db.get(args.projectId)
     if (!project || project.ownerSubject !== ownerSubject) return null
-    const tasks = await ctx.db
-      .query("tasks")
-      .withIndex("by_owner_project", (q) =>
-        q.eq("ownerSubject", ownerSubject).eq("projectId", project._id)
-      )
-      .collect()
-    const taskCounts = { ...counts }
-    for (const task of tasks) taskCounts[task.status] += 1
-    return {
-      ...publicProject(project),
-      taskCount: tasks.length,
-      todoCount: taskCounts.todo,
-      inProgressCount: taskCounts.inProgress,
-      doneCount: taskCounts.done,
-    }
+    return await summarize(ctx, project)
   },
 })
 
@@ -149,7 +111,7 @@ export const create = mutation({
   },
   returns: v.id("projects"),
   handler: async (ctx, args) => {
-    const ownerSubject = await subject(ctx)
+    const ownerSubject = await owner(ctx)
     const now = Date.now()
     return await ctx.db.insert("projects", {
       ownerSubject,
@@ -158,6 +120,10 @@ export const create = mutation({
       color: args.color === undefined ? undefined : cleanColor(args.color),
       createdAt: now,
       updatedAt: now,
+      taskCount: 0,
+      todoCount: 0,
+      inProgressCount: 0,
+      doneCount: 0,
     })
   },
 })
@@ -171,7 +137,7 @@ export const update = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const ownerSubject = await subject(ctx)
+    const ownerSubject = await owner(ctx)
     const project = await ctx.db.get(args.projectId)
     if (!project || project.ownerSubject !== ownerSubject) {
       throw new ConvexError({
@@ -199,7 +165,7 @@ export const remove = mutation({
   args: { projectId: v.id("projects") },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const ownerSubject = await subject(ctx)
+    const ownerSubject = await owner(ctx)
     const project = await ctx.db.get(args.projectId)
     if (!project || project.ownerSubject !== ownerSubject) {
       throw new ConvexError({
@@ -207,16 +173,107 @@ export const remove = mutation({
         message: "Project not found.",
       })
     }
-    const tasks = await ctx.db
+    // Remove the project immediately so it disappears from the dashboard, then
+    // delete its tasks in background batches to stay within transaction limits.
+    await ctx.db.delete(args.projectId)
+    await ctx.scheduler.runAfter(0, internal.projects.purgeTasks, {
+      projectId: args.projectId,
+      ownerSubject,
+    })
+    return null
+  },
+})
+
+const PURGE_BATCH = 100
+
+export const purgeTasks = internalMutation({
+  args: { projectId: v.id("projects"), ownerSubject: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const batch = await ctx.db
       .query("tasks")
       .withIndex("by_owner_project", (q) =>
-        q.eq("ownerSubject", ownerSubject).eq("projectId", args.projectId)
+        q.eq("ownerSubject", args.ownerSubject).eq("projectId", args.projectId)
       )
-      .collect()
-    for (const task of tasks) {
-      await ctx.db.delete(task._id)
+      .take(PURGE_BATCH)
+    for (const task of batch) await ctx.db.delete(task._id)
+    if (batch.length === PURGE_BATCH) {
+      await ctx.scheduler.runAfter(0, internal.projects.purgeTasks, args)
     }
-    await ctx.db.delete(args.projectId)
     return null
+  },
+})
+
+const BACKFILL_BATCH = 50
+
+/**
+ * One-time optimization: populate denormalized task counters on projects that
+ * predate them. Optional — queries already compute counts on the fly for legacy
+ * documents — but running this once removes the slow path. Run with:
+ *   npx convex run projects:backfillProjectCounts
+ */
+export const backfillProjectCounts = internalMutation({
+  args: { cursor: v.optional(v.union(v.string(), v.null())) },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const page = await ctx.db.query("projects").paginate({
+      numItems: BACKFILL_BATCH,
+      cursor: args.cursor ?? null,
+    })
+    for (const project of page.page) {
+      if (project.taskCount !== undefined) continue
+      const counts = await resolveCounts(ctx, project)
+      await ctx.db.patch(project._id, counts)
+    }
+    if (!page.isDone) {
+      await ctx.scheduler.runAfter(0, internal.projects.backfillProjectCounts, {
+        cursor: page.continueCursor,
+      })
+    }
+    return null
+  },
+})
+
+/**
+ * Re-keys the caller's documents from the legacy `identity.subject` key to the
+ * canonical `identity.tokenIdentifier`. Idempotent and safe to call repeatedly:
+ * once a user's rows are migrated the legacy lookup returns nothing. Returns the
+ * number of documents migrated so the client can loop until it reaches 0.
+ */
+export const migrateOwnership = mutation({
+  args: {},
+  returns: v.object({ migrated: v.number() }),
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (!identity) {
+      throw new ConvexError({
+        code: "UNAUTHENTICATED",
+        message: "Sign in required.",
+      })
+    }
+    const legacy = identity.subject
+    const next = identity.tokenIdentifier
+    if (legacy === next) return { migrated: 0 }
+
+    let migrated = 0
+    const projects = await ctx.db
+      .query("projects")
+      .withIndex("by_owner_updated", (q) => q.eq("ownerSubject", legacy))
+      .take(PURGE_BATCH)
+    for (const project of projects) {
+      await ctx.db.patch(project._id, { ownerSubject: next })
+      migrated += 1
+    }
+
+    const tasks = await ctx.db
+      .query("tasks")
+      .withIndex("by_owner_project", (q) => q.eq("ownerSubject", legacy))
+      .take(PURGE_BATCH * 2)
+    for (const task of tasks) {
+      await ctx.db.patch(task._id, { ownerSubject: next })
+      migrated += 1
+    }
+
+    return { migrated }
   },
 })

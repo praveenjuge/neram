@@ -15,6 +15,8 @@ import { Link, createFileRoute, useNavigate } from "@tanstack/react-router"
 import { api } from "../../convex/_generated/api"
 import type { Id } from "../../convex/_generated/dataModel"
 import { messageFromError } from "@/lib/errors"
+import { createTaskOptimistic, moveTaskOptimistic } from "@/lib/optimistic"
+import { useProjectPrefetch } from "@/lib/prefetch"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -77,7 +79,9 @@ function Board() {
   const projectIdArg = projectId as Id<"projects">
   const project = useQuery(api.projects.get, { projectId: projectIdArg })
   const tasks = useQuery(api.tasks.list, { projectId: projectIdArg })
-  const moveTask = useMutation(api.tasks.move)
+  const moveTask = useMutation(api.tasks.move).withOptimisticUpdate(
+    moveTaskOptimistic(projectIdArg)
+  )
   const [draggingId, setDraggingId] = useState<Id<"tasks"> | null>(null)
   const [overColumn, setOverColumn] = useState<Status | null>(null)
 
@@ -220,6 +224,7 @@ function ProjectSwitcher({
 }) {
   const projects = useQuery(api.projects.list)
   const navigate = useNavigate()
+  const prefetch = useProjectPrefetch()
 
   return (
     <DropdownMenu>
@@ -253,6 +258,8 @@ function ProjectSwitcher({
             <DropdownMenuRadioItem
               data-testid={`switch-to-${project._id}`}
               key={project._id}
+              onFocus={() => prefetch(project._id)}
+              onMouseEnter={() => prefetch(project._id)}
               value={project._id}
             >
               <span className="truncate">{project.name}</span>
@@ -281,7 +288,9 @@ function TaskCard({
   onDragStart: () => void
   onDragEnd: () => void
 }) {
-  const moveTask = useMutation(api.tasks.move)
+  const moveTask = useMutation(api.tasks.move).withOptimisticUpdate(
+    moveTaskOptimistic(task.projectId)
+  )
 
   async function onMove(status: Status) {
     if (status === task.status) return
@@ -357,7 +366,9 @@ function TaskCard({
 }
 
 function NewTaskDialog({ projectId }: { projectId: Id<"projects"> }) {
-  const createTask = useMutation(api.tasks.create)
+  const createTask = useMutation(api.tasks.create).withOptimisticUpdate(
+    createTaskOptimistic(projectId)
+  )
   const [open, setOpen] = useState(false)
   const [title, setTitle] = useState("")
   const [dueDate, setDueDate] = useState("")

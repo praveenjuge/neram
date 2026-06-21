@@ -1,8 +1,52 @@
 import { RedirectToSignIn, UserButton } from "@clerk/react"
-import { Authenticated, AuthLoading, Unauthenticated } from "convex/react"
+import {
+  Authenticated,
+  AuthLoading,
+  Unauthenticated,
+  useMutation,
+} from "convex/react"
 import type { ReactNode } from "react"
+import { useEffect, useRef } from "react"
 
+import { api } from "../../convex/_generated/api"
 import { ThemeToggle } from "@/components/theme-toggle"
+
+const OWNERSHIP_MIGRATION_KEY = "neram:ownership-migrated"
+
+/**
+ * Once per session, re-key the signed-in user's documents from the legacy
+ * `identity.subject` owner key to the canonical `identity.tokenIdentifier`.
+ * Best-effort and idempotent: the mutation returns 0 once there is nothing left
+ * to migrate, and any failure simply retries on the next session.
+ */
+function OwnershipMigrator() {
+  const migrate = useMutation(api.projects.migrateOwnership)
+  const started = useRef(false)
+
+  useEffect(() => {
+    if (started.current) return
+    started.current = true
+    if (sessionStorage.getItem(OWNERSHIP_MIGRATION_KEY) === "1") return
+
+    let active = true
+    void (async () => {
+      try {
+        for (let i = 0; i < 25 && active; i++) {
+          const { migrated } = await migrate({})
+          if (migrated === 0) break
+        }
+        sessionStorage.setItem(OWNERSHIP_MIGRATION_KEY, "1")
+      } catch {
+        // Ignore: a later session will retry.
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [migrate])
+
+  return null
+}
 
 export function Protected({ children }: { children: ReactNode }) {
   return (
@@ -13,7 +57,10 @@ export function Protected({ children }: { children: ReactNode }) {
       <Unauthenticated>
         <RedirectToSignIn signInForceRedirectUrl="/dashboard" />
       </Unauthenticated>
-      <Authenticated>{children}</Authenticated>
+      <Authenticated>
+        <OwnershipMigrator />
+        {children}
+      </Authenticated>
     </>
   )
 }

@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as model from "../model.js";
 import type * as projects from "../projects.js";
 import type * as tasks from "../tasks.js";
 
@@ -18,6 +19,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  model: typeof model;
   projects: typeof projects;
   tasks: typeof tasks;
 }>;
