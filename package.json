@@ -4,7 +4,9 @@
   "version": "0.0.1",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "bun run --parallel dev:frontend dev:backend",
+    "dev:frontend": "vite",
+    "dev:backend": "convex dev",
     "routes": "tsr generate",
     "build": "bun run routes && tsc -b && vite build",
     "lint": "eslint .",
