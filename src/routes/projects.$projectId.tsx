@@ -36,12 +36,15 @@ function Board() {
   const [dueDate, setDueDate] = useState("")
   const [error, setError] = useState("")
 
-  async function onSubmit(event: FormEvent) {
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError("")
-    const nextTitle = title.trim()
+    const form = event.currentTarget
+    const formData = new FormData(form)
+    const nextTitle = String(formData.get("title") ?? "").trim()
+    const nextDueDate = String(formData.get("dueDate") ?? "")
     if (!nextTitle) return setError("Task title is required.")
-    await createTask({ projectId: projectIdArg, title: nextTitle.slice(0, 120), dueDate: dueDate || undefined })
+    await createTask({ projectId: projectIdArg, title: nextTitle.slice(0, 120), dueDate: nextDueDate || undefined })
     setTitle("")
     setDueDate("")
   }
@@ -66,6 +69,7 @@ function Board() {
               className="h-9 min-w-56 rounded-md border bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
               data-testid="task-title-input"
               maxLength={120}
+              name="title"
               onChange={(event) => setTitle(event.target.value)}
               placeholder="New task"
               value={title}
@@ -74,6 +78,7 @@ function Board() {
               aria-label="Due date"
               className="h-9 rounded-md border bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
               data-testid="task-due-date-input"
+              name="dueDate"
               onChange={(event) => setDueDate(event.target.value)}
               type="date"
               value={dueDate}

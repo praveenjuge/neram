@@ -22,10 +22,12 @@ function Dashboard() {
   const [name, setName] = useState("")
   const [error, setError] = useState("")
 
-  async function onSubmit(event: FormEvent) {
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError("")
-    const nextName = name.trim()
+    const form = event.currentTarget
+    const formData = new FormData(form)
+    const nextName = String(formData.get("name") ?? "").trim()
     if (!nextName) return setError("Project name is required.")
     await createProject({ name: nextName.slice(0, 80) })
     setName("")
@@ -41,6 +43,7 @@ function Dashboard() {
             className="h-9 min-w-0 flex-1 rounded-md border bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
             data-testid="project-name-input"
             maxLength={80}
+            name="name"
             onChange={(event) => setName(event.target.value)}
             placeholder="New project"
             value={name}
