@@ -1,6 +1,6 @@
 import { ConvexError, v } from "convex/values"
 
-import type { Id } from "./_generated/dataModel"
+import type { Doc, Id } from "./_generated/dataModel"
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server"
 import { status } from "./schema"
 
@@ -14,6 +14,19 @@ const task = v.object({
   createdAt: v.number(),
   updatedAt: v.number(),
 })
+
+function publicTask(taskDoc: Doc<"tasks">) {
+  return {
+    _id: taskDoc._id,
+    _creationTime: taskDoc._creationTime,
+    projectId: taskDoc.projectId,
+    title: taskDoc.title,
+    dueDate: taskDoc.dueDate,
+    status: taskDoc.status,
+    createdAt: taskDoc.createdAt,
+    updatedAt: taskDoc.updatedAt,
+  }
+}
 
 async function subject(ctx: QueryCtx | MutationCtx) {
   const identity = await ctx.auth.getUserIdentity()
@@ -51,10 +64,11 @@ export const list = query({
   handler: async (ctx, args) => {
     const ownerSubject = await subject(ctx)
     await requireProject(ctx, args.projectId, ownerSubject)
-    return await ctx.db
+    const tasks = await ctx.db
       .query("tasks")
       .withIndex("by_owner_project", (q) => q.eq("ownerSubject", ownerSubject).eq("projectId", args.projectId))
       .collect()
+    return tasks.map(publicTask)
   },
 })
 

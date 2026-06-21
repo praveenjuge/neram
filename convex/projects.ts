@@ -1,5 +1,6 @@
 import { ConvexError, v } from "convex/values"
 
+import type { Doc } from "./_generated/dataModel"
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server"
 
 const counts = {
@@ -19,6 +20,16 @@ const projectSummary = v.object({
   inProgressCount: v.number(),
   doneCount: v.number(),
 })
+
+function publicProject(project: Doc<"projects">) {
+  return {
+    _id: project._id,
+    _creationTime: project._creationTime,
+    name: project.name,
+    createdAt: project.createdAt,
+    updatedAt: project.updatedAt,
+  }
+}
 
 async function subject(ctx: QueryCtx | MutationCtx) {
   const identity = await ctx.auth.getUserIdentity()
@@ -54,7 +65,7 @@ export const list = query({
           .collect()
         for (const task of tasks) taskCounts[task.status] += 1
         return {
-          ...project,
+          ...publicProject(project),
           taskCount: tasks.length,
           todoCount: taskCounts.todo,
           inProgressCount: taskCounts.inProgress,
@@ -79,7 +90,7 @@ export const get = query({
     const taskCounts = { ...counts }
     for (const task of tasks) taskCounts[task.status] += 1
     return {
-      ...project,
+      ...publicProject(project),
       taskCount: tasks.length,
       todoCount: taskCounts.todo,
       inProgressCount: taskCounts.inProgress,
