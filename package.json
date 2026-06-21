@@ -23,6 +23,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "convex": "^1.41.0",
+    "convex-helpers": "^0.1.119",
     "lucide-react": "^1.21.0",
     "radix-ui": "^1.6.0",
     "react": "^19.2.6",

@@ -1,4 +1,5 @@
 import { RedirectToSignIn, UserButton } from "@clerk/react"
+import { Link } from "@tanstack/react-router"
 import {
   Authenticated,
   AuthLoading,
@@ -80,9 +81,9 @@ export function AppHeader({
   return (
     <header className="flex items-center justify-between gap-4 border-b px-5 py-3">
       <div className="flex min-w-0 items-center gap-1.5">
-        <a className="font-heading font-medium" href="/dashboard">
+        <Link className="font-heading font-medium" to="/dashboard">
           {title}
-        </a>
+        </Link>
         {crumb ? (
           <>
             <span className="pl-3 font-heading font-medium text-muted-foreground">
