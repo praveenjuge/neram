@@ -183,7 +183,6 @@ function NewProjectDialog() {
   const [name, setName] = useState("")
   const [icon, setIcon] = useState<ProjectIconName>(randomProjectIcon)
   const [color, setColor] = useState<ProjectColorName>(randomProjectColor)
-  const [submitting, setSubmitting] = useState(false)
 
   function onOpenChange(next: boolean) {
     if (next) {
@@ -195,7 +194,7 @@ function NewProjectDialog() {
     setOpen(next)
   }
 
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+  function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const nextName = name.trim()
     if (!nextName) {
@@ -203,19 +202,14 @@ function NewProjectDialog() {
       return
     }
 
-    setSubmitting(true)
-    try {
-      await createProject({ name: nextName.slice(0, 80), icon, color })
-      toast.success("Project created.")
-      setName("")
-      setIcon(randomProjectIcon())
-      setColor(randomProjectColor())
-      setOpen(false)
-    } catch (error) {
-      toast.error(messageFromError(error, "Could not create the project."))
-    } finally {
-      setSubmitting(false)
-    }
+    // Fire optimistically and close immediately: the card is already in the
+    // list. A failure rolls back the optimistic insert and surfaces a toast.
+    void createProject({ name: nextName.slice(0, 80), icon, color })
+      .then(() => toast.success("Project created."))
+      .catch((error) =>
+        toast.error(messageFromError(error, "Could not create the project."))
+      )
+    setOpen(false)
   }
 
   return (
@@ -251,15 +245,11 @@ function NewProjectDialog() {
           </div>
           <div className="grid gap-2">
             <Label>Icon</Label>
-            <IconPicker disabled={submitting} onChange={setIcon} value={icon} />
+            <IconPicker onChange={setIcon} value={icon} />
           </div>
           <div className="grid gap-2">
             <Label>Color</Label>
-            <ColorPicker
-              disabled={submitting}
-              onChange={setColor}
-              value={color}
-            />
+            <ColorPicker onChange={setColor} value={color} />
           </div>
           <DialogFooter>
             <DialogClose asChild>
@@ -267,12 +257,8 @@ function NewProjectDialog() {
                 Cancel
               </Button>
             </DialogClose>
-            <Button
-              data-testid="create-project-button"
-              disabled={submitting}
-              type="submit"
-            >
-              <FolderPlus /> {submitting ? "Creating..." : "Create project"}
+            <Button data-testid="create-project-button" type="submit">
+              <FolderPlus /> Create project
             </Button>
           </DialogFooter>
         </form>
@@ -304,8 +290,6 @@ function EditProjectDialog({ id, name, icon, color }: EditProjectDialogProps) {
     (color as ProjectColorName) ?? DEFAULT_PROJECT_COLOR
   )
   const [confirmDelete, setConfirmDelete] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
-  const [deleting, setDeleting] = useState(false)
 
   function onOpenChange(next: boolean) {
     if (next) {
@@ -317,7 +301,7 @@ function EditProjectDialog({ id, name, icon, color }: EditProjectDialogProps) {
     setOpen(next)
   }
 
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+  function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const trimmed = nextName.trim()
     if (!trimmed) {
@@ -325,34 +309,28 @@ function EditProjectDialog({ id, name, icon, color }: EditProjectDialogProps) {
       return
     }
 
-    setSubmitting(true)
-    try {
-      await updateProject({
-        projectId: id,
-        name: trimmed.slice(0, 80),
-        icon: nextIcon,
-        color: nextColor,
-      })
-      toast.success("Project updated.")
-      setOpen(false)
-    } catch (error) {
-      toast.error(messageFromError(error, "Could not update the project."))
-    } finally {
-      setSubmitting(false)
-    }
+    // Optimistic edit renders instantly, so close right away.
+    void updateProject({
+      projectId: id,
+      name: trimmed.slice(0, 80),
+      icon: nextIcon,
+      color: nextColor,
+    })
+      .then(() => toast.success("Project updated."))
+      .catch((error) =>
+        toast.error(messageFromError(error, "Could not update the project."))
+      )
+    setOpen(false)
   }
 
-  async function onDelete() {
-    setDeleting(true)
-    try {
-      await deleteProject({ projectId: id })
-      toast.success("Project deleted.")
-      setOpen(false)
-    } catch (error) {
-      toast.error(messageFromError(error, "Could not delete the project."))
-    } finally {
-      setDeleting(false)
-    }
+  function onDelete() {
+    // Optimistic remove drops the card immediately; close and let it run.
+    void deleteProject({ projectId: id })
+      .then(() => toast.success("Project deleted."))
+      .catch((error) =>
+        toast.error(messageFromError(error, "Could not delete the project."))
+      )
+    setOpen(false)
   }
 
   return (
@@ -393,19 +371,11 @@ function EditProjectDialog({ id, name, icon, color }: EditProjectDialogProps) {
           </div>
           <div className="grid gap-2">
             <Label>Icon</Label>
-            <IconPicker
-              disabled={submitting || deleting}
-              onChange={setNextIcon}
-              value={nextIcon}
-            />
+            <IconPicker onChange={setNextIcon} value={nextIcon} />
           </div>
           <div className="grid gap-2">
             <Label>Color</Label>
-            <ColorPicker
-              disabled={submitting || deleting}
-              onChange={setNextColor}
-              value={nextColor}
-            />
+            <ColorPicker onChange={setNextColor} value={nextColor} />
           </div>
           {confirmDelete ? (
             <div className="grid gap-3 rounded-2xl border border-destructive/30 bg-destructive/5 p-3">
@@ -414,7 +384,6 @@ function EditProjectDialog({ id, name, icon, color }: EditProjectDialogProps) {
               </p>
               <div className="flex justify-end gap-2">
                 <Button
-                  disabled={deleting}
                   onClick={() => setConfirmDelete(false)}
                   type="button"
                   variant="ghost"
@@ -423,12 +392,11 @@ function EditProjectDialog({ id, name, icon, color }: EditProjectDialogProps) {
                 </Button>
                 <Button
                   data-testid="confirm-delete-project-button"
-                  disabled={deleting}
                   onClick={onDelete}
                   type="button"
                   variant="destructive"
                 >
-                  <Trash2 /> {deleting ? "Deleting..." : "Delete project"}
+                  <Trash2 /> Delete project
                 </Button>
               </div>
             </div>
@@ -437,7 +405,6 @@ function EditProjectDialog({ id, name, icon, color }: EditProjectDialogProps) {
             <Button
               className={confirmDelete ? "invisible" : undefined}
               data-testid="delete-project-trigger"
-              disabled={submitting}
               onClick={() => setConfirmDelete(true)}
               type="button"
               variant="destructive"
@@ -450,12 +417,8 @@ function EditProjectDialog({ id, name, icon, color }: EditProjectDialogProps) {
                   Cancel
                 </Button>
               </DialogClose>
-              <Button
-                data-testid="save-project-button"
-                disabled={submitting}
-                type="submit"
-              >
-                {submitting ? "Saving..." : "Save changes"}
+              <Button data-testid="save-project-button" type="submit">
+                Save changes
               </Button>
             </div>
           </DialogFooter>

@@ -9,7 +9,7 @@ import {
 } from "lucide-react"
 import type { FunctionReturnType } from "convex/server"
 import type { FormEvent } from "react"
-import { useState } from "react"
+import { Fragment, useState } from "react"
 import { toast } from "sonner"
 
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router"
@@ -61,10 +61,27 @@ const columns = [
 type Status = (typeof columns)[number]["key"]
 type Task = FunctionReturnType<typeof api.tasks.list>[number]
 
-const statusLabels: Record<Status, string> = {
-  todo: "Todo",
-  inProgress: "In Progress",
-  done: "Done",
+/**
+ * Computes the fractional `position` for a task dropped at `insertIndex` within
+ * a destination column. `dest` is the column's tasks sorted by position (it may
+ * still contain the moving task when reordering within the same column).
+ */
+function positionFor(dest: Task[], insertIndex: number, movingId: Id<"tasks">) {
+  const list = dest.filter((task) => task._id !== movingId)
+  let adjusted = 0
+  for (let i = 0; i < insertIndex && i < dest.length; i++) {
+    if (dest[i]._id !== movingId) adjusted++
+  }
+  const before = list[adjusted - 1]
+  const after = list[adjusted]
+  if (!before && !after) return Date.now()
+  if (!before) return after.position - 1
+  if (!after) return before.position + 1
+  return (before.position + after.position) / 2
+}
+
+function DropIndicator() {
+  return <div className="h-0.5 rounded-full bg-primary/70" />
 }
 
 export const Route = createFileRoute("/projects/$projectId")({
@@ -85,15 +102,31 @@ function Board() {
   )
   const [draggingId, setDraggingId] = useState<Id<"tasks"> | null>(null)
   const [overColumn, setOverColumn] = useState<Status | null>(null)
+  const [overIndex, setOverIndex] = useState<number | null>(null)
 
-  async function handleDrop(taskId: Id<"tasks">, status: Status) {
+  async function handleDrop(
+    taskId: Id<"tasks">,
+    status: Status,
+    insertIndex: number
+  ) {
     setOverColumn(null)
+    setOverIndex(null)
     setDraggingId(null)
-    const task = tasks?.find((item) => item._id === taskId)
-    if (!task || task.status === status) return
+    const moving = tasks?.find((item) => item._id === taskId)
+    if (!moving) return
+    const dest = (tasks ?? [])
+      .filter((item) => item.status === status)
+      .sort((a, b) => a.position - b.position)
+    // Skip the write when the card is dropped back into its current slot.
+    if (moving.status === status) {
+      const currentIndex = dest.findIndex((item) => item._id === taskId)
+      if (insertIndex === currentIndex || insertIndex === currentIndex + 1) {
+        return
+      }
+    }
+    const position = positionFor(dest, insertIndex, taskId)
     try {
-      await moveTask({ taskId, status })
-      toast.success(`Moved to ${statusLabels[status]}.`)
+      await moveTask({ taskId, status, position })
     } catch (error) {
       toast.error(messageFromError(error, "Could not move the task."))
     }
@@ -148,9 +181,9 @@ function Board() {
       <section className="mx-auto grid max-w-7xl gap-5 p-5">
         <div className="grid gap-3 lg:grid-cols-3">
           {columns.map((column) => {
-            const columnTasks = tasks.filter(
-              (task) => task.status === column.key
-            )
+            const columnTasks = tasks
+              .filter((task) => task.status === column.key)
+              .sort((a, b) => a.position - b.position)
             const isOver = overColumn === column.key
             return (
               <section
@@ -170,6 +203,7 @@ function Board() {
                     setOverColumn((current) =>
                       current === column.key ? null : current
                     )
+                    setOverIndex(null)
                   }
                 }}
                 onDragOver={(event) => {
@@ -183,31 +217,56 @@ function Board() {
                   const taskId = event.dataTransfer.getData(
                     "text/plain"
                   ) as Id<"tasks">
-                  if (taskId) void handleDrop(taskId, column.key)
+                  const insertIndex =
+                    overColumn === column.key && overIndex !== null
+                      ? overIndex
+                      : columnTasks.length
+                  if (taskId) void handleDrop(taskId, column.key, insertIndex)
                 }}
               >
                 <div className="flex items-center justify-between px-1">
                   <h2 className="text-sm font-medium">{column.label}</h2>
                   <Badge variant="secondary">{columnTasks.length}</Badge>
                 </div>
-                <div className="grid gap-2">
-                  {columnTasks.map((task) => (
-                    <TaskCard
-                      isDragging={draggingId === task._id}
-                      key={task._id}
-                      onDragEnd={() => {
-                        setDraggingId(null)
-                        setOverColumn(null)
-                      }}
-                      onDragStart={() => setDraggingId(task._id)}
-                      task={task}
-                    />
+                <div className="flex flex-1 flex-col gap-2">
+                  {columnTasks.map((task, index) => (
+                    <Fragment key={task._id}>
+                      {isOver && overIndex === index ? <DropIndicator /> : null}
+                      <TaskCard
+                        isDragging={draggingId === task._id}
+                        onDragEnd={() => {
+                          setDraggingId(null)
+                          setOverColumn(null)
+                          setOverIndex(null)
+                        }}
+                        onDragStart={() => setDraggingId(task._id)}
+                        onHover={() => {
+                          setOverColumn(column.key)
+                          setOverIndex(index)
+                        }}
+                        task={task}
+                      />
+                    </Fragment>
                   ))}
+                  {isOver && overIndex === columnTasks.length ? (
+                    <DropIndicator />
+                  ) : null}
                   {columnTasks.length === 0 ? (
                     <p className="rounded-2xl border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
                       Nothing here yet.
                     </p>
                   ) : null}
+                  <div
+                    aria-hidden
+                    className="min-h-8 flex-1"
+                    onDragOver={(event) => {
+                      if (!draggingId) return
+                      event.preventDefault()
+                      event.dataTransfer.dropEffect = "move"
+                      setOverColumn(column.key)
+                      setOverIndex(columnTasks.length)
+                    }}
+                  />
                 </div>
               </section>
             )
@@ -225,7 +284,7 @@ function ProjectSwitcher({
   currentId: Id<"projects">
   currentName: string
 }) {
-  const projects = useQuery(api.projects.list)
+  const projects = useQuery(api.projects.names)
   const navigate = useNavigate()
   const prefetch = useProjectPrefetch()
 
@@ -285,11 +344,13 @@ function TaskCard({
   isDragging,
   onDragStart,
   onDragEnd,
+  onHover,
 }: {
   task: Task
   isDragging: boolean
   onDragStart: () => void
   onDragEnd: () => void
+  onHover: () => void
 }) {
   const moveTask = useMutation(api.tasks.move).withOptimisticUpdate(
     moveTaskOptimistic(task.projectId)
@@ -299,7 +360,6 @@ function TaskCard({
     if (status === task.status) return
     try {
       await moveTask({ taskId: task._id, status })
-      toast.success(`Moved to ${statusLabels[status]}.`)
     } catch (error) {
       toast.error(messageFromError(error, "Could not move the task."))
     }
@@ -314,6 +374,11 @@ function TaskCard({
       data-testid="task-card"
       draggable
       onDragEnd={onDragEnd}
+      onDragOver={(event) => {
+        event.preventDefault()
+        event.dataTransfer.dropEffect = "move"
+        onHover()
+      }}
       onDragStart={(event) => {
         event.dataTransfer.effectAllowed = "move"
         event.dataTransfer.setData("text/plain", task._id)
@@ -375,14 +440,13 @@ function NewTaskDialog({ projectId }: { projectId: Id<"projects"> }) {
   const [open, setOpen] = useState(false)
   const [title, setTitle] = useState("")
   const [dueDate, setDueDate] = useState("")
-  const [submitting, setSubmitting] = useState(false)
 
   function reset() {
     setTitle("")
     setDueDate("")
   }
 
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+  function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const nextTitle = title.trim()
     if (!nextTitle) {
@@ -390,21 +454,19 @@ function NewTaskDialog({ projectId }: { projectId: Id<"projects"> }) {
       return
     }
 
-    setSubmitting(true)
-    try {
-      await createTask({
-        projectId,
-        title: nextTitle.slice(0, 120),
-        dueDate: dueDate || undefined,
-      })
-      toast.success("Task added.")
-      reset()
-      setOpen(false)
-    } catch (error) {
-      toast.error(messageFromError(error, "Could not add the task."))
-    } finally {
-      setSubmitting(false)
-    }
+    // Fire optimistically: the card appears instantly, so close the dialog now
+    // and surface only failures. The optimistic update rolls back on error.
+    void createTask({
+      projectId,
+      title: nextTitle.slice(0, 120),
+      dueDate: dueDate || undefined,
+    })
+      .then(() => toast.success("Task added."))
+      .catch((error) =>
+        toast.error(messageFromError(error, "Could not add the task."))
+      )
+    reset()
+    setOpen(false)
   }
 
   return (
@@ -450,12 +512,8 @@ function NewTaskDialog({ projectId }: { projectId: Id<"projects"> }) {
                 Cancel
               </Button>
             </DialogClose>
-            <Button
-              data-testid="create-task-button"
-              disabled={submitting}
-              type="submit"
-            >
-              <Plus /> {submitting ? "Adding..." : "Add task"}
+            <Button data-testid="create-task-button" type="submit">
+              <Plus /> Add task
             </Button>
           </DialogFooter>
         </form>

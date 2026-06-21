@@ -12,18 +12,27 @@ type CountDeltas = Partial<
   Record<"taskCount" | "todoCount" | "inProgressCount" | "doneCount", number>
 >
 
-const statusCountKey: Record<Status, "todoCount" | "inProgressCount" | "doneCount"> = {
+const statusCountKey: Record<
+  Status,
+  "todoCount" | "inProgressCount" | "doneCount"
+> = {
   todo: "todoCount",
   inProgress: "inProgressCount",
   done: "doneCount",
 }
 
-function applyCounts(summary: ProjectSummary, deltas: CountDeltas): ProjectSummary {
+function applyCounts(
+  summary: ProjectSummary,
+  deltas: CountDeltas
+): ProjectSummary {
   return {
     ...summary,
     taskCount: Math.max(0, summary.taskCount + (deltas.taskCount ?? 0)),
     todoCount: Math.max(0, summary.todoCount + (deltas.todoCount ?? 0)),
-    inProgressCount: Math.max(0, summary.inProgressCount + (deltas.inProgressCount ?? 0)),
+    inProgressCount: Math.max(
+      0,
+      summary.inProgressCount + (deltas.inProgressCount ?? 0)
+    ),
     doneCount: Math.max(0, summary.doneCount + (deltas.doneCount ?? 0)),
   }
 }
@@ -42,35 +51,44 @@ function patchProjectSummaries(
     store.setQuery(
       api.projects.list,
       {},
-      list.map((project) => (project._id === projectId ? update(project) : project))
+      list.map((project) =>
+        project._id === projectId ? update(project) : project
+      )
     )
   }
 }
 
-/** Optimistically move a task between columns and shift the project's counters. */
+/** Optimistically move/reorder a task and shift the project's counters. */
 export function moveTaskOptimistic(projectId: Id<"projects">) {
   return (
     store: OptimisticLocalStore,
-    args: { taskId: Id<"tasks">; status: Status }
+    args: { taskId: Id<"tasks">; status: Status; position?: number }
   ) => {
     const tasks = store.getQuery(api.tasks.list, { projectId })
     let from: Status | undefined
     if (tasks) {
+      const position = args.position ?? Date.now()
       const next = tasks.map((task) => {
         if (task._id === args.taskId) {
           from = task.status
-          return { ...task, status: args.status }
+          return { ...task, status: args.status, position }
         }
         return task
       })
+      // Keep the cached list ordered by position so the board renders the new
+      // order immediately, before the server confirms.
+      next.sort((a, b) => a.position - b.position)
       store.setQuery(api.tasks.list, { projectId }, next)
     }
 
     if (from && from !== args.status) {
       const deltas: CountDeltas = {}
       deltas[statusCountKey[from]] = -1
-      deltas[statusCountKey[args.status]] = (deltas[statusCountKey[args.status]] ?? 0) + 1
-      patchProjectSummaries(store, projectId, (summary) => applyCounts(summary, deltas))
+      deltas[statusCountKey[args.status]] =
+        (deltas[statusCountKey[args.status]] ?? 0) + 1
+      patchProjectSummaries(store, projectId, (summary) =>
+        applyCounts(summary, deltas)
+      )
     }
   }
 }
@@ -91,6 +109,7 @@ export function createTaskOptimistic(projectId: Id<"projects">) {
         title: args.title,
         dueDate: args.dueDate,
         status: "todo",
+        position: now,
         createdAt: now,
         updatedAt: now,
       }
@@ -129,7 +148,12 @@ export function createProjectOptimistic(
 /** Optimistically apply name/icon/color edits to a project. */
 export function updateProjectOptimistic(
   store: OptimisticLocalStore,
-  args: { projectId: Id<"projects">; name?: string; icon?: string; color?: string }
+  args: {
+    projectId: Id<"projects">
+    name?: string
+    icon?: string
+    color?: string
+  }
 ) {
   patchProjectSummaries(store, args.projectId, (summary) => ({
     ...summary,
@@ -154,5 +178,6 @@ export function removeProjectOptimistic(
     )
   }
   const single = store.getQuery(api.projects.get, { projectId: args.projectId })
-  if (single) store.setQuery(api.projects.get, { projectId: args.projectId }, null)
+  if (single)
+    store.setQuery(api.projects.get, { projectId: args.projectId }, null)
 }
