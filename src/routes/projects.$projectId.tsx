@@ -15,6 +15,7 @@ import { Link, createFileRoute, useNavigate } from "@tanstack/react-router"
 import { api } from "../../convex/_generated/api"
 import type { Id } from "../../convex/_generated/dataModel"
 import { messageFromError } from "@/lib/errors"
+import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
@@ -76,6 +77,22 @@ function Board() {
   const projectIdArg = projectId as Id<"projects">
   const project = useQuery(api.projects.get, { projectId: projectIdArg })
   const tasks = useQuery(api.tasks.list, { projectId: projectIdArg })
+  const moveTask = useMutation(api.tasks.move)
+  const [draggingId, setDraggingId] = useState<Id<"tasks"> | null>(null)
+  const [overColumn, setOverColumn] = useState<Status | null>(null)
+
+  async function handleDrop(taskId: Id<"tasks">, status: Status) {
+    setOverColumn(null)
+    setDraggingId(null)
+    const task = tasks?.find((item) => item._id === taskId)
+    if (!task || task.status === status) return
+    try {
+      await moveTask({ taskId, status })
+      toast.success(`Moved to ${statusLabels[status]}.`)
+    } catch (error) {
+      toast.error(messageFromError(error, "Could not move the task."))
+    }
+  }
 
   if (project === undefined || tasks === undefined) {
     return (
@@ -127,11 +144,40 @@ function Board() {
             const columnTasks = tasks.filter(
               (task) => task.status === column.key
             )
+            const isOver = overColumn === column.key
             return (
               <section
-                className="flex min-h-72 flex-col gap-3 rounded-[min(var(--radius-4xl),24px)] bg-muted/40 p-3"
+                aria-label={`${column.label} column`}
+                className={cn(
+                  "flex min-h-72 flex-col gap-3 rounded-[min(var(--radius-4xl),24px)] bg-muted/40 p-3 transition-colors",
+                  isOver && "bg-muted ring-2 ring-primary/40"
+                )}
                 data-testid={`column-${column.key}`}
                 key={column.key}
+                onDragLeave={(event) => {
+                  if (
+                    !event.currentTarget.contains(
+                      event.relatedTarget as Node | null
+                    )
+                  ) {
+                    setOverColumn((current) =>
+                      current === column.key ? null : current
+                    )
+                  }
+                }}
+                onDragOver={(event) => {
+                  if (!draggingId) return
+                  event.preventDefault()
+                  event.dataTransfer.dropEffect = "move"
+                  if (overColumn !== column.key) setOverColumn(column.key)
+                }}
+                onDrop={(event) => {
+                  event.preventDefault()
+                  const taskId = event.dataTransfer.getData(
+                    "text/plain"
+                  ) as Id<"tasks">
+                  if (taskId) void handleDrop(taskId, column.key)
+                }}
               >
                 <div className="flex items-center justify-between px-1">
                   <h2 className="text-sm font-medium">{column.label}</h2>
@@ -139,7 +185,16 @@ function Board() {
                 </div>
                 <div className="grid gap-2">
                   {columnTasks.map((task) => (
-                    <TaskCard key={task._id} task={task} />
+                    <TaskCard
+                      isDragging={draggingId === task._id}
+                      key={task._id}
+                      onDragEnd={() => {
+                        setDraggingId(null)
+                        setOverColumn(null)
+                      }}
+                      onDragStart={() => setDraggingId(task._id)}
+                      task={task}
+                    />
                   ))}
                   {columnTasks.length === 0 ? (
                     <p className="rounded-2xl border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
@@ -215,7 +270,17 @@ function ProjectSwitcher({
   )
 }
 
-function TaskCard({ task }: { task: Task }) {
+function TaskCard({
+  task,
+  isDragging,
+  onDragStart,
+  onDragEnd,
+}: {
+  task: Task
+  isDragging: boolean
+  onDragStart: () => void
+  onDragEnd: () => void
+}) {
   const moveTask = useMutation(api.tasks.move)
 
   async function onMove(status: Status) {
@@ -229,7 +294,21 @@ function TaskCard({ task }: { task: Task }) {
   }
 
   return (
-    <Card className="gap-2" data-testid="task-card" size="sm">
+    <Card
+      className={cn(
+        "cursor-grab gap-2 transition-opacity active:cursor-grabbing",
+        isDragging && "opacity-50"
+      )}
+      data-testid="task-card"
+      draggable
+      onDragEnd={onDragEnd}
+      onDragStart={(event) => {
+        event.dataTransfer.effectAllowed = "move"
+        event.dataTransfer.setData("text/plain", task._id)
+        onDragStart()
+      }}
+      size="sm"
+    >
       <CardContent className="space-y-2">
         <p className="text-sm font-medium">{task.title}</p>
         {task.dueDate ? (
