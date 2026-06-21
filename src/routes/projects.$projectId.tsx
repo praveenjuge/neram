@@ -1,12 +1,51 @@
 import { useMutation, useQuery } from "convex/react"
-import { ArrowLeft, ArrowRight, Plus } from "lucide-react"
+import {
+  ArrowLeft,
+  CalendarClock,
+  ChevronsUpDown,
+  LayoutGrid,
+  Plus,
+} from "lucide-react"
+import type { FunctionReturnType } from "convex/server"
 import type { FormEvent } from "react"
 import { useState } from "react"
+import { toast } from "sonner"
 
-import { Link, createFileRoute } from "@tanstack/react-router"
+import { Link, createFileRoute, useNavigate } from "@tanstack/react-router"
 import { api } from "../../convex/_generated/api"
 import type { Id } from "../../convex/_generated/dataModel"
+import { messageFromError } from "@/lib/errors"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardFooter } from "@/components/ui/card"
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Skeleton } from "@/components/ui/skeleton"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { AppHeader, Protected } from "./-components"
 
 const columns = [
@@ -16,6 +55,13 @@ const columns = [
 ] as const
 
 type Status = (typeof columns)[number]["key"]
+type Task = FunctionReturnType<typeof api.tasks.list>[number]
+
+const statusLabels: Record<Status, string> = {
+  todo: "Todo",
+  inProgress: "In Progress",
+  done: "Done",
+}
 
 export const Route = createFileRoute("/projects/$projectId")({
   component: () => (
@@ -30,104 +76,323 @@ function Board() {
   const projectIdArg = projectId as Id<"projects">
   const project = useQuery(api.projects.get, { projectId: projectIdArg })
   const tasks = useQuery(api.tasks.list, { projectId: projectIdArg })
-  const createTask = useMutation(api.tasks.create)
-  const moveTask = useMutation(api.tasks.move)
-  const [title, setTitle] = useState("")
-  const [dueDate, setDueDate] = useState("")
-  const [error, setError] = useState("")
 
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setError("")
-    const form = event.currentTarget
-    const formData = new FormData(form)
-    const nextTitle = String(formData.get("title") ?? "").trim()
-    const nextDueDate = String(formData.get("dueDate") ?? "")
-    if (!nextTitle) return setError("Task title is required.")
-    await createTask({ projectId: projectIdArg, title: nextTitle.slice(0, 120), dueDate: nextDueDate || undefined })
-    setTitle("")
-    setDueDate("")
+  if (project === undefined || tasks === undefined) {
+    return (
+      <main className="min-h-svh bg-background">
+        <AppHeader title="Neram" />
+        <BoardSkeleton />
+      </main>
+    )
   }
 
-  if (project === undefined || tasks === undefined) return <main className="p-6 text-sm">Loading...</main>
-  if (project === null) return <main className="p-6 text-sm">Project not found.</main>
+  if (project === null) {
+    return (
+      <main className="min-h-svh bg-background">
+        <AppHeader title="Neram" />
+        <section className="mx-auto grid max-w-7xl gap-4 p-5">
+          <Button asChild className="w-fit" size="sm" variant="ghost">
+            <Link to="/dashboard">
+              <ArrowLeft /> Back to projects
+            </Link>
+          </Button>
+          <Card className="items-center gap-2 border border-dashed py-12 text-center shadow-none ring-0">
+            <CardContent className="space-y-1">
+              <p className="font-medium">Project not found</p>
+              <p className="text-sm text-muted-foreground">
+                It may have been removed, or the link is incorrect.
+              </p>
+            </CardContent>
+          </Card>
+        </section>
+      </main>
+    )
+  }
 
   return (
     <main className="min-h-svh bg-background">
-      <AppHeader title="Neram" />
+      <AppHeader
+        actions={<NewTaskDialog projectId={projectIdArg} />}
+        crumb={
+          <ProjectSwitcher
+            currentId={projectIdArg}
+            currentName={project.name}
+          />
+        }
+        title="Neram"
+      />
       <section className="mx-auto grid max-w-7xl gap-5 p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <Link className="text-sm text-muted-foreground hover:text-foreground" to="/dashboard">
-              Back to projects
-            </Link>
-            <h1 className="mt-1 text-xl font-medium">{project.name}</h1>
-          </div>
-          <form className="flex flex-col gap-2 sm:flex-row" onSubmit={onSubmit}>
-            <input
-              aria-label="Task title"
-              className="h-9 min-w-56 rounded-md border bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
-              data-testid="task-title-input"
-              maxLength={120}
-              name="title"
-              onChange={(event) => setTitle(event.target.value)}
-              placeholder="New task"
-              value={title}
-            />
-            <input
-              aria-label="Due date"
-              className="h-9 rounded-md border bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
-              data-testid="task-due-date-input"
-              name="dueDate"
-              onChange={(event) => setDueDate(event.target.value)}
-              type="date"
-              value={dueDate}
-            />
-            <Button data-testid="create-task-button">
-              <Plus /> Add
-            </Button>
-          </form>
-        </div>
-        {error ? <p className="text-sm text-destructive">{error}</p> : null}
         <div className="grid gap-3 lg:grid-cols-3">
-          {columns.map((column) => (
-            <section className="min-h-72 rounded-lg border bg-muted/25 p-3" data-testid={`column-${column.key}`} key={column.key}>
-              <h2 className="mb-3 text-sm font-medium">{column.label}</h2>
-              <div className="grid gap-2">
-                {tasks
-                  .filter((task) => task.status === column.key)
-                  .map((task) => (
-                    <article className="rounded-md border bg-background p-3 text-sm" data-testid="task-card" key={task._id}>
-                      <p className="font-medium">{task.title}</p>
-                      {task.dueDate ? <p className="mt-1 text-xs text-muted-foreground">Due {task.dueDate}</p> : null}
-                      <div className="mt-3 flex gap-1">
-                        <MoveButton direction="back" disabled={column.key === "todo"} onClick={() => moveTask({ taskId: task._id, status: previous(column.key) })} />
-                        <MoveButton direction="next" disabled={column.key === "done"} onClick={() => moveTask({ taskId: task._id, status: next(column.key) })} />
-                      </div>
-                    </article>
+          {columns.map((column) => {
+            const columnTasks = tasks.filter(
+              (task) => task.status === column.key
+            )
+            return (
+              <section
+                className="flex min-h-72 flex-col gap-3 rounded-[min(var(--radius-4xl),24px)] bg-muted/40 p-3"
+                data-testid={`column-${column.key}`}
+                key={column.key}
+              >
+                <div className="flex items-center justify-between px-1">
+                  <h2 className="text-sm font-medium">{column.label}</h2>
+                  <Badge variant="secondary">{columnTasks.length}</Badge>
+                </div>
+                <div className="grid gap-2">
+                  {columnTasks.map((task) => (
+                    <TaskCard key={task._id} task={task} />
                   ))}
-              </div>
-            </section>
-          ))}
+                  {columnTasks.length === 0 ? (
+                    <p className="rounded-2xl border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
+                      Nothing here yet.
+                    </p>
+                  ) : null}
+                </div>
+              </section>
+            )
+          })}
         </div>
       </section>
     </main>
   )
 }
 
-function previous(status: Status): Status {
-  return status === "done" ? "inProgress" : "todo"
-}
+function ProjectSwitcher({
+  currentId,
+  currentName,
+}: {
+  currentId: Id<"projects">
+  currentName: string
+}) {
+  const projects = useQuery(api.projects.list)
+  const navigate = useNavigate()
 
-function next(status: Status): Status {
-  return status === "todo" ? "inProgress" : "done"
-}
-
-function MoveButton({ direction, disabled, onClick }: { direction: "back" | "next"; disabled: boolean; onClick: () => void }) {
-  const label = direction === "back" ? "Move back" : "Move next"
   return (
-    <Button aria-label={label} data-testid={direction === "back" ? "move-back-button" : "move-next-button"} disabled={disabled} onClick={onClick} size="icon-sm" type="button" variant="outline">
-      {direction === "back" ? <ArrowLeft /> : <ArrowRight />}
-    </Button>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          className="h-8 max-w-44 gap-1 px-2 font-heading text-lg font-medium sm:max-w-64"
+          data-testid="project-switcher"
+          variant="ghost"
+        >
+          <span className="truncate">{currentName}</span>
+          <ChevronsUpDown className="text-muted-foreground" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="start"
+        className="max-h-80 w-56 overflow-y-auto"
+      >
+        <DropdownMenuLabel>Switch project</DropdownMenuLabel>
+        <DropdownMenuRadioGroup
+          onValueChange={(value) => {
+            if (value !== currentId) {
+              void navigate({
+                to: "/projects/$projectId",
+                params: { projectId: value },
+              })
+            }
+          }}
+          value={currentId}
+        >
+          {projects?.map((project) => (
+            <DropdownMenuRadioItem
+              data-testid={`switch-to-${project._id}`}
+              key={project._id}
+              value={project._id}
+            >
+              <span className="truncate">{project.name}</span>
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <Link to="/dashboard">
+            <LayoutGrid /> All projects
+          </Link>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+function TaskCard({ task }: { task: Task }) {
+  const moveTask = useMutation(api.tasks.move)
+
+  async function onMove(status: Status) {
+    if (status === task.status) return
+    try {
+      await moveTask({ taskId: task._id, status })
+      toast.success(`Moved to ${statusLabels[status]}.`)
+    } catch (error) {
+      toast.error(messageFromError(error, "Could not move the task."))
+    }
+  }
+
+  return (
+    <Card className="gap-2" data-testid="task-card" size="sm">
+      <CardContent className="space-y-2">
+        <p className="text-sm font-medium">{task.title}</p>
+        {task.dueDate ? (
+          <Badge variant="outline">
+            <CalendarClock /> Due {task.dueDate}
+          </Badge>
+        ) : null}
+      </CardContent>
+      <CardFooter className="justify-end">
+        <DropdownMenu>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  data-testid="move-task-button"
+                  size="sm"
+                  variant="outline"
+                >
+                  Move
+                </Button>
+              </DropdownMenuTrigger>
+            </TooltipTrigger>
+            <TooltipContent>Move to another column</TooltipContent>
+          </Tooltip>
+          <DropdownMenuContent align="end">
+            <DropdownMenuLabel>Move to</DropdownMenuLabel>
+            <DropdownMenuRadioGroup
+              onValueChange={(value) => onMove(value as Status)}
+              value={task.status}
+            >
+              {columns.map((column) => (
+                <DropdownMenuRadioItem
+                  key={column.key}
+                  data-testid={`move-to-${column.key}`}
+                  value={column.key}
+                >
+                  {column.label}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </CardFooter>
+    </Card>
+  )
+}
+
+function NewTaskDialog({ projectId }: { projectId: Id<"projects"> }) {
+  const createTask = useMutation(api.tasks.create)
+  const [open, setOpen] = useState(false)
+  const [title, setTitle] = useState("")
+  const [dueDate, setDueDate] = useState("")
+  const [submitting, setSubmitting] = useState(false)
+
+  function reset() {
+    setTitle("")
+    setDueDate("")
+  }
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const nextTitle = title.trim()
+    if (!nextTitle) {
+      toast.error("Task title is required.")
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      await createTask({
+        projectId,
+        title: nextTitle.slice(0, 120),
+        dueDate: dueDate || undefined,
+      })
+      toast.success("Task added.")
+      reset()
+      setOpen(false)
+    } catch (error) {
+      toast.error(messageFromError(error, "Could not add the task."))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <Dialog onOpenChange={setOpen} open={open}>
+      <DialogTrigger asChild>
+        <Button data-testid="new-task-trigger">
+          <Plus /> Add task
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Add task</DialogTitle>
+          <DialogDescription>
+            New tasks start in the Todo column.
+          </DialogDescription>
+        </DialogHeader>
+        <form className="grid gap-4" onSubmit={onSubmit}>
+          <div className="grid gap-2">
+            <Label htmlFor="task-title">Title</Label>
+            <Input
+              autoFocus
+              data-testid="task-title-input"
+              id="task-title"
+              maxLength={120}
+              onChange={(event) => setTitle(event.target.value)}
+              placeholder="e.g. Draft the homepage copy"
+              value={title}
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="task-due-date">Due date (optional)</Label>
+            <Input
+              data-testid="task-due-date-input"
+              id="task-due-date"
+              onChange={(event) => setDueDate(event.target.value)}
+              type="date"
+              value={dueDate}
+            />
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="outline">
+                Cancel
+              </Button>
+            </DialogClose>
+            <Button
+              data-testid="create-task-button"
+              disabled={submitting}
+              type="submit"
+            >
+              <Plus /> {submitting ? "Adding..." : "Add task"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function BoardSkeleton() {
+  return (
+    <section className="mx-auto grid max-w-7xl gap-5 p-5">
+      <div className="flex items-end justify-between gap-3">
+        <div className="space-y-2">
+          <Skeleton className="h-4 w-28" />
+          <Skeleton className="h-7 w-48" />
+        </div>
+        <Skeleton className="h-8 w-28" />
+      </div>
+      <div className="grid gap-3 lg:grid-cols-3">
+        {columns.map((column) => (
+          <div
+            className="flex min-h-72 flex-col gap-3 rounded-[min(var(--radius-4xl),24px)] bg-muted/40 p-3"
+            key={column.key}
+          >
+            <Skeleton className="h-5 w-24" />
+            <Skeleton className="h-20 w-full" />
+            <Skeleton className="h-20 w-full" />
+          </div>
+        ))}
+      </div>
+    </section>
   )
 }

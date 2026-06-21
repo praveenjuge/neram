@@ -1,14 +1,14 @@
-import js from '@eslint/js'
-import globals from 'globals'
-import reactHooks from 'eslint-plugin-react-hooks'
-import reactRefresh from 'eslint-plugin-react-refresh'
-import tseslint from 'typescript-eslint'
-import { defineConfig, globalIgnores } from 'eslint/config'
+import js from "@eslint/js"
+import globals from "globals"
+import reactHooks from "eslint-plugin-react-hooks"
+import reactRefresh from "eslint-plugin-react-refresh"
+import tseslint from "typescript-eslint"
+import { defineConfig, globalIgnores } from "eslint/config"
 
 export default defineConfig([
-  globalIgnores(['dist', 'src/routeTree.gen.ts', 'convex/_generated']),
+  globalIgnores(["dist", "src/routeTree.gen.ts", "convex/_generated"]),
   {
-    files: ['**/*.{ts,tsx}'],
+    files: ["**/*.{ts,tsx}"],
     extends: [
       js.configs.recommended,
       tseslint.configs.recommended,
@@ -19,16 +19,19 @@ export default defineConfig([
       globals: globals.browser,
     },
     rules: {
-      'react-refresh/only-export-components': [
-        'error',
-        { allowConstantExport: true, allowExportNames: ['Route', 'buttonVariants'] },
+      "react-refresh/only-export-components": [
+        "error",
+        {
+          allowConstantExport: true,
+          allowExportNames: ["Route", "buttonVariants", "badgeVariants"],
+        },
       ],
     },
   },
   {
-    files: ['src/routes/**/*.tsx'],
+    files: ["src/routes/**/*.tsx"],
     rules: {
-      'react-refresh/only-export-components': 'off',
+      "react-refresh/only-export-components": "off",
     },
   },
 ])
