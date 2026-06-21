@@ -5,18 +5,22 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "routes": "tsr generate",
+    "build": "bun run routes && tsc -b && vite build",
     "lint": "eslint .",
     "format": "prettier --write \"**/*.{ts,tsx}\"",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "bun run routes && tsc --noEmit",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@clerk/react": "^6.10.4",
     "@fontsource-variable/geist": "^5.2.9",
     "@fontsource-variable/roboto-slab": "^5.2.8",
     "@tailwindcss/vite": "^4",
+    "@tanstack/react-router": "^1.170.16",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "convex": "^1.41.0",
     "lucide-react": "^1.21.0",
     "radix-ui": "^1.6.0",
     "react": "^19.2.6",
@@ -28,6 +32,8 @@
   },
   "devDependencies": {
     "@eslint/js": "^10",
+    "@tanstack/router-cli": "^1.167.17",
+    "@tanstack/router-plugin": "^1.168.18",
     "@types/node": "^24",
     "@types/react": "^19",
     "@types/react-dom": "^19",
