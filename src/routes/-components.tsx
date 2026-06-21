@@ -35,7 +35,7 @@ export function AppHeader({
         </a>
         {crumb ? (
           <>
-            <span className="font-heading font-medium text-muted-foreground">
+            <span className="pl-3 font-heading font-medium text-muted-foreground">
               /
             </span>
             {crumb}
