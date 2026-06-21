@@ -1,3 +1,9 @@
+declare const process: {
+  env: {
+    CLERK_FRONTEND_API_URL?: string
+  }
+}
+
 export default {
   providers: [
     {
