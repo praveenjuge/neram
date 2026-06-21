@@ -225,12 +225,12 @@ function ProjectSwitcher({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button
-          className="h-8 max-w-44 gap-1 px-2 font-heading text-lg font-medium sm:max-w-64"
+          className="font-heading"
           data-testid="project-switcher"
           variant="ghost"
         >
           <span className="truncate">{currentName}</span>
-          <ChevronsUpDown className="text-muted-foreground" />
+          <ChevronsUpDown />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
