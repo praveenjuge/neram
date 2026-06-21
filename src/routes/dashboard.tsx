@@ -44,7 +44,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Skeleton } from "@/components/ui/skeleton"
+import { Spinner } from "@/components/ui/spinner"
 import { AppHeader, Protected } from "./-components"
 
 export const Route = createFileRoute("/dashboard")({
@@ -70,7 +70,9 @@ function Dashboard() {
         </div>
 
         {projects === undefined ? (
-          <ProjectGridSkeleton />
+          <div className="grid min-h-[40vh] place-items-center">
+            <Spinner className="size-6 text-muted-foreground" />
+          </div>
         ) : projects.length === 0 ? (
           <EmptyState />
         ) : (
@@ -477,27 +479,5 @@ function EmptyState() {
         </div>
       </CardContent>
     </Card>
-  )
-}
-
-function ProjectGridSkeleton() {
-  return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      {Array.from({ length: 6 }).map((_, index) => (
-        <Card key={index}>
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <Skeleton className="size-9 rounded-xl" />
-              <Skeleton className="h-5 w-2/3" />
-            </div>
-          </CardHeader>
-          <CardContent className="flex gap-1.5">
-            <Skeleton className="h-5 w-16" />
-            <Skeleton className="h-5 w-16" />
-            <Skeleton className="h-5 w-16" />
-          </CardContent>
-        </Card>
-      ))}
-    </div>
   )
 }

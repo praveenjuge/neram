@@ -10,6 +10,7 @@ import { useEffect, useRef } from "react"
 
 import { api } from "../../convex/_generated/api"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { Spinner } from "@/components/ui/spinner"
 
 const OWNERSHIP_MIGRATION_KEY = "neram:ownership-migrated"
 
@@ -52,7 +53,9 @@ export function Protected({ children }: { children: ReactNode }) {
   return (
     <>
       <AuthLoading>
-        <main className="p-6 text-sm">Loading...</main>
+        <main className="grid min-h-svh place-items-center p-6">
+          <Spinner className="size-6 text-muted-foreground" />
+        </main>
       </AuthLoading>
       <Unauthenticated>
         <RedirectToSignIn signInForceRedirectUrl="/dashboard" />

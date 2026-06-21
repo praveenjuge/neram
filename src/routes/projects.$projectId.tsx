@@ -43,7 +43,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Skeleton } from "@/components/ui/skeleton"
+import { Spinner } from "@/components/ui/spinner"
 import {
   Tooltip,
   TooltipContent,
@@ -102,7 +102,9 @@ function Board() {
     return (
       <main className="min-h-svh bg-background">
         <AppHeader title="Neram" />
-        <BoardSkeleton />
+        <div className="grid min-h-[60vh] place-items-center">
+          <Spinner className="size-6 text-muted-foreground" />
+        </div>
       </main>
     )
   }
@@ -458,31 +460,5 @@ function NewTaskDialog({ projectId }: { projectId: Id<"projects"> }) {
         </form>
       </DialogContent>
     </Dialog>
-  )
-}
-
-function BoardSkeleton() {
-  return (
-    <section className="mx-auto grid max-w-7xl gap-5 p-5">
-      <div className="flex items-end justify-between gap-3">
-        <div className="space-y-2">
-          <Skeleton className="h-4 w-28" />
-          <Skeleton className="h-7 w-48" />
-        </div>
-        <Skeleton className="h-8 w-28" />
-      </div>
-      <div className="grid gap-3 lg:grid-cols-3">
-        {columns.map((column) => (
-          <div
-            className="flex min-h-72 flex-col gap-3 rounded-[min(var(--radius-4xl),24px)] bg-muted/40 p-3"
-            key={column.key}
-          >
-            <Skeleton className="h-5 w-24" />
-            <Skeleton className="h-20 w-full" />
-            <Skeleton className="h-20 w-full" />
-          </div>
-        ))}
-      </div>
-    </section>
   )
 }
