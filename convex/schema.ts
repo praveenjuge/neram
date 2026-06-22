@@ -7,10 +7,25 @@ export const status = v.union(
   v.literal("done")
 )
 
+// Kinds of feed entries fanned out to a project's members. Kept here so both
+// the schema and the activity helpers share a single source of truth.
+export const activityType = v.union(
+  v.literal("task.created"),
+  v.literal("task.moved"),
+  v.literal("task.deleted"),
+  v.literal("project.updated"),
+  v.literal("member.joined"),
+  v.literal("member.left"),
+  v.literal("member.removed")
+)
+
 export default defineSchema({
   projects: defineTable({
     // Stores the authenticated owner's canonical identity (identity.tokenIdentifier).
     ownerSubject: v.string(),
+    // Denormalized owner display name, set on create. Old rows fall back to
+    // "Owner" in the member list since they predate this field.
+    ownerName: v.optional(v.string()),
     name: v.string(),
     icon: v.optional(v.string()),
     color: v.optional(v.string()),
@@ -33,9 +48,48 @@ export default defineSchema({
     position: v.number(),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_owner_project_position", [
-    "ownerSubject",
-    "projectId",
-    "position",
-  ]),
+  })
+    .index("by_owner_project_position", [
+      "ownerSubject",
+      "projectId",
+      "position",
+    ])
+    // Access/order key keyed only off the project, so a collaborator who does
+    // not know the owner's subject can still read and order the board.
+    .index("by_project_position", ["projectId", "position"]),
+  // Non-owner collaborators on a project. The owner is never stored here; their
+  // membership is implicit via projects.ownerSubject.
+  projectMembers: defineTable({
+    projectId: v.id("projects"),
+    subject: v.string(),
+    role: v.literal("editor"),
+    displayName: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_project", ["projectId"])
+    .index("by_member", ["subject"])
+    .index("by_project_member", ["projectId", "subject"]),
+  // One reusable, revocable invite link per project. Revoke = delete the row;
+  // regenerate = patch a fresh token (the old link stops resolving).
+  projectInvites: defineTable({
+    projectId: v.id("projects"),
+    token: v.string(),
+    createdBy: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_token", ["token"])
+    .index("by_project", ["projectId"]),
+  // Per-recipient fan-out feed. One row is written per member for each action,
+  // so each user reads only their own rows via by_subject_created.
+  activity: defineTable({
+    subject: v.string(),
+    actorSubject: v.string(),
+    actorName: v.string(),
+    projectId: v.id("projects"),
+    projectName: v.string(),
+    type: activityType,
+    taskTitle: v.optional(v.string()),
+    toStatus: v.optional(status),
+    createdAt: v.number(),
+  }).index("by_subject_created", ["subject", "createdAt"]),
 })

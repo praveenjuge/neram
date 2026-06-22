@@ -3,7 +3,14 @@ import { ConvexError, v } from "convex/values"
 import { internal } from "./_generated/api"
 import type { Doc } from "./_generated/dataModel"
 import { internalMutation, mutation, query } from "./_generated/server"
-import { owner, projectCounts } from "./model"
+import {
+  actor,
+  projectCounts,
+  recordActivity,
+  requireProjectAccess,
+  requireProjectOwner,
+  type ProjectRole,
+} from "./model"
 
 // Upper bound for how many projects a single dashboard / switcher load reads.
 // Keeps the query bounded as the table grows instead of an unbounded collect().
@@ -21,6 +28,7 @@ const projectSummary = v.object({
   todoCount: v.number(),
   inProgressCount: v.number(),
   doneCount: v.number(),
+  role: v.union(v.literal("owner"), v.literal("editor")),
 })
 
 function publicProject(project: Doc<"projects">) {
@@ -35,8 +43,8 @@ function publicProject(project: Doc<"projects">) {
   }
 }
 
-function summarize(project: Doc<"projects">) {
-  return { ...publicProject(project), ...projectCounts(project) }
+function summarize(project: Doc<"projects">, role: ProjectRole) {
+  return { ...publicProject(project), ...projectCounts(project), role }
 }
 
 function cleanName(name: string) {
@@ -72,18 +80,51 @@ function cleanColor(color: string) {
   return trimmed
 }
 
+/**
+ * Load the projects the caller can see: the ones they own plus the ones they've
+ * joined as a member. Deduped, sorted by recent activity, and capped so the
+ * read stays bounded. Each project is tagged with the caller's role.
+ */
+async function accessibleProjects(
+  ctx: Parameters<typeof requireProjectAccess>[0],
+  subject: string
+): Promise<Array<{ project: Doc<"projects">; role: ProjectRole }>> {
+  const owned = await ctx.db
+    .query("projects")
+    .withIndex("by_owner_updated", (q) => q.eq("ownerSubject", subject))
+    .order("desc")
+    .take(MAX_PROJECTS)
+
+  const memberships = await ctx.db
+    .query("projectMembers")
+    .withIndex("by_member", (q) => q.eq("subject", subject))
+    .take(MAX_PROJECTS)
+
+  const byId = new Map<
+    string,
+    { project: Doc<"projects">; role: ProjectRole }
+  >()
+  for (const project of owned) {
+    byId.set(project._id, { project, role: "owner" })
+  }
+  for (const membership of memberships) {
+    if (byId.has(membership.projectId)) continue
+    const project = await ctx.db.get(membership.projectId)
+    if (project) byId.set(project._id, { project, role: "editor" })
+  }
+
+  return [...byId.values()]
+    .sort((a, b) => b.project.updatedAt - a.project.updatedAt)
+    .slice(0, MAX_PROJECTS)
+}
+
 export const list = query({
   args: {},
   returns: v.array(projectSummary),
   handler: async (ctx) => {
-    const ownerSubject = await owner(ctx)
-    const projects = await ctx.db
-      .query("projects")
-      .withIndex("by_owner_updated", (q) => q.eq("ownerSubject", ownerSubject))
-      .order("desc")
-      .take(MAX_PROJECTS)
-
-    return projects.map(summarize)
+    const { subject } = await actor(ctx)
+    const projects = await accessibleProjects(ctx, subject)
+    return projects.map(({ project, role }) => summarize(project, role))
   },
 })
 
@@ -91,19 +132,18 @@ export const list = query({
  * Lightweight project list (id + name only) for the board's project switcher.
  * The switcher does not need the denormalized counts, so reading just names
  * keeps its payload small and avoids re-rendering on every task-count change.
+ * Includes shared projects so collaborators see them in the sidebar.
  */
 export const names = query({
   args: {},
   returns: v.array(v.object({ _id: v.id("projects"), name: v.string() })),
   handler: async (ctx) => {
-    const ownerSubject = await owner(ctx)
-    const projects = await ctx.db
-      .query("projects")
-      .withIndex("by_owner_updated", (q) => q.eq("ownerSubject", ownerSubject))
-      .order("desc")
-      .take(MAX_PROJECTS)
-
-    return projects.map((project) => ({ _id: project._id, name: project.name }))
+    const { subject } = await actor(ctx)
+    const projects = await accessibleProjects(ctx, subject)
+    return projects.map(({ project }) => ({
+      _id: project._id,
+      name: project.name,
+    }))
   },
 })
 
@@ -111,10 +151,18 @@ export const get = query({
   args: { projectId: v.id("projects") },
   returns: v.union(v.null(), projectSummary),
   handler: async (ctx, args) => {
-    const ownerSubject = await owner(ctx)
+    const { subject } = await actor(ctx)
     const project = await ctx.db.get(args.projectId)
-    if (!project || project.ownerSubject !== ownerSubject) return null
-    return summarize(project)
+    if (!project) return null
+    if (project.ownerSubject === subject) return summarize(project, "owner")
+    const membership = await ctx.db
+      .query("projectMembers")
+      .withIndex("by_project_member", (q) =>
+        q.eq("projectId", args.projectId).eq("subject", subject)
+      )
+      .unique()
+    if (!membership) return null
+    return summarize(project, "editor")
   },
 })
 
@@ -126,10 +174,11 @@ export const create = mutation({
   },
   returns: v.id("projects"),
   handler: async (ctx, args) => {
-    const ownerSubject = await owner(ctx)
+    const { subject, name } = await actor(ctx)
     const now = Date.now()
     return await ctx.db.insert("projects", {
-      ownerSubject,
+      ownerSubject: subject,
+      ownerName: name,
       name: cleanName(args.name),
       icon: args.icon === undefined ? undefined : cleanIcon(args.icon),
       color: args.color === undefined ? undefined : cleanColor(args.color),
@@ -152,14 +201,11 @@ export const update = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const ownerSubject = await owner(ctx)
-    const project = await ctx.db.get(args.projectId)
-    if (!project || project.ownerSubject !== ownerSubject) {
-      throw new ConvexError({
-        code: "NOT_FOUND",
-        message: "Project not found.",
-      })
-    }
+    // Owner or editor may edit the project's name/icon/color.
+    const { project, actor: who } = await requireProjectAccess(
+      ctx,
+      args.projectId
+    )
     const patch: {
       name?: string
       icon?: string
@@ -172,6 +218,12 @@ export const update = mutation({
     if (args.icon !== undefined) patch.icon = cleanIcon(args.icon)
     if (args.color !== undefined) patch.color = cleanColor(args.color)
     await ctx.db.patch(args.projectId, patch)
+    await recordActivity(ctx, {
+      // Use the patched name so the feed reflects the new title.
+      project: { ...project, ...patch },
+      actor: who,
+      type: "project.updated",
+    })
     return null
   },
 })
@@ -180,20 +232,27 @@ export const remove = mutation({
   args: { projectId: v.id("projects") },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const ownerSubject = await owner(ctx)
-    const project = await ctx.db.get(args.projectId)
-    if (!project || project.ownerSubject !== ownerSubject) {
-      throw new ConvexError({
-        code: "NOT_FOUND",
-        message: "Project not found.",
-      })
-    }
+    // Only the owner can delete a project.
+    await requireProjectOwner(ctx, args.projectId)
+
+    // Remove this project's membership + invite rows inline (bounded, few rows)
+    // so it disappears from collaborators' dashboards and the link stops working.
+    const members = await ctx.db
+      .query("projectMembers")
+      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
+      .take(MAX_PROJECTS)
+    for (const member of members) await ctx.db.delete(member._id)
+    const invites = await ctx.db
+      .query("projectInvites")
+      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
+      .take(MAX_PROJECTS)
+    for (const invite of invites) await ctx.db.delete(invite._id)
+
     // Remove the project immediately so it disappears from the dashboard, then
     // delete its tasks in background batches to stay within transaction limits.
     await ctx.db.delete(args.projectId)
     await ctx.scheduler.runAfter(0, internal.projects.purgeTasks, {
       projectId: args.projectId,
-      ownerSubject,
     })
     return null
   },
@@ -202,13 +261,13 @@ export const remove = mutation({
 const PURGE_BATCH = 100
 
 export const purgeTasks = internalMutation({
-  args: { projectId: v.id("projects"), ownerSubject: v.string() },
+  args: { projectId: v.id("projects") },
   returns: v.null(),
   handler: async (ctx, args) => {
     const batch = await ctx.db
       .query("tasks")
-      .withIndex("by_owner_project_position", (q) =>
-        q.eq("ownerSubject", args.ownerSubject).eq("projectId", args.projectId)
+      .withIndex("by_project_position", (q) =>
+        q.eq("projectId", args.projectId)
       )
       .take(PURGE_BATCH)
     for (const task of batch) await ctx.db.delete(task._id)

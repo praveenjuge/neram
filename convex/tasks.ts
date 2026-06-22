@@ -1,15 +1,11 @@
 import { ConvexError, v } from "convex/values"
 
-import type { Doc, Id } from "./_generated/dataModel"
+import type { Doc } from "./_generated/dataModel"
+import { mutation, query } from "./_generated/server"
 import {
-  mutation,
-  query,
-  type MutationCtx,
-  type QueryCtx,
-} from "./_generated/server"
-import {
-  owner,
   projectCounts,
+  recordActivity,
+  requireProjectAccess,
   statusCountField,
   type ProjectCounts,
 } from "./model"
@@ -67,30 +63,18 @@ function cleanDueDate(dueDate?: string) {
   return dueDate
 }
 
-async function requireProject(
-  ctx: QueryCtx | MutationCtx,
-  projectId: Id<"projects">,
-  ownerSubject: string
-) {
-  const project = await ctx.db.get(projectId)
-  if (!project || project.ownerSubject !== ownerSubject) {
-    throw new ConvexError({ code: "NOT_FOUND", message: "Project not found." })
-  }
-  return project
-}
-
 export const list = query({
   args: { projectId: v.id("projects") },
   returns: v.array(task),
   handler: async (ctx, args) => {
-    const ownerSubject = await owner(ctx)
-    await requireProject(ctx, args.projectId, ownerSubject)
+    await requireProjectAccess(ctx, args.projectId)
     // Ordered by position ascending via the index, so each column renders in
-    // the right order without a client-side sort.
+    // the right order without a client-side sort. Keyed only off the project so
+    // collaborators (who don't know the owner's subject) can read the board.
     const tasks = await ctx.db
       .query("tasks")
-      .withIndex("by_owner_project_position", (q) =>
-        q.eq("ownerSubject", ownerSubject).eq("projectId", args.projectId)
+      .withIndex("by_project_position", (q) =>
+        q.eq("projectId", args.projectId)
       )
       .take(MAX_TASKS)
     return tasks.map(publicTask)
@@ -105,13 +89,15 @@ export const create = mutation({
   },
   returns: v.id("tasks"),
   handler: async (ctx, args) => {
-    const ownerSubject = await owner(ctx)
-    const project = await requireProject(ctx, args.projectId, ownerSubject)
+    const { project, actor } = await requireProjectAccess(ctx, args.projectId)
     const now = Date.now()
+    const title = cleanTitle(args.title)
     const taskId = await ctx.db.insert("tasks", {
-      ownerSubject,
+      // Keep the owner's subject as a consistent key; it's no longer the access
+      // gate (that's the membership check) but stays set for every task.
+      ownerSubject: project.ownerSubject,
       projectId: args.projectId,
-      title: cleanTitle(args.title),
+      title,
       dueDate: cleanDueDate(args.dueDate),
       status: "todo",
       // Append to the end of the board. Timestamp positions are monotonically
@@ -125,6 +111,12 @@ export const create = mutation({
       todoCount: project.todoCount + 1,
       updatedAt: now,
     })
+    await recordActivity(ctx, {
+      project,
+      actor,
+      type: "task.created",
+      taskTitle: title,
+    })
     return taskId
   },
 })
@@ -135,11 +127,14 @@ export const move = mutation({
   args: { taskId: v.id("tasks"), status, position: v.optional(v.number()) },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const ownerSubject = await owner(ctx)
     const current = await ctx.db.get(args.taskId)
-    if (!current || current.ownerSubject !== ownerSubject) {
+    if (!current) {
       throw new ConvexError({ code: "NOT_FOUND", message: "Task not found." })
     }
+    const { project, actor } = await requireProjectAccess(
+      ctx,
+      current.projectId
+    )
     const now = Date.now()
     const position = args.position ?? now
     await ctx.db.patch(args.taskId, {
@@ -148,20 +143,25 @@ export const move = mutation({
       updatedAt: now,
     })
 
-    // Only touch the project doc when the status actually changed: pure reorders
-    // within a column leave the counts (and the dashboard sort) untouched.
+    // Only touch the project doc + feed when the status actually changed: pure
+    // reorders within a column leave the counts (and the dashboard sort)
+    // untouched and shouldn't spam the activity feed.
     if (current.status !== args.status) {
-      const project = await ctx.db.get(current.projectId)
-      if (project) {
-        const from = statusCountField[current.status]
-        const to = statusCountField[args.status]
-        const patch: Partial<ProjectCounts> & { updatedAt: number } = {
-          updatedAt: now,
-        }
-        patch[from] = Math.max(0, projectCounts(project)[from] - 1)
-        patch[to] = projectCounts(project)[to] + 1
-        await ctx.db.patch(current.projectId, patch)
+      const from = statusCountField[current.status]
+      const to = statusCountField[args.status]
+      const patch: Partial<ProjectCounts> & { updatedAt: number } = {
+        updatedAt: now,
       }
+      patch[from] = Math.max(0, projectCounts(project)[from] - 1)
+      patch[to] = projectCounts(project)[to] + 1
+      await ctx.db.patch(current.projectId, patch)
+      await recordActivity(ctx, {
+        project,
+        actor,
+        type: "task.moved",
+        taskTitle: current.title,
+        toStatus: args.status,
+      })
     }
     return null
   },
@@ -171,23 +171,29 @@ export const remove = mutation({
   args: { taskId: v.id("tasks") },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const ownerSubject = await owner(ctx)
     const current = await ctx.db.get(args.taskId)
-    if (!current || current.ownerSubject !== ownerSubject) {
+    if (!current) {
       throw new ConvexError({ code: "NOT_FOUND", message: "Task not found." })
     }
+    const { project, actor } = await requireProjectAccess(
+      ctx,
+      current.projectId
+    )
     const now = Date.now()
-    const project = await ctx.db.get(current.projectId)
     await ctx.db.delete(args.taskId)
-    if (project) {
-      const field = statusCountField[current.status]
-      const patch: Partial<ProjectCounts> & { updatedAt: number } = {
-        updatedAt: now,
-      }
-      patch.taskCount = Math.max(0, project.taskCount - 1)
-      patch[field] = Math.max(0, projectCounts(project)[field] - 1)
-      await ctx.db.patch(current.projectId, patch)
+    const field = statusCountField[current.status]
+    const patch: Partial<ProjectCounts> & { updatedAt: number } = {
+      updatedAt: now,
     }
+    patch.taskCount = Math.max(0, project.taskCount - 1)
+    patch[field] = Math.max(0, projectCounts(project)[field] - 1)
+    await ctx.db.patch(current.projectId, patch)
+    await recordActivity(ctx, {
+      project,
+      actor,
+      type: "task.deleted",
+      taskTitle: current.title,
+    })
     return null
   },
 })

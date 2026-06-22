@@ -156,9 +156,14 @@ function Board() {
   }
 
   return (
-    <AppLayout actions={<NewTaskDialog projectId={projectIdArg} />}>
+    <AppLayout>
       <section className="mx-auto grid w-full max-w-7xl gap-5 p-5">
-        <h1 className="font-heading text-lg font-medium">{project.name}</h1>
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="truncate font-heading text-lg font-medium">
+            {project.name}
+          </h1>
+          <NewTaskDialog projectId={projectIdArg} />
+        </div>
         <div className="grid gap-3 lg:grid-cols-3">
           {columns.map((column) => {
             const columnTasks = tasks

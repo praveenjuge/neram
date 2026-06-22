@@ -2,7 +2,7 @@ import { RedirectToSignIn, UserButton } from "@clerk/react"
 import { Link, useLocation, useParams } from "@tanstack/react-router"
 import { useQuery } from "convex-helpers/react/cache"
 import { Authenticated, AuthLoading, Unauthenticated } from "convex/react"
-import { FolderKanban, LayoutGrid } from "lucide-react"
+import { Activity, FolderKanban, LayoutGrid } from "lucide-react"
 import type { ReactNode } from "react"
 
 import { api } from "../../convex/_generated/api"
@@ -27,7 +27,13 @@ import {
 } from "@/components/ui/sidebar"
 import { useProjectPrefetch } from "@/lib/prefetch"
 
-export function Protected({ children }: { children: ReactNode }) {
+export function Protected({
+  children,
+  redirectUrl = "/dashboard",
+}: {
+  children: ReactNode
+  redirectUrl?: string
+}) {
   return (
     <>
       <AuthLoading>
@@ -36,14 +42,14 @@ export function Protected({ children }: { children: ReactNode }) {
         </main>
       </AuthLoading>
       <Unauthenticated>
-        <RedirectToSignIn signInForceRedirectUrl="/dashboard" />
+        <RedirectToSignIn signInForceRedirectUrl={redirectUrl} />
       </Unauthenticated>
       <Authenticated>{children}</Authenticated>
     </>
   )
 }
 
-function AppSidebar({ actions }: { actions?: ReactNode }) {
+function AppSidebar() {
   const projects = useQuery(api.projects.names)
   const prefetch = useProjectPrefetch()
   const params = useParams({ strict: false })
@@ -69,9 +75,6 @@ function AppSidebar({ actions }: { actions?: ReactNode }) {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        {actions ? (
-          <SidebarGroup className="[&_button]:w-full">{actions}</SidebarGroup>
-        ) : null}
         <SidebarGroup>
           <SidebarGroupLabel>Projects</SidebarGroupLabel>
           <SidebarGroupContent>
@@ -81,6 +84,14 @@ function AppSidebar({ actions }: { actions?: ReactNode }) {
                   <Link to="/dashboard">
                     <LayoutGrid />
                     <span>All projects</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={pathname === "/activity"}>
+                  <Link to="/activity">
+                    <Activity />
+                    <span>Activity</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -129,16 +140,10 @@ function AppSidebar({ actions }: { actions?: ReactNode }) {
   )
 }
 
-export function AppLayout({
-  actions,
-  children,
-}: {
-  actions?: ReactNode
-  children: ReactNode
-}) {
+export function AppLayout({ children }: { children: ReactNode }) {
   return (
     <SidebarProvider>
-      <AppSidebar actions={actions} />
+      <AppSidebar />
       <SidebarInset>
         <div className="flex items-center gap-2 border-b px-3 py-2 md:hidden">
           <SidebarTrigger />

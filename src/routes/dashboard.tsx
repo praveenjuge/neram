@@ -1,6 +1,19 @@
 import { useQuery } from "convex-helpers/react/cache"
 import { useMutation } from "convex/react"
-import { FolderPlus, ListChecks, Pencil, Plus, Trash2 } from "lucide-react"
+import {
+  Ban,
+  Copy,
+  FolderPlus,
+  ListChecks,
+  LogOut,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Share2,
+  Trash2,
+  UserMinus,
+  Users,
+} from "lucide-react"
 import type { FormEvent } from "react"
 import { useState } from "react"
 import { toast } from "sonner"
@@ -67,9 +80,12 @@ function Dashboard() {
   const projects = useQuery(api.projects.list)
 
   return (
-    <AppLayout actions={<NewProjectDialog />}>
+    <AppLayout>
       <section className="mx-auto grid w-full max-w-6xl gap-6 p-5">
-        <h1 className="font-heading text-lg font-medium">Projects</h1>
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="font-heading text-lg font-medium">Projects</h1>
+          <NewProjectDialog />
+        </div>
         {projects === undefined ? (
           <div className="grid min-h-[40vh] place-items-center">
             <Spinner className="size-6 text-muted-foreground" />
@@ -87,6 +103,7 @@ function Dashboard() {
                 inProgressCount={project.inProgressCount}
                 key={project._id}
                 name={project.name}
+                role={project.role}
                 taskCount={project.taskCount}
                 todoCount={project.todoCount}
               />
@@ -103,6 +120,7 @@ type ProjectCardProps = {
   name: string
   icon?: string
   color?: string
+  role: "owner" | "editor"
   taskCount: number
   todoCount: number
   inProgressCount: number
@@ -147,7 +165,13 @@ function ProjectCard(project: ProjectCardProps) {
           icon={project.icon}
           id={project.id}
           name={project.name}
+          role={project.role}
         />
+        {project.role === "owner" ? (
+          <ShareProjectDialog id={project.id} name={project.name} />
+        ) : (
+          <LeaveProjectButton id={project.id} name={project.name} />
+        )}
       </CardFooter>
     </Card>
   )
@@ -270,9 +294,16 @@ type EditProjectDialogProps = {
   name: string
   icon?: string
   color?: string
+  role: "owner" | "editor"
 }
 
-function EditProjectDialog({ id, name, icon, color }: EditProjectDialogProps) {
+function EditProjectDialog({
+  id,
+  name,
+  icon,
+  color,
+  role,
+}: EditProjectDialogProps) {
   const updateProject = useMutation(api.projects.update).withOptimisticUpdate(
     updateProjectOptimistic
   )
@@ -374,7 +405,7 @@ function EditProjectDialog({ id, name, icon, color }: EditProjectDialogProps) {
             <Label>Color</Label>
             <ColorPicker onChange={setNextColor} value={nextColor} />
           </div>
-          {confirmDelete ? (
+          {confirmDelete && role === "owner" ? (
             <div className="grid gap-3 rounded-2xl border border-destructive/30 bg-destructive/5 p-3">
               <p className="text-sm text-muted-foreground">
                 This permanently deletes the project and all of its tasks.
@@ -398,16 +429,20 @@ function EditProjectDialog({ id, name, icon, color }: EditProjectDialogProps) {
               </div>
             </div>
           ) : null}
-          <DialogFooter className="sm:justify-between">
-            <Button
-              className={confirmDelete ? "invisible" : undefined}
-              data-testid="delete-project-trigger"
-              onClick={() => setConfirmDelete(true)}
-              type="button"
-              variant="destructive"
-            >
-              <Trash2 /> Delete
-            </Button>
+          <DialogFooter
+            className={cn(role === "owner" && "sm:justify-between")}
+          >
+            {role === "owner" ? (
+              <Button
+                className={confirmDelete ? "invisible" : undefined}
+                data-testid="delete-project-trigger"
+                onClick={() => setConfirmDelete(true)}
+                type="button"
+                variant="destructive"
+              >
+                <Trash2 /> Delete
+              </Button>
+            ) : null}
             <div className="flex gap-2">
               <DialogClose asChild>
                 <Button type="button" variant="outline">
@@ -420,6 +455,294 @@ function EditProjectDialog({ id, name, icon, color }: EditProjectDialogProps) {
             </div>
           </DialogFooter>
         </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function ShareProjectDialog({
+  id,
+  name,
+}: {
+  id: Id<"projects">
+  name: string
+}) {
+  const ensureInvite = useMutation(api.invites.ensure)
+  const regenerateInvite = useMutation(api.invites.regenerate)
+  const revokeInvite = useMutation(api.invites.revoke)
+  const removeMember = useMutation(api.members.remove)
+  const [open, setOpen] = useState(false)
+  const [token, setToken] = useState<string | null>(null)
+  const [working, setWorking] = useState(false)
+  // Only subscribe to the member list while the dialog is open so the dashboard
+  // doesn't hold a members subscription open for every owned card.
+  const members = useQuery(api.members.list, open ? { projectId: id } : "skip")
+
+  function onOpenChange(next: boolean) {
+    if (next) {
+      // Opening Share ensures a link exists, so there's always one to copy.
+      setToken(null)
+      setWorking(true)
+      ensureInvite({ projectId: id })
+        .then((value) => setToken(value))
+        .catch((error) =>
+          toast.error(messageFromError(error, "Could not create the link."))
+        )
+        .finally(() => setWorking(false))
+    }
+    setOpen(next)
+  }
+
+  const link = token ? `${window.location.origin}/join/${token}` : ""
+
+  async function onCopy() {
+    if (!link) return
+    try {
+      await navigator.clipboard.writeText(link)
+      toast.success("Link copied.")
+    } catch {
+      toast.error("Could not copy the link.")
+    }
+  }
+
+  async function onGenerate() {
+    setWorking(true)
+    try {
+      setToken(await ensureInvite({ projectId: id }))
+      toast.success("Sharing turned on.")
+    } catch (error) {
+      toast.error(messageFromError(error, "Could not create the link."))
+    } finally {
+      setWorking(false)
+    }
+  }
+
+  async function onRegenerate() {
+    setWorking(true)
+    try {
+      setToken(await regenerateInvite({ projectId: id }))
+      toast.success("New link generated. The old link no longer works.")
+    } catch (error) {
+      toast.error(messageFromError(error, "Could not regenerate the link."))
+    } finally {
+      setWorking(false)
+    }
+  }
+
+  async function onRevoke() {
+    setWorking(true)
+    try {
+      await revokeInvite({ projectId: id })
+      setToken(null)
+      toast.success("Sharing turned off.")
+    } catch (error) {
+      toast.error(messageFromError(error, "Could not revoke the link."))
+    } finally {
+      setWorking(false)
+    }
+  }
+
+  async function onRemoveMember(subject: string, displayName: string) {
+    try {
+      await removeMember({ projectId: id, subject })
+      toast.success(`Removed ${displayName}.`)
+    } catch (error) {
+      toast.error(messageFromError(error, "Could not remove the member."))
+    }
+  }
+
+  return (
+    <Dialog onOpenChange={onOpenChange} open={open}>
+      <DialogTrigger asChild>
+        <Button
+          aria-label="Share project"
+          data-testid="share-project-trigger"
+          size="sm"
+          variant="outline"
+        >
+          <Share2 /> Share
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Share {name}</DialogTitle>
+          <DialogDescription>
+            Anyone signed in who opens this link can join as an editor. Editors
+            add and edit tasks, but can't delete or re-share the project.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-5">
+          <div className="grid gap-2">
+            <Label>Invite link</Label>
+            {token ? (
+              <div className="flex gap-2">
+                <Input data-testid="invite-link-input" readOnly value={link} />
+                <Button
+                  aria-label="Copy link"
+                  onClick={onCopy}
+                  type="button"
+                  variant="outline"
+                >
+                  <Copy />
+                </Button>
+              </div>
+            ) : working ? (
+              <div className="flex h-9 items-center">
+                <Spinner className="size-4 text-muted-foreground" />
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Sharing is off. Generate a link to invite collaborators.
+              </p>
+            )}
+            <div className="flex gap-2">
+              {token ? (
+                <>
+                  <Button
+                    data-testid="regenerate-invite-button"
+                    disabled={working}
+                    onClick={onRegenerate}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    <RefreshCw /> Regenerate
+                  </Button>
+                  <Button
+                    data-testid="revoke-invite-button"
+                    disabled={working}
+                    onClick={onRevoke}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    <Ban /> Revoke
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  data-testid="generate-invite-button"
+                  disabled={working}
+                  onClick={onGenerate}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  <Share2 /> Generate link
+                </Button>
+              )}
+            </div>
+          </div>
+          <div className="grid gap-2">
+            <Label className="flex items-center gap-2">
+              <Users className="size-4" /> Members
+            </Label>
+            <ul className="grid gap-1">
+              {members === undefined ? (
+                <li className="px-1 text-sm text-muted-foreground">Loading…</li>
+              ) : (
+                members.map((member) => (
+                  <li
+                    className="flex items-center justify-between gap-2 rounded-xl border px-3 py-2"
+                    key={member.subject}
+                  >
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="truncate text-sm">
+                        {member.displayName}
+                        {member.isYou ? " (you)" : ""}
+                      </span>
+                      <Badge variant="outline">
+                        {member.role === "owner" ? "Owner" : "Editor"}
+                      </Badge>
+                    </span>
+                    {member.role === "editor" ? (
+                      <Button
+                        aria-label={`Remove ${member.displayName}`}
+                        data-testid="remove-member-button"
+                        onClick={() =>
+                          onRemoveMember(member.subject, member.displayName)
+                        }
+                        size="sm"
+                        variant="ghost"
+                      >
+                        <UserMinus />
+                      </Button>
+                    ) : null}
+                  </li>
+                ))
+              )}
+            </ul>
+          </div>
+        </div>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button type="button" variant="outline">
+              Done
+            </Button>
+          </DialogClose>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function LeaveProjectButton({
+  id,
+  name,
+}: {
+  id: Id<"projects">
+  name: string
+}) {
+  const leaveProject = useMutation(api.members.leave).withOptimisticUpdate(
+    removeProjectOptimistic
+  )
+  const [open, setOpen] = useState(false)
+
+  function onLeave() {
+    // Optimistic remove drops the card immediately; close and let it run.
+    void leaveProject({ projectId: id })
+      .then(() => toast.success(`Left ${name}.`))
+      .catch((error) =>
+        toast.error(messageFromError(error, "Could not leave the project."))
+      )
+    setOpen(false)
+  }
+
+  return (
+    <Dialog onOpenChange={setOpen} open={open}>
+      <DialogTrigger asChild>
+        <Button
+          aria-label="Leave project"
+          data-testid="leave-project-trigger"
+          size="sm"
+          variant="outline"
+        >
+          <LogOut /> Leave
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Leave {name}?</DialogTitle>
+          <DialogDescription>
+            You'll lose access to this board. You can rejoin later if someone
+            shares the link with you again.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button type="button" variant="outline">
+              Cancel
+            </Button>
+          </DialogClose>
+          <Button
+            data-testid="confirm-leave-project-button"
+            onClick={onLeave}
+            type="button"
+            variant="destructive"
+          >
+            <LogOut /> Leave project
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )

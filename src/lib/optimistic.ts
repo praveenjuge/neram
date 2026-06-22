@@ -141,6 +141,8 @@ export function createProjectOptimistic(
     todoCount: 0,
     inProgressCount: 0,
     doneCount: 0,
+    // The creator is always the owner of their freshly created project.
+    role: "owner",
   }
   store.setQuery(api.projects.list, {}, [temp, ...list])
 }
