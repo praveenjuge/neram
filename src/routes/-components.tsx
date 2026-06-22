@@ -5,7 +5,7 @@ import { Authenticated, AuthLoading, Unauthenticated } from "convex/react"
 import type { FunctionReturnType } from "convex/server"
 import {
   Activity,
-  LayoutGrid,
+  LayoutDashboard,
   LogOut,
   MoreHorizontal,
   Pencil,
@@ -241,11 +241,11 @@ function AppSidebar() {
                 <SidebarMenuButton
                   asChild
                   isActive={pathname === "/dashboard"}
-                  tooltip="All projects"
+                  tooltip="Dashboard"
                 >
                   <Link to="/dashboard">
-                    <LayoutGrid />
-                    <span>All projects</span>
+                    <LayoutDashboard />
+                    <span>Dashboard</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
