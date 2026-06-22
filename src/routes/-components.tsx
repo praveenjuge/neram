@@ -33,13 +33,13 @@ export function AppHeader({
 }) {
   return (
     <header className="flex items-center justify-between gap-4 border-b px-5 py-3">
-      <div className="flex min-w-0 items-center gap-1.5">
-        <Link className="font-heading font-medium" to="/dashboard">
+      <div className="flex min-w-0 items-center">
+        <Link className="font-medium" to="/dashboard">
           {title}
         </Link>
         {crumb ? (
           <>
-            <span className="pl-3 font-heading font-medium text-muted-foreground">
+            <span className="pl-2 font-heading font-medium text-muted-foreground">
               /
             </span>
             {crumb}

@@ -26,7 +26,7 @@ export function ThemeToggle() {
           aria-label="Change theme"
           data-testid="theme-toggle"
           size="icon"
-          variant="ghost"
+          variant="outline"
         >
           <Sun className="dark:hidden" />
           <Moon className="hidden dark:block" />
