@@ -5,6 +5,7 @@ import {
   FolderPlus,
   ListChecks,
   Pencil,
+  Plus,
   Trash2,
 } from "lucide-react"
 import type { FormEvent } from "react"
@@ -19,6 +20,7 @@ import { IconPicker } from "@/components/icon-picker"
 import { messageFromError } from "@/lib/errors"
 import {
   createProjectOptimistic,
+  createTaskOptimistic,
   removeProjectOptimistic,
   updateProjectOptimistic,
 } from "@/lib/optimistic"
@@ -38,7 +40,13 @@ import {
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
 import {
   Dialog,
   DialogClose,
@@ -160,46 +168,44 @@ type ProjectCardProps = {
 function ProjectCard(project: ProjectCardProps) {
   const prefetch = useProjectPrefetch()
   return (
-    <div className="group relative">
+    <Card className="h-full transition-shadow hover:shadow-md">
       <Link
-        className="block rounded-[min(var(--radius-4xl),24px)] outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
+        className="flex flex-1 flex-col gap-(--card-spacing) rounded-[min(var(--radius-4xl),24px)] outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
         data-testid="project-card"
         onFocus={() => prefetch(project.id)}
         onMouseEnter={() => prefetch(project.id)}
         params={{ projectId: project.id }}
         to="/projects/$projectId"
       >
-        <Card className="h-full transition-shadow group-hover:shadow-md">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-3 pe-9">
-              <span
-                className={cn(
-                  "grid size-9 shrink-0 place-items-center rounded-xl",
-                  getProjectColorBox(project.color)
-                )}
-              >
-                <ProjectIcon className="size-4" name={project.icon} />
-              </span>
-              <span className="truncate">{project.name}</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-wrap gap-1.5">
-            <Badge variant="secondary">
-              <ListChecks /> {project.taskCount}
-            </Badge>
-            <Badge variant="outline">{project.todoCount} Todo</Badge>
-            <Badge variant="outline">{project.inProgressCount} Doing</Badge>
-            <Badge variant="outline">{project.doneCount} Done</Badge>
-          </CardContent>
-        </Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-3">
+            <span
+              className={cn(
+                "grid size-9 shrink-0 place-items-center rounded-xl",
+                getProjectColorBox(project.color)
+              )}
+            >
+              <ProjectIcon className="size-4" name={project.icon} />
+            </span>
+            <span className="truncate">{project.name}</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-1">
+          <Badge variant="outline">{project.todoCount} Todo</Badge>
+          <Badge variant="outline">{project.inProgressCount} Doing</Badge>
+          <Badge variant="outline">{project.doneCount} Done</Badge>
+        </CardContent>
       </Link>
-      <EditProjectDialog
-        color={project.color}
-        icon={project.icon}
-        id={project.id}
-        name={project.name}
-      />
-    </div>
+      <CardFooter className="gap-2 border-t">
+        <AddTaskDialog id={project.id} name={project.name} />
+        <EditProjectDialog
+          color={project.color}
+          icon={project.icon}
+          id={project.id}
+          name={project.name}
+        />
+      </CardFooter>
+    </Card>
   )
 }
 
@@ -386,12 +392,11 @@ function EditProjectDialog({ id, name, icon, color }: EditProjectDialogProps) {
       <DialogTrigger asChild>
         <Button
           aria-label="Edit project"
-          className="absolute end-3 top-3 text-muted-foreground opacity-70 transition-opacity hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
           data-testid="edit-project-trigger"
-          size="icon-sm"
-          variant="ghost"
+          size="sm"
+          variant="outline"
         >
-          <Pencil />
+          <Pencil /> Edit
         </Button>
       </DialogTrigger>
       <DialogContent>
@@ -469,6 +474,104 @@ function EditProjectDialog({ id, name, icon, color }: EditProjectDialogProps) {
                 Save changes
               </Button>
             </div>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+type AddTaskDialogProps = {
+  id: Id<"projects">
+  name: string
+}
+
+function AddTaskDialog({ id, name }: AddTaskDialogProps) {
+  const createTask = useMutation(api.tasks.create).withOptimisticUpdate(
+    createTaskOptimistic(id)
+  )
+  const [open, setOpen] = useState(false)
+  const [title, setTitle] = useState("")
+  const [dueDate, setDueDate] = useState("")
+
+  function onOpenChange(next: boolean) {
+    if (next) {
+      setTitle("")
+      setDueDate("")
+    }
+    setOpen(next)
+  }
+
+  function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const nextTitle = title.trim()
+    if (!nextTitle) {
+      toast.error("Task title is required.")
+      return
+    }
+
+    // Fire optimistically: the project's Todo count bumps immediately on the
+    // dashboard card, and a failure rolls it back with a toast.
+    void createTask({
+      projectId: id,
+      title: nextTitle.slice(0, 120),
+      dueDate: dueDate || undefined,
+    })
+      .then(() => toast.success("Task added."))
+      .catch((error) =>
+        toast.error(messageFromError(error, "Could not add the task."))
+      )
+    setOpen(false)
+  }
+
+  return (
+    <Dialog onOpenChange={onOpenChange} open={open}>
+      <DialogTrigger asChild>
+        <Button data-testid="add-task-trigger" size="sm">
+          <Plus /> Add task
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Add task</DialogTitle>
+          <DialogDescription>
+            New tasks start in the Todo column of {name}.
+          </DialogDescription>
+        </DialogHeader>
+        <form className="grid gap-4" onSubmit={onSubmit}>
+          <div className="grid gap-2">
+            <Label htmlFor={`add-task-title-${id}`}>Title</Label>
+            <Input
+              autoFocus
+              data-testid="add-task-title-input"
+              id={`add-task-title-${id}`}
+              maxLength={120}
+              onChange={(event) => setTitle(event.target.value)}
+              placeholder="e.g. Draft the homepage copy"
+              value={title}
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor={`add-task-due-date-${id}`}>
+              Due date (optional)
+            </Label>
+            <Input
+              data-testid="add-task-due-date-input"
+              id={`add-task-due-date-${id}`}
+              onChange={(event) => setDueDate(event.target.value)}
+              type="date"
+              value={dueDate}
+            />
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="outline">
+                Cancel
+              </Button>
+            </DialogClose>
+            <Button data-testid="add-task-button" type="submit">
+              <Plus /> Add task
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>
