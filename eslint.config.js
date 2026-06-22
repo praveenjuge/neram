@@ -23,7 +23,12 @@ export default defineConfig([
         "error",
         {
           allowConstantExport: true,
-          allowExportNames: ["Route", "buttonVariants", "badgeVariants"],
+          allowExportNames: [
+            "Route",
+            "buttonVariants",
+            "badgeVariants",
+            "useSidebar",
+          ],
         },
       ],
     },

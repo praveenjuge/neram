@@ -1,23 +1,16 @@
 import { useQuery } from "convex-helpers/react/cache"
 import { useMutation } from "convex/react"
-import {
-  ArrowLeft,
-  CalendarClock,
-  ChevronsUpDown,
-  LayoutGrid,
-  Plus,
-} from "lucide-react"
+import { ArrowLeft, CalendarClock, Plus } from "lucide-react"
 import type { FunctionReturnType } from "convex/server"
 import type { FormEvent } from "react"
 import { Fragment, useState } from "react"
 import { toast } from "sonner"
 
-import { Link, createFileRoute, useNavigate } from "@tanstack/react-router"
+import { Link, createFileRoute } from "@tanstack/react-router"
 import { api } from "../../convex/_generated/api"
 import type { Id } from "../../convex/_generated/dataModel"
 import { messageFromError } from "@/lib/errors"
 import { createTaskOptimistic, moveTaskOptimistic } from "@/lib/optimistic"
-import { useProjectPrefetch } from "@/lib/prefetch"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -35,11 +28,9 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
@@ -50,7 +41,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { AppHeader, Protected } from "./-components"
+import { AppLayout, Protected } from "./-components"
 
 const columns = [
   { key: "todo", label: "Todo" },
@@ -134,20 +125,18 @@ function Board() {
 
   if (project === undefined || tasks === undefined) {
     return (
-      <main className="min-h-svh bg-background">
-        <AppHeader title="Neram" />
+      <AppLayout>
         <div className="grid min-h-[60vh] place-items-center">
           <Spinner className="size-6 text-muted-foreground" />
         </div>
-      </main>
+      </AppLayout>
     )
   }
 
   if (project === null) {
     return (
-      <main className="min-h-svh bg-background">
-        <AppHeader title="Neram" />
-        <section className="mx-auto grid max-w-7xl gap-4 p-5">
+      <AppLayout>
+        <section className="mx-auto grid w-full max-w-7xl gap-4 p-5">
           <Button asChild className="w-fit" size="sm" variant="ghost">
             <Link to="/dashboard">
               <ArrowLeft /> Back to projects
@@ -162,23 +151,14 @@ function Board() {
             </CardContent>
           </Card>
         </section>
-      </main>
+      </AppLayout>
     )
   }
 
   return (
-    <main className="min-h-svh bg-background">
-      <AppHeader
-        actions={<NewTaskDialog projectId={projectIdArg} />}
-        crumb={
-          <ProjectSwitcher
-            currentId={projectIdArg}
-            currentName={project.name}
-          />
-        }
-        title="Neram"
-      />
-      <section className="mx-auto grid max-w-7xl gap-5 p-5">
+    <AppLayout actions={<NewTaskDialog projectId={projectIdArg} />}>
+      <section className="mx-auto grid w-full max-w-7xl gap-5 p-5">
+        <h1 className="font-heading text-lg font-medium">{project.name}</h1>
         <div className="grid gap-3 lg:grid-cols-3">
           {columns.map((column) => {
             const columnTasks = tasks
@@ -273,69 +253,7 @@ function Board() {
           })}
         </div>
       </section>
-    </main>
-  )
-}
-
-function ProjectSwitcher({
-  currentId,
-  currentName,
-}: {
-  currentId: Id<"projects">
-  currentName: string
-}) {
-  const projects = useQuery(api.projects.names)
-  const navigate = useNavigate()
-  const prefetch = useProjectPrefetch()
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          className="font-heading"
-          data-testid="project-switcher"
-          variant="ghost"
-        >
-          <span className="truncate">{currentName}</span>
-          <ChevronsUpDown />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="start"
-        className="max-h-80 w-56 overflow-y-auto"
-      >
-        <DropdownMenuLabel>Switch project</DropdownMenuLabel>
-        <DropdownMenuRadioGroup
-          onValueChange={(value) => {
-            if (value !== currentId) {
-              void navigate({
-                to: "/projects/$projectId",
-                params: { projectId: value },
-              })
-            }
-          }}
-          value={currentId}
-        >
-          {projects?.map((project) => (
-            <DropdownMenuRadioItem
-              data-testid={`switch-to-${project._id}`}
-              key={project._id}
-              onFocus={() => prefetch(project._id)}
-              onMouseEnter={() => prefetch(project._id)}
-              value={project._id}
-            >
-              <span className="truncate">{project.name}</span>
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem asChild>
-          <Link to="/dashboard">
-            <LayoutGrid /> All projects
-          </Link>
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    </AppLayout>
   )
 }
 
