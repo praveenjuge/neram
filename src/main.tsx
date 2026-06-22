@@ -1,4 +1,5 @@
 import { ClerkProvider, useAuth } from "@clerk/react"
+import { shadcn } from "@clerk/ui/themes"
 import { ConvexReactClient } from "convex/react"
 import { ConvexProviderWithClerk } from "convex/react-clerk"
 import { ConvexQueryCacheProvider } from "convex-helpers/react/cache"
@@ -23,6 +24,7 @@ createRoot(document.getElementById("root")!).render(
       <TooltipProvider>
         {clerkKey && convex ? (
           <ClerkProvider
+            appearance={{ theme: shadcn }}
             publishableKey={clerkKey}
             signInFallbackRedirectUrl="/dashboard"
             signInForceRedirectUrl="/dashboard"
