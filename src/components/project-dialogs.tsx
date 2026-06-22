@@ -19,6 +19,7 @@ import { toast } from "sonner"
 import { api } from "../../convex/_generated/api"
 import type { Id } from "../../convex/_generated/dataModel"
 import { ColorPicker } from "@/components/color-picker"
+import { DueDatePicker } from "@/components/due-date-picker"
 import { IconPicker } from "@/components/icon-picker"
 import { messageFromError } from "@/lib/errors"
 import {
@@ -54,6 +55,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Spinner } from "@/components/ui/spinner"
+import { Textarea } from "@/components/ui/textarea"
 
 /**
  * Project dialogs are shared between the dashboard cards and the sidebar's
@@ -723,6 +725,7 @@ export function AddTaskDialog({
   )
   const [open, setOpen] = useControlledOpen(openProp, onOpenChange)
   const [title, setTitle] = useState("")
+  const [description, setDescription] = useState("")
   const [dueDate, setDueDate] = useState("")
 
   // Clear the form each time the dialog opens.
@@ -731,6 +734,7 @@ export function AddTaskDialog({
     setPrevOpen(open)
     if (open) {
       setTitle("")
+      setDescription("")
       setDueDate("")
     }
   }
@@ -748,6 +752,7 @@ export function AddTaskDialog({
     void createTask({
       projectId: id,
       title: nextTitle.slice(0, 120),
+      description: description || undefined,
       dueDate: dueDate || undefined,
     })
       .then(() => toast.success("Task added."))
@@ -781,14 +786,26 @@ export function AddTaskDialog({
             />
           </div>
           <div className="grid gap-2">
+            <Label htmlFor={`add-task-description-${id}`}>
+              Description (optional)
+            </Label>
+            <Textarea
+              data-testid="add-task-description-input"
+              id={`add-task-description-${id}`}
+              maxLength={2000}
+              onChange={(event) => setDescription(event.target.value)}
+              placeholder="Add more detail about this task"
+              value={description}
+            />
+          </div>
+          <div className="grid gap-2">
             <Label htmlFor={`add-task-due-date-${id}`}>
               Due date (optional)
             </Label>
-            <Input
-              data-testid="add-task-due-date-input"
+            <DueDatePicker
               id={`add-task-due-date-${id}`}
-              onChange={(event) => setDueDate(event.target.value)}
-              type="date"
+              onChange={setDueDate}
+              testId="add-task-due-date-input"
               value={dueDate}
             />
           </div>

@@ -41,6 +41,7 @@ export default defineSchema({
     ownerSubject: v.string(),
     projectId: v.id("projects"),
     title: v.string(),
+    description: v.optional(v.string()),
     dueDate: v.optional(v.string()),
     status,
     // Fractional sort key for ordering within a column. New tasks append at the

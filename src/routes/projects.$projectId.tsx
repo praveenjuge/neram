@@ -1,6 +1,15 @@
 import { useQuery } from "convex-helpers/react/cache"
 import { useMutation } from "convex/react"
-import { ArrowLeft, CalendarClock, Plus } from "lucide-react"
+import {
+  ArrowLeft,
+  CalendarClock,
+  Circle,
+  CircleCheck,
+  CircleDot,
+  Pencil,
+  Plus,
+  Trash2,
+} from "lucide-react"
 import type { FunctionReturnType } from "convex/server"
 import type { FormEvent } from "react"
 import { Fragment, useState } from "react"
@@ -9,12 +18,19 @@ import { toast } from "sonner"
 import { Link, createFileRoute } from "@tanstack/react-router"
 import { api } from "../../convex/_generated/api"
 import type { Id } from "../../convex/_generated/dataModel"
+import { DueDatePicker } from "@/components/due-date-picker"
+import { formatDueDate } from "@/lib/dates"
 import { messageFromError } from "@/lib/errors"
-import { createTaskOptimistic, moveTaskOptimistic } from "@/lib/optimistic"
+import {
+  createTaskOptimistic,
+  moveTaskOptimistic,
+  removeTaskOptimistic,
+  updateTaskOptimistic,
+} from "@/lib/optimistic"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardFooter } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import {
   Dialog,
   DialogClose,
@@ -25,28 +41,23 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Spinner } from "@/components/ui/spinner"
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Spinner } from "@/components/ui/spinner"
+import { Textarea } from "@/components/ui/textarea"
 import { AppLayout, Protected } from "./-components"
 
 const columns = [
-  { key: "todo", label: "Todo" },
-  { key: "inProgress", label: "In Progress" },
-  { key: "done", label: "Done" },
+  { key: "todo", label: "Todo", icon: Circle },
+  { key: "inProgress", label: "In Progress", icon: CircleDot },
+  { key: "done", label: "Done", icon: CircleCheck },
 ] as const
 
 type Status = (typeof columns)[number]["key"]
@@ -94,6 +105,10 @@ function Board() {
   const [draggingId, setDraggingId] = useState<Id<"tasks"> | null>(null)
   const [overColumn, setOverColumn] = useState<Status | null>(null)
   const [overIndex, setOverIndex] = useState<number | null>(null)
+  // The opened task dialog is tracked here (not inside each card) so it stays
+  // open when a status change moves the card into a different column, which
+  // would otherwise unmount the card and its dialog.
+  const [openTaskId, setOpenTaskId] = useState<Id<"tasks"> | null>(null)
 
   async function handleDrop(
     taskId: Id<"tasks">,
@@ -210,7 +225,10 @@ function Board() {
                 }}
               >
                 <div className="flex items-center justify-between px-1">
-                  <h2 className="text-sm font-medium">{column.label}</h2>
+                  <h2 className="flex items-center gap-2 text-sm font-medium">
+                    <column.icon className="size-4 text-muted-foreground" />
+                    {column.label}
+                  </h2>
                   <Badge variant="secondary">{columnTasks.length}</Badge>
                 </div>
                 <div className="flex flex-1 flex-col gap-2">
@@ -229,6 +247,7 @@ function Board() {
                           setOverColumn(column.key)
                           setOverIndex(index)
                         }}
+                        onOpen={() => setOpenTaskId(task._id)}
                         task={task}
                       />
                     </Fragment>
@@ -257,6 +276,13 @@ function Board() {
             )
           })}
         </div>
+        <TaskDialog
+          onOpenChange={(next) => {
+            if (!next) setOpenTaskId(null)
+          }}
+          open={openTaskId !== null}
+          task={tasks.find((task) => task._id === openTaskId) ?? null}
+        />
       </section>
     </AppLayout>
   )
@@ -268,34 +294,25 @@ function TaskCard({
   onDragStart,
   onDragEnd,
   onHover,
+  onOpen,
 }: {
   task: Task
   isDragging: boolean
   onDragStart: () => void
   onDragEnd: () => void
   onHover: () => void
+  onOpen: () => void
 }) {
-  const moveTask = useMutation(api.tasks.move).withOptimisticUpdate(
-    moveTaskOptimistic(task.projectId)
-  )
-
-  async function onMove(status: Status) {
-    if (status === task.status) return
-    try {
-      await moveTask({ taskId: task._id, status })
-    } catch (error) {
-      toast.error(messageFromError(error, "Could not move the task."))
-    }
-  }
-
   return (
     <Card
+      aria-label={`Open ${task.title}`}
       className={cn(
-        "cursor-grab gap-2 transition-opacity active:cursor-grabbing",
+        "cursor-grab gap-2 transition-opacity outline-none focus-visible:ring-3 focus-visible:ring-ring/30 active:cursor-grabbing",
         isDragging && "opacity-50"
       )}
       data-testid="task-card"
       draggable
+      onClick={onOpen}
       onDragEnd={onDragEnd}
       onDragOver={(event) => {
         event.preventDefault()
@@ -307,52 +324,245 @@ function TaskCard({
         event.dataTransfer.setData("text/plain", task._id)
         onDragStart()
       }}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault()
+          onOpen()
+        }
+      }}
+      role="button"
       size="sm"
+      tabIndex={0}
     >
-      <CardContent className="space-y-2">
+      <CardContent className="space-y-1.5">
         <p className="text-sm font-medium">{task.title}</p>
+        {task.description ? (
+          <p className="line-clamp-2 text-xs text-muted-foreground">
+            {task.description}
+          </p>
+        ) : null}
         {task.dueDate ? (
           <Badge variant="outline">
-            <CalendarClock /> Due {task.dueDate}
+            <CalendarClock /> Due {formatDueDate(task.dueDate)}
           </Badge>
         ) : null}
       </CardContent>
-      <CardFooter className="justify-end">
-        <DropdownMenu>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  data-testid="move-task-button"
-                  size="sm"
-                  variant="outline"
-                >
-                  Move
-                </Button>
-              </DropdownMenuTrigger>
-            </TooltipTrigger>
-            <TooltipContent>Move to another column</TooltipContent>
-          </Tooltip>
-          <DropdownMenuContent align="end">
-            <DropdownMenuLabel>Move to</DropdownMenuLabel>
-            <DropdownMenuRadioGroup
-              onValueChange={(value) => onMove(value as Status)}
+    </Card>
+  )
+}
+
+function TaskDialog({
+  task,
+  open,
+  onOpenChange,
+}: {
+  task: Task | null
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  // Rendered once at the board level; only mount the editable content while a
+  // task is selected so its form hooks always have a concrete task to work on.
+  if (!task) return null
+  return (
+    <TaskDialogContent onOpenChange={onOpenChange} open={open} task={task} />
+  )
+}
+
+function TaskDialogContent({
+  task,
+  open,
+  onOpenChange,
+}: {
+  task: Task
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  const updateTask = useMutation(api.tasks.update).withOptimisticUpdate(
+    updateTaskOptimistic(task.projectId)
+  )
+  const moveTask = useMutation(api.tasks.move).withOptimisticUpdate(
+    moveTaskOptimistic(task.projectId)
+  )
+  const removeTask = useMutation(api.tasks.remove).withOptimisticUpdate(
+    removeTaskOptimistic(task.projectId)
+  )
+
+  const [title, setTitle] = useState(task.title)
+  const [description, setDescription] = useState(task.description ?? "")
+  const [dueDate, setDueDate] = useState(task.dueDate ?? "")
+  const [confirmDelete, setConfirmDelete] = useState(false)
+
+  // The status dropdown is a quick action: changing it moves the card to the
+  // end of the target column immediately (mirroring the old "Move" menu), while
+  // title/description/due-date edits are persisted with "Save changes".
+  function onStatusChange(next: Status) {
+    if (next === task.status) return
+    void moveTask({ taskId: task._id, status: next })
+      .then(() => toast.success("Task moved."))
+      .catch((error) =>
+        toast.error(messageFromError(error, "Could not move the task."))
+      )
+  }
+
+  function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const nextTitle = title.trim()
+    if (!nextTitle) {
+      toast.error("Task title is required.")
+      return
+    }
+
+    // Optimistic edit renders instantly, so close right away. Empty strings for
+    // description/due date clear those fields on the server.
+    void updateTask({
+      taskId: task._id,
+      title: nextTitle.slice(0, 120),
+      description,
+      dueDate,
+    })
+      .then(() => toast.success("Task updated."))
+      .catch((error) =>
+        toast.error(messageFromError(error, "Could not update the task."))
+      )
+    onOpenChange(false)
+  }
+
+  function onDelete() {
+    // Optimistic remove drops the card immediately; close and let it run.
+    void removeTask({ taskId: task._id })
+      .then(() => toast.success("Task deleted."))
+      .catch((error) =>
+        toast.error(messageFromError(error, "Could not delete the task."))
+      )
+    onOpenChange(false)
+  }
+
+  return (
+    <Dialog onOpenChange={onOpenChange} open={open}>
+      <DialogContent data-testid="task-dialog">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Pencil className="size-4 text-muted-foreground" /> Edit task
+          </DialogTitle>
+          <DialogDescription>
+            Update the details, change the status, or delete this task.
+          </DialogDescription>
+        </DialogHeader>
+        <form className="grid gap-4" onSubmit={onSubmit}>
+          <div className="grid gap-2">
+            <Label htmlFor={`edit-task-title-${task._id}`}>Title</Label>
+            <Input
+              autoFocus
+              data-testid="edit-task-title-input"
+              id={`edit-task-title-${task._id}`}
+              maxLength={120}
+              onChange={(event) => setTitle(event.target.value)}
+              placeholder="e.g. Draft the homepage copy"
+              value={title}
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor={`edit-task-description-${task._id}`}>
+              Description (optional)
+            </Label>
+            <Textarea
+              data-testid="edit-task-description-input"
+              id={`edit-task-description-${task._id}`}
+              maxLength={2000}
+              onChange={(event) => setDescription(event.target.value)}
+              placeholder="Add more detail about this task"
+              value={description}
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor={`edit-task-status-${task._id}`}>Status</Label>
+            <Select
+              onValueChange={(value) => onStatusChange(value as Status)}
               value={task.status}
             >
-              {columns.map((column) => (
-                <DropdownMenuRadioItem
-                  key={column.key}
-                  data-testid={`move-to-${column.key}`}
-                  value={column.key}
+              <SelectTrigger
+                className="w-full"
+                data-testid="task-status-select"
+                id={`edit-task-status-${task._id}`}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {columns.map((column) => {
+                  const Icon = column.icon
+                  return (
+                    <SelectItem
+                      data-testid={`status-option-${column.key}`}
+                      key={column.key}
+                      value={column.key}
+                    >
+                      <Icon className="size-4 text-muted-foreground" />
+                      {column.label}
+                    </SelectItem>
+                  )
+                })}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor={`edit-task-due-date-${task._id}`}>
+              Due date (optional)
+            </Label>
+            <DueDatePicker
+              id={`edit-task-due-date-${task._id}`}
+              onChange={setDueDate}
+              testId="edit-task-due-date-input"
+              value={dueDate}
+            />
+          </div>
+          {confirmDelete ? (
+            <div className="grid gap-3 rounded-2xl border border-destructive/30 bg-destructive/5 p-3">
+              <p className="text-sm text-muted-foreground">
+                This permanently deletes the task. This can't be undone.
+              </p>
+              <div className="flex justify-end gap-2">
+                <Button
+                  onClick={() => setConfirmDelete(false)}
+                  type="button"
+                  variant="ghost"
                 >
-                  {column.label}
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </CardFooter>
-    </Card>
+                  Cancel
+                </Button>
+                <Button
+                  data-testid="confirm-delete-task-button"
+                  onClick={onDelete}
+                  type="button"
+                  variant="destructive"
+                >
+                  <Trash2 /> Delete task
+                </Button>
+              </div>
+            </div>
+          ) : null}
+          <DialogFooter className="sm:justify-between">
+            <Button
+              className={confirmDelete ? "invisible" : undefined}
+              data-testid="delete-task-trigger"
+              onClick={() => setConfirmDelete(true)}
+              type="button"
+              variant="destructive"
+            >
+              <Trash2 /> Delete
+            </Button>
+            <div className="flex gap-2">
+              <DialogClose asChild>
+                <Button type="button" variant="outline">
+                  Cancel
+                </Button>
+              </DialogClose>
+              <Button data-testid="save-task-button" type="submit">
+                Save changes
+              </Button>
+            </div>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -362,10 +572,12 @@ function NewTaskDialog({ projectId }: { projectId: Id<"projects"> }) {
   )
   const [open, setOpen] = useState(false)
   const [title, setTitle] = useState("")
+  const [description, setDescription] = useState("")
   const [dueDate, setDueDate] = useState("")
 
   function reset() {
     setTitle("")
+    setDescription("")
     setDueDate("")
   }
 
@@ -382,6 +594,7 @@ function NewTaskDialog({ projectId }: { projectId: Id<"projects"> }) {
     void createTask({
       projectId,
       title: nextTitle.slice(0, 120),
+      description: description || undefined,
       dueDate: dueDate || undefined,
     })
       .then(() => toast.success("Task added."))
@@ -420,12 +633,22 @@ function NewTaskDialog({ projectId }: { projectId: Id<"projects"> }) {
             />
           </div>
           <div className="grid gap-2">
+            <Label htmlFor="task-description">Description (optional)</Label>
+            <Textarea
+              data-testid="task-description-input"
+              id="task-description"
+              maxLength={2000}
+              onChange={(event) => setDescription(event.target.value)}
+              placeholder="Add more detail about this task"
+              value={description}
+            />
+          </div>
+          <div className="grid gap-2">
             <Label htmlFor="task-due-date">Due date (optional)</Label>
-            <Input
-              data-testid="task-due-date-input"
+            <DueDatePicker
               id="task-due-date"
-              onChange={(event) => setDueDate(event.target.value)}
-              type="date"
+              onChange={setDueDate}
+              testId="task-due-date-input"
               value={dueDate}
             />
           </div>

@@ -97,7 +97,12 @@ export function moveTaskOptimistic(projectId: Id<"projects">) {
 export function createTaskOptimistic(projectId: Id<"projects">) {
   return (
     store: OptimisticLocalStore,
-    args: { projectId: Id<"projects">; title: string; dueDate?: string }
+    args: {
+      projectId: Id<"projects">
+      title: string
+      description?: string
+      dueDate?: string
+    }
   ) => {
     const tasks = store.getQuery(api.tasks.list, { projectId })
     if (tasks) {
@@ -107,6 +112,7 @@ export function createTaskOptimistic(projectId: Id<"projects">) {
         _creationTime: now,
         projectId,
         title: args.title,
+        description: args.description,
         dueDate: args.dueDate,
         status: "todo",
         position: now,
@@ -118,6 +124,67 @@ export function createTaskOptimistic(projectId: Id<"projects">) {
     patchProjectSummaries(store, projectId, (summary) =>
       applyCounts(summary, { taskCount: 1, todoCount: 1 })
     )
+  }
+}
+
+/** Optimistically apply title/description/due-date edits to a task on the board. */
+export function updateTaskOptimistic(projectId: Id<"projects">) {
+  return (
+    store: OptimisticLocalStore,
+    args: {
+      taskId: Id<"tasks">
+      title?: string
+      description?: string
+      dueDate?: string
+    }
+  ) => {
+    const tasks = store.getQuery(api.tasks.list, { projectId })
+    if (!tasks) return
+    store.setQuery(
+      api.tasks.list,
+      { projectId },
+      tasks.map((task) =>
+        task._id === args.taskId
+          ? {
+              ...task,
+              title: args.title ?? task.title,
+              // Empty strings clear the field, mirroring the server's cleaners.
+              description: args.description
+                ? args.description
+                : args.description === undefined
+                  ? task.description
+                  : undefined,
+              dueDate: args.dueDate
+                ? args.dueDate
+                : args.dueDate === undefined
+                  ? task.dueDate
+                  : undefined,
+              updatedAt: Date.now(),
+            }
+          : task
+      )
+    )
+  }
+}
+
+/** Optimistically remove a task from the board and drop the project's counters. */
+export function removeTaskOptimistic(projectId: Id<"projects">) {
+  return (store: OptimisticLocalStore, args: { taskId: Id<"tasks"> }) => {
+    const tasks = store.getQuery(api.tasks.list, { projectId })
+    if (!tasks) return
+    const removed = tasks.find((task) => task._id === args.taskId)
+    store.setQuery(
+      api.tasks.list,
+      { projectId },
+      tasks.filter((task) => task._id !== args.taskId)
+    )
+    if (removed) {
+      const deltas: CountDeltas = { taskCount: -1 }
+      deltas[statusCountKey[removed.status]] = -1
+      patchProjectSummaries(store, projectId, (summary) =>
+        applyCounts(summary, deltas)
+      )
+    }
   }
 }
 

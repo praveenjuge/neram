@@ -20,6 +20,7 @@ const task = v.object({
   _creationTime: v.number(),
   projectId: v.id("projects"),
   title: v.string(),
+  description: v.optional(v.string()),
   dueDate: v.optional(v.string()),
   status,
   position: v.number(),
@@ -33,6 +34,7 @@ function publicTask(taskDoc: Doc<"tasks">) {
     _creationTime: taskDoc._creationTime,
     projectId: taskDoc.projectId,
     title: taskDoc.title,
+    description: taskDoc.description,
     dueDate: taskDoc.dueDate,
     status: taskDoc.status,
     position: taskDoc.position,
@@ -47,6 +49,21 @@ function cleanTitle(title: string) {
     throw new ConvexError({
       code: "INVALID_TITLE",
       message: "Use 1 to 120 characters.",
+    })
+  }
+  return trimmed
+}
+
+// Description is free-form and optional. Trim it, drop it when empty, and cap
+// the length so a single task can't store an unbounded blob.
+function cleanDescription(description?: string) {
+  if (description === undefined) return undefined
+  const trimmed = description.trim()
+  if (trimmed.length === 0) return undefined
+  if (trimmed.length > 2000) {
+    throw new ConvexError({
+      code: "INVALID_DESCRIPTION",
+      message: "Use at most 2000 characters.",
     })
   }
   return trimmed
@@ -85,6 +102,7 @@ export const create = mutation({
   args: {
     projectId: v.id("projects"),
     title: v.string(),
+    description: v.optional(v.string()),
     dueDate: v.optional(v.string()),
   },
   returns: v.id("tasks"),
@@ -98,6 +116,7 @@ export const create = mutation({
       ownerSubject: project.ownerSubject,
       projectId: args.projectId,
       title,
+      description: cleanDescription(args.description),
       dueDate: cleanDueDate(args.dueDate),
       status: "todo",
       // Append to the end of the board. Timestamp positions are monotonically
@@ -118,6 +137,33 @@ export const create = mutation({
       taskTitle: title,
     })
     return taskId
+  },
+})
+
+// Edit a task's editable fields (title, description, due date). Status changes
+// go through `move` so the project counters and activity feed stay correct.
+export const update = mutation({
+  args: {
+    taskId: v.id("tasks"),
+    title: v.optional(v.string()),
+    description: v.optional(v.string()),
+    dueDate: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const current = await ctx.db.get(args.taskId)
+    if (!current) {
+      throw new ConvexError({ code: "NOT_FOUND", message: "Task not found." })
+    }
+    await requireProjectAccess(ctx, current.projectId)
+    const patch: Partial<Doc<"tasks">> = { updatedAt: Date.now() }
+    if (args.title !== undefined) patch.title = cleanTitle(args.title)
+    if (args.description !== undefined) {
+      patch.description = cleanDescription(args.description)
+    }
+    if (args.dueDate !== undefined) patch.dueDate = cleanDueDate(args.dueDate)
+    await ctx.db.patch(args.taskId, patch)
+    return null
   },
 })
 
