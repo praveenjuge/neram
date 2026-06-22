@@ -136,7 +136,7 @@ function ProjectCard(project: ProjectCardProps) {
             <span className="truncate">{project.name}</span>
           </CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+        <CardContent className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
           {counts.length === 0 ? (
             <span>No tasks yet</span>
           ) : (

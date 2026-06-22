@@ -127,7 +127,7 @@ function ActivityFeed() {
                             </span>{" "}
                             {describe(item)}
                           </p>
-                          <p className="truncate text-xs text-muted-foreground">
+                          <p className="truncate text-sm text-muted-foreground">
                             {item.projectName} · {relativeTime(item.createdAt)}
                           </p>
                         </div>

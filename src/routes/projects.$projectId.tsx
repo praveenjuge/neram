@@ -237,7 +237,7 @@ function Board() {
                     <DropIndicator />
                   ) : null}
                   {columnTasks.length === 0 ? (
-                    <p className="rounded-2xl border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
+                    <p className="rounded-2xl border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
                       Nothing here yet.
                     </p>
                   ) : null}

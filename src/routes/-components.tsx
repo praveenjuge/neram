@@ -17,7 +17,7 @@ import {
 import { type ReactNode, useState } from "react"
 
 import { api } from "../../convex/_generated/api"
-import { ThemeToggle } from "@/components/theme-toggle"
+import { ThemeMenuItem } from "@/components/theme-toggle"
 import {
   AddTaskDialog,
   DeleteProjectDialog,
@@ -38,7 +38,6 @@ import { Spinner } from "@/components/ui/spinner"
 import {
   Sidebar,
   SidebarContent,
-  SidebarFooter,
   SidebarGroup,
   SidebarGroupAction,
   SidebarGroupContent,
@@ -223,15 +222,14 @@ function AppSidebar() {
     <Sidebar collapsible="icon">
       <SidebarHeader>
         <SidebarMenu>
-          <SidebarMenuItem>
+          <SidebarMenuItem className="flex items-center justify-between gap-2">
             <SidebarMenuButton asChild tooltip="Neram">
               <Link to="/dashboard">
                 <Sparkles className="text-primary" />
-                <span className="font-heading text-base font-medium">
-                  Neram
-                </span>
+                <span className="font-medium">Neram</span>
               </Link>
             </SidebarMenuButton>
+            <UserButton />
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
@@ -263,6 +261,9 @@ function AppSidebar() {
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+              <SidebarMenuItem>
+                <ThemeMenuItem />
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -293,7 +294,7 @@ function AppSidebar() {
                   </SidebarMenuItem>
                 </>
               ) : projects.length === 0 ? (
-                <li className="px-3 py-1.5 text-xs text-sidebar-foreground/60 group-data-[collapsible=icon]:hidden">
+                <li className="px-3 py-1.5 text-sm text-sidebar-foreground/60 group-data-[collapsible=icon]:hidden">
                   No projects yet
                 </li>
               ) : (
@@ -309,12 +310,6 @@ function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter>
-        <div className="flex items-center justify-between gap-1 px-1 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
-          <ThemeToggle />
-          <UserButton />
-        </div>
-      </SidebarFooter>
       <SidebarRail />
     </Sidebar>
   )
