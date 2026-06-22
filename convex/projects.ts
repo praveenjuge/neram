@@ -129,21 +129,39 @@ export const list = query({
 })
 
 /**
- * Lightweight project list (id + name only) for the board's project switcher.
- * The switcher does not need the denormalized counts, so reading just names
- * keeps its payload small and avoids re-rendering on every task-count change.
- * Includes shared projects so collaborators see them in the sidebar.
+ * Lightweight project list for the sidebar / board switcher: id, name, the
+ * project's icon + color so the nav can render each project's own glyph, the
+ * caller's role (so the sidebar can offer the right per-project actions), and a
+ * single `openCount` (todo + in-progress) for an at-a-glance badge. It still
+ * omits the full count breakdown, so the payload stays small. Includes shared
+ * projects so collaborators see them in the sidebar.
  */
 export const names = query({
   args: {},
-  returns: v.array(v.object({ _id: v.id("projects"), name: v.string() })),
+  returns: v.array(
+    v.object({
+      _id: v.id("projects"),
+      name: v.string(),
+      icon: v.optional(v.string()),
+      color: v.optional(v.string()),
+      role: v.union(v.literal("owner"), v.literal("editor")),
+      openCount: v.number(),
+    })
+  ),
   handler: async (ctx) => {
     const { subject } = await actor(ctx)
     const projects = await accessibleProjects(ctx, subject)
-    return projects.map(({ project }) => ({
-      _id: project._id,
-      name: project.name,
-    }))
+    return projects.map(({ project, role }) => {
+      const counts = projectCounts(project)
+      return {
+        _id: project._id,
+        name: project.name,
+        icon: project.icon,
+        color: project.color,
+        role,
+        openCount: counts.todoCount + counts.inProgressCount,
+      }
+    })
   },
 })
 

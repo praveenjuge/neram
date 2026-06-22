@@ -102,6 +102,18 @@ export function getProjectColorBox(color?: string): string {
   return PROJECT_COLORS[DEFAULT_PROJECT_COLOR].box
 }
 
+/**
+ * Resolve a stored color name to just its icon foreground classes: the
+ * `text-*` part of the box without the tinted background. Used where we want
+ * the colored icon on a transparent surface, e.g. the sidebar project list.
+ */
+export function getProjectColorText(color?: string): string {
+  return getProjectColorBox(color)
+    .split(" ")
+    .filter((cls) => !cls.startsWith("bg-"))
+    .join(" ")
+}
+
 /** Pick a random color name, used to seed a fresh project. */
 export function randomProjectColor(): ProjectColorName {
   const index = Math.floor(Math.random() * PROJECT_COLOR_NAMES.length)
