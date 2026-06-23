@@ -12,6 +12,18 @@ export const PROJECT_COLORS = {
     box: "bg-slate-500/15 text-slate-600 dark:text-slate-300",
     swatch: "bg-slate-500",
   },
+  gray: {
+    box: "bg-gray-500/15 text-gray-600 dark:text-gray-300",
+    swatch: "bg-gray-500",
+  },
+  zinc: {
+    box: "bg-zinc-500/15 text-zinc-600 dark:text-zinc-300",
+    swatch: "bg-zinc-500",
+  },
+  neutral: {
+    box: "bg-neutral-500/15 text-neutral-600 dark:text-neutral-300",
+    swatch: "bg-neutral-500",
+  },
   stone: {
     box: "bg-stone-500/15 text-stone-600 dark:text-stone-300",
     swatch: "bg-stone-500",
@@ -118,4 +130,10 @@ export function getProjectColorText(color?: string): string {
 export function randomProjectColor(): ProjectColorName {
   const index = Math.floor(Math.random() * PROJECT_COLOR_NAMES.length)
   return PROJECT_COLOR_NAMES[index]
+}
+
+/** Human-friendly, capitalized label for a color name, e.g. "sky" -> "Sky". */
+export function getProjectColorLabel(color?: string): string {
+  const name = color && color in PROJECT_COLORS ? color : DEFAULT_PROJECT_COLOR
+  return name.charAt(0).toUpperCase() + name.slice(1)
 }

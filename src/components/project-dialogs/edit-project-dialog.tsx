@@ -13,11 +13,14 @@ import {
 } from "@/lib/optimistic"
 import {
   DEFAULT_PROJECT_COLOR,
+  getProjectColorLabel,
   type ProjectColorName,
+  randomProjectColor,
 } from "@/lib/project-colors"
 import {
   DEFAULT_PROJECT_ICON,
   type ProjectIconName,
+  randomProjectIcon,
 } from "@/lib/project-icons"
 import { cn } from "@/lib/utils"
 import { ColorPicker } from "@/components/color-picker"
@@ -35,7 +38,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
-import { IconPreview } from "./icon-preview"
+import { ProjectPreview } from "./project-preview"
 import { type DialogControlProps, useControlledOpen } from "./shared"
 
 type EditProjectDialogProps = DialogControlProps & {
@@ -84,6 +87,11 @@ export function EditProjectDialog({
     }
   }
 
+  function shuffleAppearance() {
+    setNextIcon(randomProjectIcon())
+    setNextColor(randomProjectColor())
+  }
+
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const trimmed = nextName.trim()
@@ -127,28 +135,36 @@ export function EditProjectDialog({
           </DialogDescription>
         </DialogHeader>
         <form className="grid gap-4" onSubmit={onSubmit}>
-          <div className="flex items-center gap-3">
-            <IconPreview color={nextColor} icon={nextIcon} />
-            <div className="grid flex-1 gap-2">
-              <Label htmlFor={`edit-project-name-${id}`}>Project name</Label>
-              <Input
-                autoFocus
-                data-testid="edit-project-name-input"
-                id={`edit-project-name-${id}`}
-                maxLength={80}
-                onChange={(event) => setNextName(event.target.value)}
-                placeholder="e.g. Website redesign"
-                value={nextName}
-              />
+          <ProjectPreview
+            color={nextColor}
+            icon={nextIcon}
+            name={nextName}
+            onShuffle={shuffleAppearance}
+          />
+          <div className="grid gap-2">
+            <Label htmlFor={`edit-project-name-${id}`}>Project name</Label>
+            <Input
+              autoFocus
+              data-testid="edit-project-name-input"
+              id={`edit-project-name-${id}`}
+              maxLength={80}
+              onChange={(event) => setNextName(event.target.value)}
+              placeholder="e.g. Website redesign"
+              value={nextName}
+            />
+          </div>
+          <div className="grid gap-2">
+            <div className="flex items-center justify-between">
+              <Label>Color</Label>
+              <span className="text-xs text-muted-foreground">
+                {getProjectColorLabel(nextColor)}
+              </span>
             </div>
+            <ColorPicker onChange={setNextColor} value={nextColor} />
           </div>
           <div className="grid gap-2">
             <Label>Icon</Label>
             <IconPicker onChange={setNextIcon} value={nextIcon} />
-          </div>
-          <div className="grid gap-2">
-            <Label>Color</Label>
-            <ColorPicker onChange={setNextColor} value={nextColor} />
           </div>
           {confirmDelete && role === "owner" ? (
             <div className="grid gap-3 rounded-2xl border border-destructive/30 bg-destructive/5 p-3">

@@ -8,6 +8,7 @@ import { api } from "../../../convex/_generated/api"
 import { messageFromError } from "@/lib/errors"
 import { createProjectOptimistic } from "@/lib/optimistic"
 import {
+  getProjectColorLabel,
   type ProjectColorName,
   randomProjectColor,
 } from "@/lib/project-colors"
@@ -27,7 +28,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
-import { IconPreview } from "./icon-preview"
+import { ProjectPreview } from "./project-preview"
 import { type DialogControlProps, useControlledOpen } from "./shared"
 
 export function NewProjectDialog({
@@ -53,6 +54,11 @@ export function NewProjectDialog({
       setIcon(randomProjectIcon())
       setColor(randomProjectColor())
     }
+  }
+
+  function shuffleAppearance() {
+    setIcon(randomProjectIcon())
+    setColor(randomProjectColor())
   }
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -85,28 +91,36 @@ export function NewProjectDialog({
           </DialogDescription>
         </DialogHeader>
         <form className="grid gap-4" onSubmit={onSubmit}>
-          <div className="flex items-center gap-3">
-            <IconPreview color={color} icon={icon} />
-            <div className="grid flex-1 gap-2">
-              <Label htmlFor="project-name">Project name</Label>
-              <Input
-                autoFocus
-                data-testid="project-name-input"
-                id="project-name"
-                maxLength={80}
-                onChange={(event) => setName(event.target.value)}
-                placeholder="e.g. Website redesign"
-                value={name}
-              />
+          <ProjectPreview
+            color={color}
+            icon={icon}
+            name={name}
+            onShuffle={shuffleAppearance}
+          />
+          <div className="grid gap-2">
+            <Label htmlFor="project-name">Project name</Label>
+            <Input
+              autoFocus
+              data-testid="project-name-input"
+              id="project-name"
+              maxLength={80}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="e.g. Website redesign"
+              value={name}
+            />
+          </div>
+          <div className="grid gap-2">
+            <div className="flex items-center justify-between">
+              <Label>Color</Label>
+              <span className="text-xs text-muted-foreground">
+                {getProjectColorLabel(color)}
+              </span>
             </div>
+            <ColorPicker onChange={setColor} value={color} />
           </div>
           <div className="grid gap-2">
             <Label>Icon</Label>
             <IconPicker onChange={setIcon} value={icon} />
-          </div>
-          <div className="grid gap-2">
-            <Label>Color</Label>
-            <ColorPicker onChange={setColor} value={color} />
           </div>
           <DialogFooter>
             <DialogClose asChild>
