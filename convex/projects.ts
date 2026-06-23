@@ -85,7 +85,7 @@ function cleanColor(color: string) {
  * joined as a member. Deduped, sorted by recent activity, and capped so the
  * read stays bounded. Each project is tagged with the caller's role.
  */
-async function accessibleProjects(
+export async function accessibleProjects(
   ctx: Parameters<typeof requireProjectAccess>[0],
   subject: string
 ): Promise<Array<{ project: Doc<"projects">; role: ProjectRole }>> {

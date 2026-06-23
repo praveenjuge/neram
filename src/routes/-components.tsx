@@ -6,6 +6,7 @@ import type { FunctionReturnType } from "convex/server"
 import {
   Activity,
   LayoutDashboard,
+  ListTodo,
   LogOut,
   MoreHorizontal,
   Pencil,
@@ -246,6 +247,18 @@ function AppSidebar() {
                   <Link to="/dashboard">
                     <LayoutDashboard />
                     <span>Dashboard</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={pathname === "/tasks"}
+                  tooltip="My Tasks"
+                >
+                  <Link to="/tasks">
+                    <ListTodo />
+                    <span>My Tasks</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

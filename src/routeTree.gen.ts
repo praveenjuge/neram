@@ -9,12 +9,18 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TasksRouteImport } from './routes/tasks'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ActivityRouteImport } from './routes/activity'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ProjectsProjectIdRouteImport } from './routes/projects.$projectId'
 import { Route as JoinTokenRouteImport } from './routes/join.$token'
 
+const TasksRoute = TasksRouteImport.update({
+  id: '/tasks',
+  path: '/tasks',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -45,6 +51,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/activity': typeof ActivityRoute
   '/dashboard': typeof DashboardRoute
+  '/tasks': typeof TasksRoute
   '/join/$token': typeof JoinTokenRoute
   '/projects/$projectId': typeof ProjectsProjectIdRoute
 }
@@ -52,6 +59,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/activity': typeof ActivityRoute
   '/dashboard': typeof DashboardRoute
+  '/tasks': typeof TasksRoute
   '/join/$token': typeof JoinTokenRoute
   '/projects/$projectId': typeof ProjectsProjectIdRoute
 }
@@ -60,6 +68,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/activity': typeof ActivityRoute
   '/dashboard': typeof DashboardRoute
+  '/tasks': typeof TasksRoute
   '/join/$token': typeof JoinTokenRoute
   '/projects/$projectId': typeof ProjectsProjectIdRoute
 }
@@ -69,15 +78,23 @@ export interface FileRouteTypes {
     | '/'
     | '/activity'
     | '/dashboard'
+    | '/tasks'
     | '/join/$token'
     | '/projects/$projectId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/activity' | '/dashboard' | '/join/$token' | '/projects/$projectId'
+  to:
+    | '/'
+    | '/activity'
+    | '/dashboard'
+    | '/tasks'
+    | '/join/$token'
+    | '/projects/$projectId'
   id:
     | '__root__'
     | '/'
     | '/activity'
     | '/dashboard'
+    | '/tasks'
     | '/join/$token'
     | '/projects/$projectId'
   fileRoutesById: FileRoutesById
@@ -86,12 +103,20 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ActivityRoute: typeof ActivityRoute
   DashboardRoute: typeof DashboardRoute
+  TasksRoute: typeof TasksRoute
   JoinTokenRoute: typeof JoinTokenRoute
   ProjectsProjectIdRoute: typeof ProjectsProjectIdRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/tasks': {
+      id: '/tasks'
+      path: '/tasks'
+      fullPath: '/tasks'
+      preLoaderRoute: typeof TasksRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/dashboard': {
       id: '/dashboard'
       path: '/dashboard'
@@ -134,6 +159,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ActivityRoute: ActivityRoute,
   DashboardRoute: DashboardRoute,
+  TasksRoute: TasksRoute,
   JoinTokenRoute: JoinTokenRoute,
   ProjectsProjectIdRoute: ProjectsProjectIdRoute,
 }

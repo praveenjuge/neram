@@ -3,12 +3,14 @@ import { ConvexError, v } from "convex/values"
 import type { Doc } from "./_generated/dataModel"
 import { mutation, query } from "./_generated/server"
 import {
+  actor,
   projectCounts,
   recordActivity,
   requireProjectAccess,
   statusCountField,
   type ProjectCounts,
 } from "./model"
+import { accessibleProjects } from "./projects"
 import { status } from "./schema"
 
 // Upper bound for a single board load. A kanban board renders every card, so we
@@ -95,6 +97,60 @@ export const list = query({
       )
       .take(MAX_TASKS)
     return tasks.map(publicTask)
+  },
+})
+
+// Each task in the cross-project "My Tasks" list carries its project's display
+// fields so the page can show where the task lives without a second lookup.
+const taskWithProject = v.object({
+  _id: v.id("tasks"),
+  _creationTime: v.number(),
+  projectId: v.id("projects"),
+  projectName: v.string(),
+  projectIcon: v.optional(v.string()),
+  projectColor: v.optional(v.string()),
+  title: v.string(),
+  description: v.optional(v.string()),
+  dueDate: v.optional(v.string()),
+  status,
+  position: v.number(),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+})
+
+// Every task across the projects the caller can see (owned + shared), flattened
+// into a single list for the "My Tasks" page. We read each project's board with
+// the same per-project cap as `list`, then sort the combined set by most recent
+// update so the freshest work surfaces first.
+export const listAll = query({
+  args: {},
+  returns: v.array(taskWithProject),
+  handler: async (ctx) => {
+    const { subject } = await actor(ctx)
+    const projects = await accessibleProjects(ctx, subject)
+    const results: Array<
+      ReturnType<typeof publicTask> & {
+        projectName: string
+        projectIcon?: string
+        projectColor?: string
+      }
+    > = []
+    for (const { project } of projects) {
+      const tasks = await ctx.db
+        .query("tasks")
+        .withIndex("by_project_position", (q) => q.eq("projectId", project._id))
+        .take(MAX_TASKS)
+      for (const taskDoc of tasks) {
+        results.push({
+          ...publicTask(taskDoc),
+          projectName: project.name,
+          projectIcon: project.icon,
+          projectColor: project.color,
+        })
+      }
+    }
+    results.sort((a, b) => b.updatedAt - a.updatedAt)
+    return results
   },
 })
 
