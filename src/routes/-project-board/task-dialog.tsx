@@ -5,6 +5,7 @@ import { useState } from "react"
 import { toast } from "sonner"
 
 import { api } from "../../../convex/_generated/api"
+import { AssigneeSelect, UNASSIGNED } from "@/components/assignee-select"
 import { DueDatePicker } from "@/components/due-date-picker"
 import { messageFromError } from "@/lib/errors"
 import {
@@ -74,6 +75,12 @@ function TaskDialogContent({
   const [title, setTitle] = useState(task.title)
   const [description, setDescription] = useState(task.description ?? "")
   const [dueDate, setDueDate] = useState(task.dueDate ?? "")
+  const [assigneeSubject, setAssigneeSubject] = useState(
+    task.assigneeSubject ?? UNASSIGNED
+  )
+  const [assigneeName, setAssigneeName] = useState<string | null>(
+    task.assigneeName ?? null
+  )
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   // The status dropdown is a quick action: changing it moves the card to the
@@ -103,6 +110,13 @@ function TaskDialogContent({
       title: nextTitle.slice(0, 120),
       description,
       dueDate,
+      // Always send the current selection: a subject to (re)assign or an empty
+      // string to clear. The optimistic update needs the name too.
+      assigneeSubject: assigneeSubject === UNASSIGNED ? "" : assigneeSubject,
+      assigneeName:
+        assigneeSubject === UNASSIGNED
+          ? undefined
+          : (assigneeName ?? undefined),
     })
       .then(() => toast.success("Task updated."))
       .catch((error) =>
@@ -199,6 +213,16 @@ function TaskDialogContent({
               value={dueDate}
             />
           </div>
+          <AssigneeSelect
+            enabled={open}
+            id={`edit-task-assignee-${task._id}`}
+            onChange={(subject, name) => {
+              setAssigneeSubject(subject)
+              setAssigneeName(name)
+            }}
+            projectId={task.projectId}
+            value={assigneeSubject}
+          />
           {confirmDelete ? (
             <div className="grid gap-3 rounded-2xl border border-destructive/30 bg-destructive/5 p-3">
               <p className="text-sm text-muted-foreground">

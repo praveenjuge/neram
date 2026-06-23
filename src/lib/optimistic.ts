@@ -102,6 +102,8 @@ export function createTaskOptimistic(projectId: Id<"projects">) {
       title: string
       description?: string
       dueDate?: string
+      assigneeSubject?: string
+      assigneeName?: string
     }
   ) => {
     const tasks = store.getQuery(api.tasks.list, { projectId })
@@ -115,6 +117,8 @@ export function createTaskOptimistic(projectId: Id<"projects">) {
         description: args.description,
         dueDate: args.dueDate,
         status: "todo",
+        assigneeSubject: args.assigneeSubject,
+        assigneeName: args.assigneeName,
         position: now,
         createdAt: now,
         updatedAt: now,
@@ -127,7 +131,7 @@ export function createTaskOptimistic(projectId: Id<"projects">) {
   }
 }
 
-/** Optimistically apply title/description/due-date edits to a task on the board. */
+/** Optimistically apply title/description/due-date/assignee edits to a task. */
 export function updateTaskOptimistic(projectId: Id<"projects">) {
   return (
     store: OptimisticLocalStore,
@@ -136,6 +140,8 @@ export function updateTaskOptimistic(projectId: Id<"projects">) {
       title?: string
       description?: string
       dueDate?: string
+      assigneeSubject?: string
+      assigneeName?: string
     }
   ) => {
     const tasks = store.getQuery(api.tasks.list, { projectId })
@@ -143,26 +149,40 @@ export function updateTaskOptimistic(projectId: Id<"projects">) {
     store.setQuery(
       api.tasks.list,
       { projectId },
-      tasks.map((task) =>
-        task._id === args.taskId
-          ? {
-              ...task,
-              title: args.title ?? task.title,
-              // Empty strings clear the field, mirroring the server's cleaners.
-              description: args.description
-                ? args.description
-                : args.description === undefined
-                  ? task.description
-                  : undefined,
-              dueDate: args.dueDate
-                ? args.dueDate
-                : args.dueDate === undefined
-                  ? task.dueDate
-                  : undefined,
-              updatedAt: Date.now(),
-            }
-          : task
-      )
+      tasks.map((task) => {
+        if (task._id !== args.taskId) return task
+        // Mirror the server: an empty assigneeSubject clears the assignment,
+        // an omitted one leaves it unchanged, anything else sets it.
+        let assigneeSubject = task.assigneeSubject
+        let assigneeName = task.assigneeName
+        if (args.assigneeSubject !== undefined) {
+          if (args.assigneeSubject === "") {
+            assigneeSubject = undefined
+            assigneeName = undefined
+          } else {
+            assigneeSubject = args.assigneeSubject
+            assigneeName = args.assigneeName
+          }
+        }
+        return {
+          ...task,
+          title: args.title ?? task.title,
+          // Empty strings clear the field, mirroring the server's cleaners.
+          description: args.description
+            ? args.description
+            : args.description === undefined
+              ? task.description
+              : undefined,
+          dueDate: args.dueDate
+            ? args.dueDate
+            : args.dueDate === undefined
+              ? task.dueDate
+              : undefined,
+          assigneeSubject,
+          assigneeName,
+          updatedAt: Date.now(),
+        }
+      })
     )
   }
 }

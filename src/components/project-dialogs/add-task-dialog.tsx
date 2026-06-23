@@ -7,6 +7,7 @@ import { toast } from "sonner"
 import { api } from "../../../convex/_generated/api"
 import { messageFromError } from "@/lib/errors"
 import { createTaskOptimistic } from "@/lib/optimistic"
+import { AssigneeSelect, UNASSIGNED } from "@/components/assignee-select"
 import { DueDatePicker } from "@/components/due-date-picker"
 import { Button } from "@/components/ui/button"
 import {
@@ -38,6 +39,8 @@ export function AddTaskDialog({
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [dueDate, setDueDate] = useState("")
+  const [assigneeSubject, setAssigneeSubject] = useState(UNASSIGNED)
+  const [assigneeName, setAssigneeName] = useState<string | null>(null)
 
   // Clear the form each time the dialog opens.
   const [prevOpen, setPrevOpen] = useState(open)
@@ -47,6 +50,8 @@ export function AddTaskDialog({
       setTitle("")
       setDescription("")
       setDueDate("")
+      setAssigneeSubject(UNASSIGNED)
+      setAssigneeName(null)
     }
   }
 
@@ -65,6 +70,12 @@ export function AddTaskDialog({
       title: nextTitle.slice(0, 120),
       description: description || undefined,
       dueDate: dueDate || undefined,
+      assigneeSubject:
+        assigneeSubject === UNASSIGNED ? undefined : assigneeSubject,
+      assigneeName:
+        assigneeSubject === UNASSIGNED
+          ? undefined
+          : (assigneeName ?? undefined),
     })
       .then(() => toast.success("Task added."))
       .catch((error) =>
@@ -120,6 +131,16 @@ export function AddTaskDialog({
               value={dueDate}
             />
           </div>
+          <AssigneeSelect
+            enabled={open}
+            id={`add-task-assignee-${id}`}
+            onChange={(subject, name) => {
+              setAssigneeSubject(subject)
+              setAssigneeName(name)
+            }}
+            projectId={id}
+            value={assigneeSubject}
+          />
           <DialogFooter>
             <DialogClose asChild>
               <Button type="button" variant="outline">

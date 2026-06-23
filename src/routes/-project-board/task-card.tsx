@@ -1,9 +1,6 @@
-import { CalendarClock } from "lucide-react"
-
-import { formatDueDate } from "@/lib/dates"
 import { cn } from "@/lib/utils"
-import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
+import { TaskItem } from "@/components/task-item"
 
 import type { Task } from "./board-shared"
 
@@ -53,18 +50,13 @@ export function TaskCard({
       size="sm"
       tabIndex={0}
     >
-      <CardContent className="space-y-1.5">
-        <p className="text-sm font-medium">{task.title}</p>
-        {task.description ? (
-          <p className="line-clamp-2 text-xs text-muted-foreground">
-            {task.description}
-          </p>
-        ) : null}
-        {task.dueDate ? (
-          <Badge variant="outline">
-            <CalendarClock /> Due {formatDueDate(task.dueDate)}
-          </Badge>
-        ) : null}
+      <CardContent>
+        <TaskItem
+          assigneeName={task.assigneeName}
+          dueDate={task.dueDate}
+          status={task.status}
+          title={task.title}
+        />
       </CardContent>
     </Card>
   )

@@ -6,6 +6,7 @@ import { toast } from "sonner"
 
 import { api } from "../../../convex/_generated/api"
 import type { Id } from "../../../convex/_generated/dataModel"
+import { AssigneeSelect, UNASSIGNED } from "@/components/assignee-select"
 import { DueDatePicker } from "@/components/due-date-picker"
 import { messageFromError } from "@/lib/errors"
 import { createTaskOptimistic } from "@/lib/optimistic"
@@ -32,11 +33,15 @@ export function NewTaskDialog({ projectId }: { projectId: Id<"projects"> }) {
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [dueDate, setDueDate] = useState("")
+  const [assigneeSubject, setAssigneeSubject] = useState(UNASSIGNED)
+  const [assigneeName, setAssigneeName] = useState<string | null>(null)
 
   function reset() {
     setTitle("")
     setDescription("")
     setDueDate("")
+    setAssigneeSubject(UNASSIGNED)
+    setAssigneeName(null)
   }
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -54,6 +59,12 @@ export function NewTaskDialog({ projectId }: { projectId: Id<"projects"> }) {
       title: nextTitle.slice(0, 120),
       description: description || undefined,
       dueDate: dueDate || undefined,
+      assigneeSubject:
+        assigneeSubject === UNASSIGNED ? undefined : assigneeSubject,
+      assigneeName:
+        assigneeSubject === UNASSIGNED
+          ? undefined
+          : (assigneeName ?? undefined),
     })
       .then(() => toast.success("Task added."))
       .catch((error) =>
@@ -110,6 +121,16 @@ export function NewTaskDialog({ projectId }: { projectId: Id<"projects"> }) {
               value={dueDate}
             />
           </div>
+          <AssigneeSelect
+            enabled={open}
+            id="task-assignee"
+            onChange={(subject, name) => {
+              setAssigneeSubject(subject)
+              setAssigneeName(name)
+            }}
+            projectId={projectId}
+            value={assigneeSubject}
+          />
           <DialogFooter>
             <DialogClose asChild>
               <Button type="button" variant="outline">

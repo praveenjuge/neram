@@ -7,7 +7,9 @@ import {
   projectCounts,
   recordActivity,
   requireProjectAccess,
+  resolveAssignee,
   statusCountField,
+  type Actor,
   type ProjectCounts,
 } from "./model"
 import { accessibleProjects } from "./projects"
@@ -25,6 +27,8 @@ const task = v.object({
   description: v.optional(v.string()),
   dueDate: v.optional(v.string()),
   status,
+  assigneeSubject: v.optional(v.string()),
+  assigneeName: v.optional(v.string()),
   position: v.number(),
   createdAt: v.number(),
   updatedAt: v.number(),
@@ -39,6 +43,8 @@ function publicTask(taskDoc: Doc<"tasks">) {
     description: taskDoc.description,
     dueDate: taskDoc.dueDate,
     status: taskDoc.status,
+    assigneeSubject: taskDoc.assigneeSubject,
+    assigneeName: taskDoc.assigneeName,
     position: taskDoc.position,
     createdAt: taskDoc.createdAt,
     updatedAt: taskDoc.updatedAt,
@@ -113,15 +119,18 @@ const taskWithProject = v.object({
   description: v.optional(v.string()),
   dueDate: v.optional(v.string()),
   status,
+  assigneeSubject: v.optional(v.string()),
+  assigneeName: v.optional(v.string()),
   position: v.number(),
   createdAt: v.number(),
   updatedAt: v.number(),
 })
 
-// Every task across the projects the caller can see (owned + shared), flattened
-// into a single list for the "My Tasks" page. We read each project's board with
-// the same per-project cap as `list`, then sort the combined set by most recent
-// update so the freshest work surfaces first.
+// Every task assigned to the caller across the projects they can see (owned +
+// shared), flattened into a single list for the "My Tasks" page. We read each
+// project's board with the same per-project cap as `list`, keep only the
+// caller's assigned tasks, then sort by most recent update so the freshest work
+// surfaces first.
 export const listAll = query({
   args: {},
   returns: v.array(taskWithProject),
@@ -141,6 +150,8 @@ export const listAll = query({
         .withIndex("by_project_position", (q) => q.eq("projectId", project._id))
         .take(MAX_TASKS)
       for (const taskDoc of tasks) {
+        // My Tasks shows only what's assigned to the caller.
+        if (taskDoc.assigneeSubject !== subject) continue
         results.push({
           ...publicTask(taskDoc),
           projectName: project.name,
@@ -160,12 +171,19 @@ export const create = mutation({
     title: v.string(),
     description: v.optional(v.string()),
     dueDate: v.optional(v.string()),
+    assigneeSubject: v.optional(v.string()),
+    // Display hint used only for the optimistic UI; the server stores the
+    // authoritative name resolved from the project's membership.
+    assigneeName: v.optional(v.string()),
   },
   returns: v.id("tasks"),
   handler: async (ctx, args) => {
     const { project, actor } = await requireProjectAccess(ctx, args.projectId)
     const now = Date.now()
     const title = cleanTitle(args.title)
+    const assignee = args.assigneeSubject
+      ? await resolveAssignee(ctx, project, args.assigneeSubject)
+      : null
     const taskId = await ctx.db.insert("tasks", {
       // Keep the owner's subject as a consistent key; it's no longer the access
       // gate (that's the membership check) but stays set for every task.
@@ -175,6 +193,8 @@ export const create = mutation({
       description: cleanDescription(args.description),
       dueDate: cleanDueDate(args.dueDate),
       status: "todo",
+      assigneeSubject: assignee?.subject,
+      assigneeName: assignee?.name,
       // Append to the end of the board. Timestamp positions are monotonically
       // increasing and leave wide gaps for drag-to-reorder midpoints.
       position: now,
@@ -192,6 +212,18 @@ export const create = mutation({
       type: "task.created",
       taskTitle: title,
     })
+    // Notify the assignee (and the rest of the project) when a task starts out
+    // assigned to someone.
+    if (assignee) {
+      await recordActivity(ctx, {
+        project,
+        actor,
+        type: "task.assigned",
+        taskTitle: title,
+        assigneeSubject: assignee.subject,
+        assigneeName: assignee.name,
+      })
+    }
     return taskId
   },
 })
@@ -204,6 +236,11 @@ export const update = mutation({
     title: v.optional(v.string()),
     description: v.optional(v.string()),
     dueDate: v.optional(v.string()),
+    // Pass a subject to (re)assign, or an empty string to clear the assignee.
+    // Omit the field to leave the assignment untouched.
+    assigneeSubject: v.optional(v.string()),
+    // Display hint for the optimistic UI; the server resolves the real name.
+    assigneeName: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -211,14 +248,50 @@ export const update = mutation({
     if (!current) {
       throw new ConvexError({ code: "NOT_FOUND", message: "Task not found." })
     }
-    await requireProjectAccess(ctx, current.projectId)
+    const { project, actor } = await requireProjectAccess(
+      ctx,
+      current.projectId
+    )
     const patch: Partial<Doc<"tasks">> = { updatedAt: Date.now() }
     if (args.title !== undefined) patch.title = cleanTitle(args.title)
     if (args.description !== undefined) {
       patch.description = cleanDescription(args.description)
     }
     if (args.dueDate !== undefined) patch.dueDate = cleanDueDate(args.dueDate)
+
+    let newlyAssigned: Actor | null = null
+    if (args.assigneeSubject !== undefined) {
+      if (args.assigneeSubject === "") {
+        // Empty string clears the assignment (mirrors the field cleaners).
+        patch.assigneeSubject = undefined
+        patch.assigneeName = undefined
+      } else {
+        const assignee = await resolveAssignee(
+          ctx,
+          project,
+          args.assigneeSubject
+        )
+        patch.assigneeSubject = assignee.subject
+        patch.assigneeName = assignee.name
+        // Only log assignment activity when the assignee actually changes.
+        if (current.assigneeSubject !== assignee.subject) {
+          newlyAssigned = assignee
+        }
+      }
+    }
+
     await ctx.db.patch(args.taskId, patch)
+
+    if (newlyAssigned) {
+      await recordActivity(ctx, {
+        project,
+        actor,
+        type: "task.assigned",
+        taskTitle: patch.title ?? current.title,
+        assigneeSubject: newlyAssigned.subject,
+        assigneeName: newlyAssigned.name,
+      })
+    }
     return null
   },
 })

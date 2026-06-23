@@ -12,6 +12,7 @@ export const status = v.union(
 export const activityType = v.union(
   v.literal("task.created"),
   v.literal("task.moved"),
+  v.literal("task.assigned"),
   v.literal("task.deleted"),
   v.literal("project.updated"),
   v.literal("member.joined"),
@@ -44,6 +45,10 @@ export default defineSchema({
     description: v.optional(v.string()),
     dueDate: v.optional(v.string()),
     status,
+    // The member the task is assigned to, if any. Subject is the canonical
+    // identity key; the denormalized name is shown on cards without a lookup.
+    assigneeSubject: v.optional(v.string()),
+    assigneeName: v.optional(v.string()),
     // Fractional sort key for ordering within a column. New tasks append at the
     // end; drag-to-reorder writes a value between its neighbors.
     position: v.number(),
@@ -91,6 +96,10 @@ export default defineSchema({
     type: activityType,
     taskTitle: v.optional(v.string()),
     toStatus: v.optional(status),
+    // For task.assigned rows: who the task was assigned to. The feed compares
+    // assigneeSubject against the recipient (subject) to say "to you".
+    assigneeSubject: v.optional(v.string()),
+    assigneeName: v.optional(v.string()),
     createdAt: v.number(),
   }).index("by_subject_created", ["subject", "createdAt"]),
 })

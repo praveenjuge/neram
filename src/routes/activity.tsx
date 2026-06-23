@@ -7,6 +7,7 @@ import {
   Pencil,
   Plus,
   Trash2,
+  UserCheck,
   UserMinus,
   UserPlus,
   type LucideIcon,
@@ -38,6 +39,7 @@ const statusLabel: Record<string, string> = {
 const typeIcon: Record<ActivityItem["type"], LucideIcon> = {
   "task.created": Plus,
   "task.moved": ArrowRight,
+  "task.assigned": UserCheck,
   "task.deleted": Trash2,
   "project.updated": Pencil,
   "member.joined": UserPlus,
@@ -54,6 +56,15 @@ function describe(item: ActivityItem): string {
       return `moved ${item.taskTitle ?? "a task"} to ${
         statusLabel[item.toStatus ?? ""] ?? "another column"
       }`
+    case "task.assigned": {
+      // The feed is per-recipient, so when the assignee is the viewer we say
+      // "to you"; otherwise name them.
+      const who =
+        item.assigneeSubject && item.assigneeSubject === item.subject
+          ? "you"
+          : (item.assigneeName ?? "someone")
+      return `assigned ${item.taskTitle ?? "a task"} to ${who}`
+    }
     case "task.deleted":
       return `deleted ${item.taskTitle ?? "a task"}`
     case "project.updated":

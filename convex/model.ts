@@ -44,6 +44,35 @@ export async function actor(ctx: QueryCtx | MutationCtx): Promise<Actor> {
   }
 }
 
+/**
+ * Resolve a task assignee from a subject, validating they're actually on the
+ * project (the owner or a member). Returns the canonical subject plus the
+ * authoritative display name to denormalize onto the task. Throws if the
+ * subject isn't part of the project so a task can't be assigned to a stranger.
+ */
+export async function resolveAssignee(
+  ctx: QueryCtx | MutationCtx,
+  project: Doc<"projects">,
+  assigneeSubject: string
+): Promise<Actor> {
+  if (assigneeSubject === project.ownerSubject) {
+    return { subject: assigneeSubject, name: project.ownerName ?? "Owner" }
+  }
+  const membership = await ctx.db
+    .query("projectMembers")
+    .withIndex("by_project_member", (q) =>
+      q.eq("projectId", project._id).eq("subject", assigneeSubject)
+    )
+    .unique()
+  if (!membership) {
+    throw new ConvexError({
+      code: "INVALID_ASSIGNEE",
+      message: "Choose someone on this project.",
+    })
+  }
+  return { subject: membership.subject, name: membership.displayName }
+}
+
 export type ProjectRole = "owner" | "editor"
 
 export type ProjectAccess = {
@@ -120,6 +149,8 @@ export async function recordActivity(
     type: ActivityType
     taskTitle?: string
     toStatus?: Doc<"tasks">["status"]
+    assigneeSubject?: string
+    assigneeName?: string
   }
 ) {
   const members = await ctx.db
@@ -143,6 +174,8 @@ export async function recordActivity(
       type: args.type,
       taskTitle: args.taskTitle,
       toStatus: args.toStatus,
+      assigneeSubject: args.assigneeSubject,
+      assigneeName: args.assigneeName,
       createdAt: now,
     })
   }
