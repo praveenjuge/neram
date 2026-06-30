@@ -365,20 +365,12 @@ export const remove = mutation({
       .take(MAX_PROJECTS)
     for (const invite of invites) await ctx.db.delete(invite._id)
 
-    // Drop every member's personal work-state row for this project so they
-    // don't pile up orphaned under each subject and crowd out the bounded
-    // work-state read in accessibleProjects. The by_project index makes this a
-    // direct lookup instead of a table scan.
-    const workStates = await ctx.db
-      .query("projectWorkStates")
-      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
-      .take(MAX_PROJECTS)
-    for (const state of workStates) await ctx.db.delete(state._id)
-
     // Remove the project immediately so it disappears from the dashboard, then
-    // delete its tasks in background batches to stay within transaction limits.
+    // delete its tasks and every member's personal work-state row in background
+    // batches. Batching keeps each transaction bounded and, unlike an inline
+    // cap, never silently leaves rows behind for projects with many members.
     await ctx.db.delete(args.projectId)
-    await ctx.scheduler.runAfter(0, internal.projects.purgeTasks, {
+    await ctx.scheduler.runAfter(0, internal.projects.purgeProjectData, {
       projectId: args.projectId,
     })
     return null
@@ -387,19 +379,34 @@ export const remove = mutation({
 
 const PURGE_BATCH = 100
 
-export const purgeTasks = internalMutation({
+/**
+ * Background cleanup for a deleted project's child rows. Deletes one batch of
+ * personal work states and one batch of tasks per run, rescheduling itself
+ * until both are drained. This keeps cleanup uncapped (no orphaned rows for
+ * large projects) while each transaction stays within its document limits.
+ */
+export const purgeProjectData = internalMutation({
   args: { projectId: v.id("projects") },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const batch = await ctx.db
+    // Personal work-state rows (one per member who worked on the project),
+    // reachable by the by_project reverse index.
+    const workStates = await ctx.db
+      .query("projectWorkStates")
+      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
+      .take(PURGE_BATCH)
+    for (const state of workStates) await ctx.db.delete(state._id)
+
+    const tasks = await ctx.db
       .query("tasks")
       .withIndex("by_project_position", (q) =>
         q.eq("projectId", args.projectId)
       )
       .take(PURGE_BATCH)
-    for (const task of batch) await ctx.db.delete(task._id)
-    if (batch.length === PURGE_BATCH) {
-      await ctx.scheduler.runAfter(0, internal.projects.purgeTasks, args)
+    for (const task of tasks) await ctx.db.delete(task._id)
+
+    if (workStates.length === PURGE_BATCH || tasks.length === PURGE_BATCH) {
+      await ctx.scheduler.runAfter(0, internal.projects.purgeProjectData, args)
     }
     return null
   },

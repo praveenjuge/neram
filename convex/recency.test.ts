@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 import { convexTest } from "convex-test"
-import { expect, test } from "vitest"
+import { expect, test, vi } from "vitest"
 
 import { api } from "./_generated/api"
 import schema from "./schema"
@@ -163,22 +163,30 @@ test("projects.list orders dated projects above never-worked ones", async () => 
 })
 
 test("removing a project purges every member's personal work state", async () => {
-  const { t, alice, bob } = setup()
-  const projectId = await alice.mutation(api.projects.create, {
-    name: "Roadmap",
-  })
-  const token = await alice.mutation(api.invites.ensure, { projectId })
-  await bob.mutation(api.invites.accept, { token })
+  // The purge runs in a self-rescheduling background batch, so drive Convex's
+  // scheduler with fake timers to drain it before asserting.
+  vi.useFakeTimers()
+  try {
+    const { t, alice, bob } = setup()
+    const projectId = await alice.mutation(api.projects.create, {
+      name: "Roadmap",
+    })
+    const token = await alice.mutation(api.invites.ensure, { projectId })
+    await bob.mutation(api.invites.accept, { token })
 
-  // Both members build up personal recency on the shared project.
-  await alice.mutation(api.projects.markWorked, { projectId })
-  await bob.mutation(api.projects.markWorked, { projectId })
-  expect(await allWorkStates(t)).toHaveLength(2)
+    // Both members build up personal recency on the shared project.
+    await alice.mutation(api.projects.markWorked, { projectId })
+    await bob.mutation(api.projects.markWorked, { projectId })
+    expect(await allWorkStates(t)).toHaveLength(2)
 
-  // Deleting the project must not leave orphaned work-state rows behind, or
-  // they'd accumulate under each subject and crowd out the bounded read.
-  await alice.mutation(api.projects.remove, { projectId })
-  expect(await allWorkStates(t)).toHaveLength(0)
+    // Deleting the project must not leave orphaned work-state rows behind, or
+    // they'd accumulate under each subject and crowd out the bounded read.
+    await alice.mutation(api.projects.remove, { projectId })
+    await t.finishAllScheduledFunctions(vi.runAllTimers)
+    expect(await allWorkStates(t)).toHaveLength(0)
+  } finally {
+    vi.useRealTimers()
+  }
 })
 
 test("leaving a project clears the departing member's work state", async () => {
