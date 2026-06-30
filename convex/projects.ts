@@ -9,6 +9,7 @@ import {
   recordActivity,
   requireProjectAccess,
   requireProjectOwner,
+  touchProjectWorkState,
   type ProjectRole,
 } from "./model"
 
@@ -29,6 +30,9 @@ const projectSummary = v.object({
   inProgressCount: v.number(),
   doneCount: v.number(),
   role: v.union(v.literal("owner"), v.literal("editor")),
+  // The caller's own "last worked on" timestamp for this project, or undefined
+  // if they've never checked in. Personal to the caller; never an owner field.
+  lastWorkedAt: v.optional(v.number()),
 })
 
 function publicProject(project: Doc<"projects">) {
@@ -43,8 +47,17 @@ function publicProject(project: Doc<"projects">) {
   }
 }
 
-function summarize(project: Doc<"projects">, role: ProjectRole) {
-  return { ...publicProject(project), ...projectCounts(project), role }
+function summarize(
+  project: Doc<"projects">,
+  role: ProjectRole,
+  lastWorkedAt?: number
+) {
+  return {
+    ...publicProject(project),
+    ...projectCounts(project),
+    role,
+    lastWorkedAt,
+  }
 }
 
 function cleanName(name: string) {
@@ -83,12 +96,15 @@ function cleanColor(color: string) {
 /**
  * Load the projects the caller can see: the ones they own plus the ones they've
  * joined as a member. Deduped, sorted by recent activity, and capped so the
- * read stays bounded. Each project is tagged with the caller's role.
+ * read stays bounded. Each project is tagged with the caller's role and their
+ * personal `lastWorkedAt` (undefined if they've never checked in).
  */
 export async function accessibleProjects(
   ctx: Parameters<typeof requireProjectAccess>[0],
   subject: string
-): Promise<Array<{ project: Doc<"projects">; role: ProjectRole }>> {
+): Promise<
+  Array<{ project: Doc<"projects">; role: ProjectRole; lastWorkedAt?: number }>
+> {
   const owned = await ctx.db
     .query("projects")
     .withIndex("by_owner_updated", (q) => q.eq("ownerSubject", subject))
@@ -113,9 +129,43 @@ export async function accessibleProjects(
     if (project) byId.set(project._id, { project, role: "editor" })
   }
 
+  // The caller's personal work states, keyed by project. A single indexed read
+  // off `by_subject_project` (subject prefix) returns every check-in they own.
+  const workStates = await ctx.db
+    .query("projectWorkStates")
+    .withIndex("by_subject_project", (q) => q.eq("subject", subject))
+    .take(MAX_PROJECTS)
+  const lastWorkedByProject = new Map<string, number>()
+  for (const state of workStates) {
+    lastWorkedByProject.set(state.projectId, state.lastWorkedAt)
+  }
+
   return [...byId.values()]
+    .map((entry) => ({
+      ...entry,
+      lastWorkedAt: lastWorkedByProject.get(entry.project._id),
+    }))
     .sort((a, b) => b.project.updatedAt - a.project.updatedAt)
     .slice(0, MAX_PROJECTS)
+}
+
+/**
+ * Order projects by the caller's personal recency: most recently worked first,
+ * tie-broken by the project's own `updatedAt`. Projects the caller has never
+ * checked in on sort last, regardless of how recently they changed.
+ */
+function byPersonalRecency(
+  a: { project: Doc<"projects">; lastWorkedAt?: number },
+  b: { project: Doc<"projects">; lastWorkedAt?: number }
+): number {
+  if (a.lastWorkedAt !== undefined && b.lastWorkedAt !== undefined) {
+    if (b.lastWorkedAt !== a.lastWorkedAt)
+      return b.lastWorkedAt - a.lastWorkedAt
+    return b.project.updatedAt - a.project.updatedAt
+  }
+  if (a.lastWorkedAt !== undefined) return -1
+  if (b.lastWorkedAt !== undefined) return 1
+  return b.project.updatedAt - a.project.updatedAt
 }
 
 export const list = query({
@@ -124,7 +174,11 @@ export const list = query({
   handler: async (ctx) => {
     const { subject } = await actor(ctx)
     const projects = await accessibleProjects(ctx, subject)
-    return projects.map(({ project, role }) => summarize(project, role))
+    return [...projects]
+      .sort(byPersonalRecency)
+      .map(({ project, role, lastWorkedAt }) =>
+        summarize(project, role, lastWorkedAt)
+      )
   },
 })
 
@@ -146,12 +200,15 @@ export const names = query({
       color: v.optional(v.string()),
       role: v.union(v.literal("owner"), v.literal("editor")),
       openCount: v.number(),
+      // The caller's personal "last worked on" timestamp, surfaced so the nav
+      // can hint at recency too. Undefined until the caller checks in.
+      lastWorkedAt: v.optional(v.number()),
     })
   ),
   handler: async (ctx) => {
     const { subject } = await actor(ctx)
     const projects = await accessibleProjects(ctx, subject)
-    return projects.map(({ project, role }) => {
+    return projects.map(({ project, role, lastWorkedAt }) => {
       const counts = projectCounts(project)
       return {
         _id: project._id,
@@ -160,6 +217,7 @@ export const names = query({
         color: project.color,
         role,
         openCount: counts.todoCount + counts.inProgressCount,
+        lastWorkedAt,
       }
     })
   },
@@ -172,7 +230,16 @@ export const get = query({
     const { subject } = await actor(ctx)
     const project = await ctx.db.get(args.projectId)
     if (!project) return null
-    if (project.ownerSubject === subject) return summarize(project, "owner")
+    const workState = await ctx.db
+      .query("projectWorkStates")
+      .withIndex("by_subject_project", (q) =>
+        q.eq("subject", subject).eq("projectId", args.projectId)
+      )
+      .unique()
+    const lastWorkedAt = workState?.lastWorkedAt
+    if (project.ownerSubject === subject) {
+      return summarize(project, "owner", lastWorkedAt)
+    }
     const membership = await ctx.db
       .query("projectMembers")
       .withIndex("by_project_member", (q) =>
@@ -180,7 +247,7 @@ export const get = query({
       )
       .unique()
     if (!membership) return null
-    return summarize(project, "editor")
+    return summarize(project, "editor", lastWorkedAt)
   },
 })
 
@@ -242,7 +309,29 @@ export const update = mutation({
       actor: who,
       type: "project.updated",
     })
+    // Editing the project counts as personally working on it (creation does not).
+    await touchProjectWorkState(
+      ctx,
+      who.subject,
+      args.projectId,
+      patch.updatedAt
+    )
     return null
+  },
+})
+
+/**
+ * Mark that the caller personally worked on a project right now. Requires
+ * access (owner or editor) and only ever touches the caller's own work state,
+ * so checking in never disturbs a collaborator's dashboard recency. Writes no
+ * shared Activity feed row. Returns the timestamp that was stored.
+ */
+export const markWorked = mutation({
+  args: { projectId: v.id("projects") },
+  returns: v.number(),
+  handler: async (ctx, args) => {
+    const { actor: who } = await requireProjectAccess(ctx, args.projectId)
+    return await touchProjectWorkState(ctx, who.subject, args.projectId)
   },
 })
 

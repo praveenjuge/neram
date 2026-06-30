@@ -85,6 +85,16 @@ export default defineSchema({
   })
     .index("by_token", ["token"])
     .index("by_project", ["projectId"]),
+  // Per-user, per-project "last worked on" signal that powers the private
+  // recency radar on the dashboard. Latest-only: each (subject, projectId) pair
+  // has at most one row whose lastWorkedAt is overwritten on every check-in.
+  // Personal by design — a collaborator's activity never touches another
+  // member's row, so each user's dashboard recency is their own.
+  projectWorkStates: defineTable({
+    subject: v.string(),
+    projectId: v.id("projects"),
+    lastWorkedAt: v.number(),
+  }).index("by_subject_project", ["subject", "projectId"]),
   // Per-recipient fan-out feed. One row is written per member for each action,
   // so each user reads only their own rows via by_subject_created.
   activity: defineTable({

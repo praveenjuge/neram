@@ -58,6 +58,22 @@ function patchProjectSummaries(
   }
 }
 
+/**
+ * Mirror the server's personal-recency ordering for `projects.list`: most
+ * recently worked first, tie-broken by the project's own `updatedAt`, with
+ * never-worked projects sorted last.
+ */
+function byPersonalRecency(a: ProjectSummary, b: ProjectSummary): number {
+  if (a.lastWorkedAt !== undefined && b.lastWorkedAt !== undefined) {
+    if (b.lastWorkedAt !== a.lastWorkedAt)
+      return b.lastWorkedAt - a.lastWorkedAt
+    return b.updatedAt - a.updatedAt
+  }
+  if (a.lastWorkedAt !== undefined) return -1
+  if (b.lastWorkedAt !== undefined) return 1
+  return b.updatedAt - a.updatedAt
+}
+
 /** Optimistically move/reorder a task and shift the project's counters. */
 export function moveTaskOptimistic(projectId: Id<"projects">) {
   return (
@@ -230,8 +246,30 @@ export function createProjectOptimistic(
     doneCount: 0,
     // The creator is always the owner of their freshly created project.
     role: "owner",
+    // A brand-new project starts with no personal work state ("Needs love").
+    lastWorkedAt: undefined,
   }
   store.setQuery(api.projects.list, {}, [temp, ...list])
+}
+
+/**
+ * Optimistically record a personal "worked on" check-in: stamp the project's
+ * `lastWorkedAt` to now and resort the dashboard list to mirror the server's
+ * recency ordering, so the card jumps to the top instantly.
+ */
+export function markWorkedOptimistic(
+  store: OptimisticLocalStore,
+  args: { projectId: Id<"projects"> }
+) {
+  const now = Date.now()
+  patchProjectSummaries(store, args.projectId, (summary) => ({
+    ...summary,
+    lastWorkedAt: now,
+  }))
+  const list = store.getQuery(api.projects.list, {})
+  if (list) {
+    store.setQuery(api.projects.list, {}, [...list].sort(byPersonalRecency))
+  }
 }
 
 /** Optimistically apply name/icon/color edits to a project. */

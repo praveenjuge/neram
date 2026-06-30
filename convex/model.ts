@@ -206,3 +206,34 @@ export function projectCounts(project: Doc<"projects">): ProjectCounts {
     doneCount: project.doneCount,
   }
 }
+
+/**
+ * Record that `subject` personally worked on a project right now. This is a
+ * latest-only upsert: each (subject, projectId) pair keeps a single row whose
+ * `lastWorkedAt` is overwritten on every check-in. It is intentionally scoped
+ * to the acting user, so a collaborator's work never moves another member's
+ * personal recency. Returns the timestamp that was stored.
+ */
+export async function touchProjectWorkState(
+  ctx: MutationCtx,
+  subject: string,
+  projectId: Id<"projects">,
+  now: number = Date.now()
+): Promise<number> {
+  const existing = await ctx.db
+    .query("projectWorkStates")
+    .withIndex("by_subject_project", (q) =>
+      q.eq("subject", subject).eq("projectId", projectId)
+    )
+    .unique()
+  if (existing) {
+    await ctx.db.patch(existing._id, { lastWorkedAt: now })
+  } else {
+    await ctx.db.insert("projectWorkStates", {
+      subject,
+      projectId,
+      lastWorkedAt: now,
+    })
+  }
+  return now
+}

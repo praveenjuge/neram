@@ -9,6 +9,7 @@ import {
   requireProjectAccess,
   resolveAssignee,
   statusCountField,
+  touchProjectWorkState,
   type Actor,
   type ProjectCounts,
 } from "./model"
@@ -224,6 +225,8 @@ export const create = mutation({
         assigneeName: assignee.name,
       })
     }
+    // The actor just worked on this project; bump their personal recency.
+    await touchProjectWorkState(ctx, actor.subject, args.projectId, now)
     return taskId
   },
 })
@@ -292,6 +295,8 @@ export const update = mutation({
         assigneeName: newlyAssigned.name,
       })
     }
+    // Editing a task counts as working on its project for the actor.
+    await touchProjectWorkState(ctx, actor.subject, current.projectId)
     return null
   },
 })
@@ -338,6 +343,9 @@ export const move = mutation({
         toStatus: args.status,
       })
     }
+    // Moving or reordering a card counts as working on the project, even when
+    // the status is unchanged (a pure within-column reorder).
+    await touchProjectWorkState(ctx, actor.subject, current.projectId, now)
     return null
   },
 })
@@ -369,6 +377,8 @@ export const remove = mutation({
       type: "task.deleted",
       taskTitle: current.title,
     })
+    // Deleting a task is still working on the project for the actor.
+    await touchProjectWorkState(ctx, actor.subject, current.projectId, now)
     return null
   },
 })
