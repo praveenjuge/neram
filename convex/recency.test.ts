@@ -180,3 +180,22 @@ test("removing a project purges every member's personal work state", async () =>
   await alice.mutation(api.projects.remove, { projectId })
   expect(await allWorkStates(t)).toHaveLength(0)
 })
+
+test("leaving a project clears the departing member's work state", async () => {
+  const { t, alice, bob } = setup()
+  const projectId = await alice.mutation(api.projects.create, {
+    name: "Roadmap",
+  })
+  const token = await alice.mutation(api.invites.ensure, { projectId })
+  await bob.mutation(api.invites.accept, { token })
+
+  await alice.mutation(api.projects.markWorked, { projectId })
+  await bob.mutation(api.projects.markWorked, { projectId })
+  expect(await allWorkStates(t)).toHaveLength(2)
+
+  // Bob leaves: only his row goes; Alice (owner) keeps her recency.
+  await bob.mutation(api.members.leave, { projectId })
+  const remaining = await allWorkStates(t)
+  expect(remaining).toHaveLength(1)
+  expect(remaining[0].subject).toBe("alice")
+})

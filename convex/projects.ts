@@ -133,10 +133,14 @@ export async function accessibleProjects(
 
   // The caller's personal work states, keyed by project. A single indexed read
   // off `by_subject_project` (subject prefix) returns every check-in they own.
+  // Collected in full (not take-capped): the rows are scoped to one subject and
+  // bounded by the projects they can access — and deleting a project purges its
+  // rows — so a take cap here would instead silently drop recency for some
+  // projects (the index orders by projectId, not by how recently worked).
   const workStates = await ctx.db
     .query("projectWorkStates")
     .withIndex("by_subject_project", (q) => q.eq("subject", subject))
-    .take(MAX_PROJECTS)
+    .collect()
   const lastWorkedByProject = new Map<string, number>()
   for (const state of workStates) {
     lastWorkedByProject.set(state.projectId, state.lastWorkedAt)
