@@ -350,6 +350,88 @@ export const move = mutation({
   },
 })
 
+// Move a task to a different project the caller can also access. The status
+// carries over, the card re-homes at the end of the destination board, the
+// denormalized counters shift off the source project onto the destination, and
+// the assignee is cleared when they aren't a member of the destination.
+export const changeProject = mutation({
+  args: { taskId: v.id("tasks"), projectId: v.id("projects") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const current = await ctx.db.get(args.taskId)
+    if (!current) {
+      throw new ConvexError({ code: "NOT_FOUND", message: "Task not found." })
+    }
+    // Already there: nothing to move.
+    if (current.projectId === args.projectId) return null
+
+    // The caller must be able to access both ends of the move.
+    const { project: source, actor } = await requireProjectAccess(
+      ctx,
+      current.projectId
+    )
+    const { project: destination } = await requireProjectAccess(
+      ctx,
+      args.projectId
+    )
+
+    const now = Date.now()
+
+    // The current assignee may not belong to the destination project; keep them
+    // only when they're still a valid member there, otherwise drop the
+    // assignment so a task can't reference a stranger.
+    let assigneeSubject = current.assigneeSubject
+    let assigneeName = current.assigneeName
+    if (assigneeSubject) {
+      try {
+        const assignee = await resolveAssignee(
+          ctx,
+          destination,
+          assigneeSubject
+        )
+        assigneeSubject = assignee.subject
+        assigneeName = assignee.name
+      } catch {
+        assigneeSubject = undefined
+        assigneeName = undefined
+      }
+    }
+
+    await ctx.db.patch(args.taskId, {
+      projectId: args.projectId,
+      // Keep ownerSubject aligned with the destination owner, mirroring create.
+      ownerSubject: destination.ownerSubject,
+      // Append to the end of the destination board; the status is preserved.
+      position: now,
+      assigneeSubject,
+      assigneeName,
+      updatedAt: now,
+    })
+
+    // Shift the task's counters off the source project and onto the
+    // destination, keeping both projects' denormalized counts consistent.
+    const field = statusCountField[current.status]
+    const fromPatch: Partial<ProjectCounts> & { updatedAt: number } = {
+      updatedAt: now,
+    }
+    fromPatch.taskCount = Math.max(0, source.taskCount - 1)
+    fromPatch[field] = Math.max(0, projectCounts(source)[field] - 1)
+    await ctx.db.patch(source._id, fromPatch)
+
+    const toPatch: Partial<ProjectCounts> & { updatedAt: number } = {
+      updatedAt: now,
+    }
+    toPatch.taskCount = destination.taskCount + 1
+    toPatch[field] = projectCounts(destination)[field] + 1
+    await ctx.db.patch(destination._id, toPatch)
+
+    // The actor just worked on both projects.
+    await touchProjectWorkState(ctx, actor.subject, source._id, now)
+    await touchProjectWorkState(ctx, actor.subject, destination._id, now)
+    return null
+  },
+})
+
 export const remove = mutation({
   args: { taskId: v.id("tasks") },
   returns: v.null(),

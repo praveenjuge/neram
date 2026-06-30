@@ -5,10 +5,13 @@ import { useState } from "react"
 import { toast } from "sonner"
 
 import { api } from "../../../convex/_generated/api"
+import type { Id } from "../../../convex/_generated/dataModel"
 import { AssigneeSelect, UNASSIGNED } from "@/components/assignee-select"
 import { DueDatePicker } from "@/components/due-date-picker"
+import { ProjectSelect } from "@/components/project-select"
 import { messageFromError } from "@/lib/errors"
 import {
+  changeProjectTaskOptimistic,
   moveTaskOptimistic,
   removeTaskOptimistic,
   updateTaskOptimistic,
@@ -71,6 +74,9 @@ function TaskDialogContent({
   const removeTask = useMutation(api.tasks.remove).withOptimisticUpdate(
     removeTaskOptimistic(task.projectId)
   )
+  const changeProjectTask = useMutation(
+    api.tasks.changeProject
+  ).withOptimisticUpdate(changeProjectTaskOptimistic(task.projectId))
 
   const [title, setTitle] = useState(task.title)
   const [description, setDescription] = useState(task.description ?? "")
@@ -93,6 +99,20 @@ function TaskDialogContent({
       .catch((error) =>
         toast.error(messageFromError(error, "Could not move the task."))
       )
+  }
+
+  // Changing the project is a quick action like the status dropdown: it moves
+  // the task to the chosen project immediately. Because the card then belongs to
+  // another board, we close this dialog right away (any unsaved title/
+  // description edits are discarded, mirroring the status quick action).
+  function onProjectChange(next: Id<"projects">) {
+    if (next === task.projectId) return
+    void changeProjectTask({ taskId: task._id, projectId: next })
+      .then(() => toast.success("Task moved to another project."))
+      .catch((error) =>
+        toast.error(messageFromError(error, "Could not move the task."))
+      )
+    onOpenChange(false)
   }
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -202,6 +222,12 @@ function TaskDialogContent({
               </SelectContent>
             </Select>
           </div>
+          <ProjectSelect
+            enabled={open}
+            id={`edit-task-project-${task._id}`}
+            onChange={onProjectChange}
+            value={task.projectId}
+          />
           <div className="grid gap-2">
             <Label htmlFor={`edit-task-due-date-${task._id}`}>
               Due date (optional)

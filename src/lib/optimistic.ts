@@ -224,6 +224,70 @@ export function removeTaskOptimistic(projectId: Id<"projects">) {
   }
 }
 
+/**
+ * Optimistically move a task to another project: drop it (and its counts) from
+ * the source board and add it (and its counts) to the destination board. The
+ * status carries over and the card appends to the end of the destination. The
+ * source project is captured in the closure; the destination arrives in the
+ * mutation args.
+ */
+export function changeProjectTaskOptimistic(sourceProjectId: Id<"projects">) {
+  return (
+    store: OptimisticLocalStore,
+    args: { taskId: Id<"tasks">; projectId: Id<"projects"> }
+  ) => {
+    const destinationProjectId = args.projectId
+    // Nothing to do if the task is already in the requested project.
+    if (destinationProjectId === sourceProjectId) return
+
+    const sourceTasks = store.getQuery(api.tasks.list, {
+      projectId: sourceProjectId,
+    })
+    const moving = sourceTasks?.find((task) => task._id === args.taskId)
+
+    // Remove the card from the source board and shift its counts down.
+    if (sourceTasks) {
+      store.setQuery(
+        api.tasks.list,
+        { projectId: sourceProjectId },
+        sourceTasks.filter((task) => task._id !== args.taskId)
+      )
+    }
+    if (moving) {
+      const deltas: CountDeltas = { taskCount: -1 }
+      deltas[statusCountKey[moving.status]] = -1
+      patchProjectSummaries(store, sourceProjectId, (summary) =>
+        applyCounts(summary, deltas)
+      )
+    }
+
+    // Add the card to the destination board (when it's cached) and shift its
+    // counts up. The destination list may not be loaded if that board has never
+    // been opened; the counters still update via the summary caches.
+    if (moving) {
+      const destinationTasks = store.getQuery(api.tasks.list, {
+        projectId: destinationProjectId,
+      })
+      if (destinationTasks) {
+        const moved: TaskItem = {
+          ...moving,
+          projectId: destinationProjectId,
+          position: Date.now(),
+        }
+        store.setQuery(api.tasks.list, { projectId: destinationProjectId }, [
+          ...destinationTasks,
+          moved,
+        ])
+      }
+      const deltas: CountDeltas = { taskCount: 1 }
+      deltas[statusCountKey[moving.status]] = 1
+      patchProjectSummaries(store, destinationProjectId, (summary) =>
+        applyCounts(summary, deltas)
+      )
+    }
+  }
+}
+
 /** Optimistically prepend a new project to the dashboard list. */
 export function createProjectOptimistic(
   store: OptimisticLocalStore,
