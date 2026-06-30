@@ -95,8 +95,10 @@ function cleanColor(color: string) {
 
 /**
  * Load the projects the caller can see: the ones they own plus the ones they've
- * joined as a member. Deduped, sorted by recent activity, and capped so the
- * read stays bounded. Each project is tagged with the caller's role and their
+ * joined as a member. Deduped, capped so the read stays bounded, and ordered by
+ * the caller's personal recency (most recently worked first) so the bounded
+ * window keeps the projects they actually touched rather than dropping a freshly
+ * checked-in one. Each project is tagged with the caller's role and their
  * personal `lastWorkedAt` (undefined if they've never checked in).
  */
 export async function accessibleProjects(
@@ -140,13 +142,18 @@ export async function accessibleProjects(
     lastWorkedByProject.set(state.projectId, state.lastWorkedAt)
   }
 
-  return [...byId.values()]
-    .map((entry) => ({
-      ...entry,
-      lastWorkedAt: lastWorkedByProject.get(entry.project._id),
-    }))
-    .sort((a, b) => b.project.updatedAt - a.project.updatedAt)
-    .slice(0, MAX_PROJECTS)
+  return (
+    [...byId.values()]
+      .map((entry) => ({
+        ...entry,
+        lastWorkedAt: lastWorkedByProject.get(entry.project._id),
+      }))
+      // Sort by personal recency *before* slicing so a project the caller just
+      // checked in on (which does not bump project.updatedAt) is never dropped
+      // from the bounded window in favor of a more-recently-edited one.
+      .sort(byPersonalRecency)
+      .slice(0, MAX_PROJECTS)
+  )
 }
 
 /**
@@ -173,12 +180,11 @@ export const list = query({
   returns: v.array(projectSummary),
   handler: async (ctx) => {
     const { subject } = await actor(ctx)
+    // accessibleProjects already returns personal-recency order.
     const projects = await accessibleProjects(ctx, subject)
-    return [...projects]
-      .sort(byPersonalRecency)
-      .map(({ project, role, lastWorkedAt }) =>
-        summarize(project, role, lastWorkedAt)
-      )
+    return projects.map(({ project, role, lastWorkedAt }) =>
+      summarize(project, role, lastWorkedAt)
+    )
   },
 })
 
@@ -354,6 +360,16 @@ export const remove = mutation({
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
       .take(MAX_PROJECTS)
     for (const invite of invites) await ctx.db.delete(invite._id)
+
+    // Drop every member's personal work-state row for this project so they
+    // don't pile up orphaned under each subject and crowd out the bounded
+    // work-state read in accessibleProjects. The by_project index makes this a
+    // direct lookup instead of a table scan.
+    const workStates = await ctx.db
+      .query("projectWorkStates")
+      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
+      .take(MAX_PROJECTS)
+    for (const state of workStates) await ctx.db.delete(state._id)
 
     // Remove the project immediately so it disappears from the dashboard, then
     // delete its tasks in background batches to stay within transaction limits.

@@ -94,7 +94,11 @@ export default defineSchema({
     subject: v.string(),
     projectId: v.id("projects"),
     lastWorkedAt: v.number(),
-  }).index("by_subject_project", ["subject", "projectId"]),
+  })
+    .index("by_subject_project", ["subject", "projectId"])
+    // Reverse lookup by project so a deleted project can purge every member's
+    // work-state rows without scanning the table.
+    .index("by_project", ["projectId"]),
   // Per-recipient fan-out feed. One row is written per member for each action,
   // so each user reads only their own rows via by_subject_created.
   activity: defineTable({

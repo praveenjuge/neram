@@ -161,3 +161,22 @@ test("projects.list orders dated projects above never-worked ones", async () => 
   // The remaining projects have no personal state and sort after the dated one.
   expect(list.slice(1).every((p) => p.lastWorkedAt === undefined)).toBe(true)
 })
+
+test("removing a project purges every member's personal work state", async () => {
+  const { t, alice, bob } = setup()
+  const projectId = await alice.mutation(api.projects.create, {
+    name: "Roadmap",
+  })
+  const token = await alice.mutation(api.invites.ensure, { projectId })
+  await bob.mutation(api.invites.accept, { token })
+
+  // Both members build up personal recency on the shared project.
+  await alice.mutation(api.projects.markWorked, { projectId })
+  await bob.mutation(api.projects.markWorked, { projectId })
+  expect(await allWorkStates(t)).toHaveLength(2)
+
+  // Deleting the project must not leave orphaned work-state rows behind, or
+  // they'd accumulate under each subject and crowd out the bounded read.
+  await alice.mutation(api.projects.remove, { projectId })
+  expect(await allWorkStates(t)).toHaveLength(0)
+})
