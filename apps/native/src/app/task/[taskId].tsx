@@ -29,8 +29,11 @@ export default function TaskScreen() {
   const task = tasks?.find((candidate) => candidate._id === id) ?? null
   const updateTask = useMutation(api.tasks.update)
   const moveTask = useMutation(api.tasks.move)
-  const [title, setTitle] = useState("")
-  const [description, setDescription] = useState("")
+  // `null` means "not edited": we only send a field to the mutation when the
+  // user actually changed it, so saving after editing only the title (or just
+  // tapping save) never overwrites the stored description with an empty string.
+  const [title, setTitle] = useState<string | null>(null)
+  const [description, setDescription] = useState<string | null>(null)
   const [status, setStatus] = useState<Status | null>(null)
 
   if (tasks === undefined) {
@@ -73,13 +76,19 @@ export default function TaskScreen() {
         <Button
           label="Save task"
           systemImage="square.and.arrow.down"
-          onPress={() =>
-            void updateTask({
-              taskId: id,
-              title: title.trim() || task.title,
-              description,
-            })
-          }
+          onPress={() => {
+            const patch: {
+              taskId: Id<"tasks">
+              title?: string
+              description?: string
+            } = { taskId: id }
+            // Only include fields the user edited. Omitting a field tells the
+            // mutation to leave it untouched; sending an edited (possibly empty)
+            // description still lets the user clear it on purpose.
+            if (title !== null) patch.title = title.trim() || task.title
+            if (description !== null) patch.description = description
+            void updateTask(patch)
+          }}
         />
       </Section>
       <Section title="Status">
