@@ -4,15 +4,18 @@
   "workspaces": {
     "": {
       "name": "neram",
+      "dependencies": {
+        "neram": "workspace:*",
+      },
       "devDependencies": {
         "turbo": "^2.10.2",
       },
     },
     "apps/agent": {
       "name": "neram",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "bin": {
-        "neram": "./dist/cli.js",
+        "neram": "dist/cli.js",
       },
       "dependencies": {
         "@modelcontextprotocol/sdk": "^1.29.0",
