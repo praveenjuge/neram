@@ -36,7 +36,7 @@ export default function RootLayout() {
     <ClerkProvider publishableKey={clerkKey} tokenCache={tokenCache}>
       <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
         <Stack>
-          <Stack.Screen name="index" options={{ title: "Neram" }} />
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen
             name="project/[projectId]"
             options={{ title: "Project" }}
