@@ -1,0 +1,42 @@
+{
+  "name": "@neram/convex",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "exports": {
+    "./api": {
+      "types": "./convex/_generated/api.d.ts",
+      "default": "./convex/_generated/api.js"
+    },
+    "./data-model": {
+      "types": "./convex/_generated/dataModel.d.ts",
+      "default": "./convex/_generated/dataModel.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc --noEmit -p convex/tsconfig.json",
+    "codegen": "convex codegen",
+    "deploy": "convex deploy --cmd-url-env-var-name VITE_CONVEX_URL --cmd 'turbo run build --filter=@neram/web'",
+    "dev": "convex dev",
+    "format": "prettier --write \"convex/**/*.ts\"",
+    "lint": "eslint convex",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p convex/tsconfig.json"
+  },
+  "dependencies": {
+    "convex": "^1.41.0"
+  },
+  "devDependencies": {
+    "@edge-runtime/vm": "^5.0.0",
+    "@eslint/js": "^10",
+    "@types/node": "^24",
+    "convex-test": "^0.0.53",
+    "eslint": "^10",
+    "globals": "^17",
+    "prettier": "^3.8.3",
+    "typescript": "~6",
+    "typescript-eslint": "^8",
+    "vite": "^8",
+    "vitest": "^4.1.9"
+  }
+}

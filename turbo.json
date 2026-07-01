@@ -1,0 +1,63 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "tasks": {
+    "transit": {
+      "dependsOn": ["^transit"]
+    },
+    "routes": {
+      "outputs": ["src/routeTree.gen.ts"]
+    },
+    "codegen": {
+      "passThroughEnv": ["CONVEX_DEPLOYMENT", "CONVEX_DEPLOY_KEY"],
+      "outputs": ["convex/_generated/**"]
+    },
+    "build": {
+      "dependsOn": ["^build", "routes"],
+      "env": ["VITE_*"],
+      "passThroughEnv": [
+        "CLERK_FRONTEND_API_URL",
+        "CONVEX_DEPLOYMENT",
+        "CONVEX_DEPLOY_KEY"
+      ],
+      "inputs": ["$TURBO_DEFAULT$", ".env", ".env.*"],
+      "outputs": ["dist/**", "convex/_generated/**"]
+    },
+    "deploy": {
+      "cache": false,
+      "env": ["VITE_*"],
+      "passThroughEnv": [
+        "CI",
+        "CLERK_FRONTEND_API_URL",
+        "CONVEX_DEPLOY_KEY",
+        "VERCEL",
+        "VERCEL_ENV",
+        "VERCEL_GIT_COMMIT_REF"
+      ]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "format": {
+      "cache": false
+    },
+    "lint": {
+      "dependsOn": ["transit"],
+      "outputs": []
+    },
+    "preview": {
+      "cache": false,
+      "persistent": true
+    },
+    "test": {
+      "dependsOn": ["transit"],
+      "inputs": ["$TURBO_DEFAULT$", ".env", ".env.*"],
+      "outputs": []
+    },
+    "typecheck": {
+      "dependsOn": ["transit", "routes"],
+      "inputs": ["$TURBO_DEFAULT$", ".env", ".env.*"],
+      "outputs": []
+    }
+  }
+}

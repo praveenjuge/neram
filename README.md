@@ -1,21 +1,58 @@
-# React + TypeScript + Vite + shadcn/ui
+# Neram
 
-This is a template for a new Vite project with React, TypeScript, and shadcn/ui.
+Neram is a Clerk-authenticated project and task workspace backed by Convex.
+The repository is a Bun-powered Turborepo with one deployable web app and one
+canonical backend package.
 
-## Adding components
+## Structure
 
-To add components to your app, run the following command:
+```text
+apps/
+  web/            Vite, React, TanStack Router, shadcn/ui, and PWA assets
+packages/
+  convex/         Convex functions, generated API, backend tests, and deployment
+turbo.json        Repository task graph and cache inputs
+vercel.json       Production web and Convex deployment pipeline
+```
+
+The web app consumes generated backend APIs through the
+`@neram/convex` workspace package. Do not import files across package
+boundaries with relative paths.
+
+## Setup
+
+Install the exact workspace graph from the repository root:
 
 ```bash
-npx shadcn@latest add button
+bun install --frozen-lockfile
 ```
 
-This will place the ui components in the `src/components` directory.
+Create package-local environment files from the examples:
 
-## Using components
+- `apps/web/.env.local` contains browser-safe `VITE_*` values.
+- `packages/convex/.env.local` contains the Convex deployment selection and
+  Clerk issuer configuration.
 
-To use the components in your app, import them as follows:
+Then start both package development processes:
 
-```tsx
-import { Button } from "@/components/ui/button"
+```bash
+bun run dev
 ```
+
+## Canonical commands
+
+All root commands delegate to package tasks through Turbo:
+
+```bash
+bun run routes
+bun run codegen
+bun run lint
+bun run test
+bun run typecheck
+bun run build
+```
+
+`routes` runs before web typechecking and builds through Turbo's task graph.
+Production deployment is push-driven through Vercel. Its build runs
+`bun run deploy`, which deploys the Convex backend and builds the web app with
+the resulting production URL exposed as `VITE_CONVEX_URL`.

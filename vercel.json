@@ -1,6 +1,9 @@
 {
   "bunVersion": "1.x",
-  "buildCommand": "bunx convex deploy --cmd-url-env-var-name VITE_CONVEX_URL --cmd 'bun run build'",
+  "framework": "vite",
+  "installCommand": "bun install --frozen-lockfile",
+  "buildCommand": "bun run deploy",
+  "outputDirectory": "apps/web/dist",
   "rewrites": [
     {
       "source": "/((?!.*\\..*).*)",
