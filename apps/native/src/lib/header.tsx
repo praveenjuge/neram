@@ -2,7 +2,9 @@ import { useUser } from "@clerk/expo"
 import { Image } from "expo-image"
 import { router } from "expo-router"
 import { SymbolView, type SymbolViewProps } from "expo-symbols"
-import { PlatformColor, Pressable, View } from "react-native"
+import { Pressable, View } from "react-native"
+
+import { accentColor } from "@/lib/theme"
 
 /**
  * A tappable SF Symbol button sized for the navigation bar's toolbar.
@@ -23,11 +25,7 @@ export function HeaderIconButton({
       hitSlop={8}
       onPress={onPress}
     >
-      <SymbolView
-        name={name}
-        size={24}
-        tintColor={PlatformColor("systemBlue")}
-      />
+      <SymbolView name={name} size={24} tintColor={accentColor} />
     </Pressable>
   )
 }

@@ -5,6 +5,7 @@ import { useState } from "react"
 import { Modal } from "react-native"
 
 import { Button, Empty, Screen, Section, Text } from "@/lib/ui"
+import { accentColor } from "@/lib/theme"
 
 export default function TabsLayout() {
   const { isLoaded, isSignedIn } = useAuth({ treatPendingAsSignedOut: false })
@@ -44,7 +45,7 @@ export default function TabsLayout() {
   }
 
   return (
-    <NativeTabs>
+    <NativeTabs tintColor={accentColor}>
       <NativeTabs.Trigger name="(projects)">
         <NativeTabs.Trigger.Icon sf="folder" />
         <NativeTabs.Trigger.Label>Projects</NativeTabs.Trigger.Label>

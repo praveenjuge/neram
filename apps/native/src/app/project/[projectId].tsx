@@ -9,6 +9,7 @@ import { HeaderIconButton } from "@/lib/header"
 import {
   Button,
   Empty,
+  Row,
   Screen,
   Section,
   Status,
@@ -103,7 +104,7 @@ export default function ProjectScreen() {
             />
           ) : (
             visibleTasks.map((task) => (
-              <Button
+              <Row
                 key={task._id}
                 label={task.title}
                 systemImage={symbolFor(task.status)}

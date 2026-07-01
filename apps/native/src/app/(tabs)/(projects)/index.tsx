@@ -5,7 +5,7 @@ import { router, Stack } from "expo-router"
 import { Alert } from "react-native"
 
 import { HeaderAvatar, HeaderIconButton, HeaderRow } from "@/lib/header"
-import { Button, Empty, Screen, Section, Text } from "@/lib/ui"
+import { Empty, Row, Screen, Section, Text } from "@/lib/ui"
 
 export default function ProjectsScreen() {
   const { isSignedIn } = useAuth({ treatPendingAsSignedOut: false })
@@ -26,7 +26,7 @@ export default function ProjectsScreen() {
             void createProject({
               name: trimmed,
               icon: "folder",
-              color: "blue",
+              color: "green",
             }).then((id) => router.push(`/project/${id}`))
           },
         },
@@ -62,7 +62,7 @@ export default function ProjectsScreen() {
             />
           ) : (
             projects.map((project) => (
-              <Button
+              <Row
                 key={project._id}
                 label={`${project.name} - ${project.taskCount} tasks`}
                 systemImage="folder"

@@ -1,6 +1,8 @@
 import {
   Button,
   Host,
+  HStack,
+  Image,
   List,
   Picker,
   Section,
@@ -9,8 +11,17 @@ import {
   VStack,
   useNativeState,
 } from "@expo/ui/swift-ui"
-import { pickerStyle, tag } from "@expo/ui/swift-ui/modifiers"
-import type { PropsWithChildren } from "react"
+import {
+  foregroundStyle,
+  frame,
+  pickerStyle,
+  tag,
+} from "@expo/ui/swift-ui/modifiers"
+import type { ComponentProps, PropsWithChildren } from "react"
+
+import { accentColor } from "@/lib/theme"
+
+type SymbolName = ComponentProps<typeof Image>["systemName"]
 
 export const statuses = [
   ["todo", "To do"],
@@ -22,9 +33,38 @@ export type Status = (typeof statuses)[number][0]
 
 export function Screen({ children }: PropsWithChildren) {
   return (
-    <Host style={{ flex: 1 }} useViewportSizeMeasurement>
+    <Host style={{ flex: 1 }} seedColor={accentColor} useViewportSizeMeasurement>
       <List>{children}</List>
     </Host>
+  )
+}
+
+export function Row({
+  label,
+  systemImage,
+  onPress,
+}: {
+  label: string
+  systemImage: SymbolName
+  onPress: () => void
+}) {
+  return (
+    <Button onPress={onPress}>
+      <HStack
+        spacing={12}
+        alignment="center"
+        modifiers={[frame({ maxWidth: Infinity, alignment: "leading" })]}
+      >
+        <Image systemName={systemImage} color={accentColor} size={20} />
+        <Text
+          modifiers={[
+            foregroundStyle({ type: "hierarchical", style: "primary" }),
+          ]}
+        >
+          {label}
+        </Text>
+      </HStack>
+    </Button>
   )
 }
 

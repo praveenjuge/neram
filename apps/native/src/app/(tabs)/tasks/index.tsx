@@ -3,7 +3,7 @@ import { api } from "@neram/convex/api"
 import { useQuery } from "convex/react"
 import { router } from "expo-router"
 
-import { Button, Empty, Screen, Section, Text, type Status } from "@/lib/ui"
+import { Empty, Row, Screen, Section, Text, type Status } from "@/lib/ui"
 
 export default function TasksScreen() {
   const { isSignedIn } = useAuth({ treatPendingAsSignedOut: false })
@@ -21,7 +21,7 @@ export default function TasksScreen() {
           />
         ) : (
           tasks.map((task) => (
-            <Button
+            <Row
               key={task._id}
               label={`${task.title} - ${task.projectName}`}
               systemImage={symbolFor(task.status)}
