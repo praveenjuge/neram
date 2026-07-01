@@ -2,6 +2,7 @@
   "name": "neram",
   "private": true,
   "version": "0.0.1",
+  "license": "MIT",
   "packageManager": "bun@1.3.14",
   "workspaces": [
     "apps/*",
