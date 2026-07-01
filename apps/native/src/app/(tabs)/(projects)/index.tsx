@@ -1,54 +1,77 @@
 import { useAuth } from "@clerk/expo"
 import { api } from "@neram/convex/api"
 import { useMutation, useQuery } from "convex/react"
-import { router } from "expo-router"
-import { useState } from "react"
+import { router, Stack } from "expo-router"
+import { Alert } from "react-native"
 
-import { Button, Empty, Field, Screen, Section, Text } from "@/lib/ui"
+import { HeaderAvatar, HeaderIconButton, HeaderRow } from "@/lib/header"
+import { Button, Empty, Screen, Section, Text } from "@/lib/ui"
 
 export default function ProjectsScreen() {
   const { isSignedIn } = useAuth({ treatPendingAsSignedOut: false })
-  const [name, setName] = useState("")
   const projects = useQuery(api.projects.list, isSignedIn ? {} : "skip")
   const createProject = useMutation(api.projects.create)
 
-  return (
-    <Screen>
-      <Section title="New project">
-        <Field placeholder="Project name" onChange={setName} />
-        <Button
-          label="Create project"
-          systemImage="plus"
-          onPress={() => {
-            const trimmed = name.trim()
+  const promptNewProject = () => {
+    Alert.prompt(
+      "New project",
+      "Give your project a name.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Create",
+          onPress: (value?: string) => {
+            const trimmed = (value ?? "").trim()
             if (!trimmed) return
             void createProject({
               name: trimmed,
               icon: "folder",
               color: "blue",
             }).then((id) => router.push(`/project/${id}`))
-          }}
-        />
-      </Section>
-      <Section title="Projects">
-        {projects === undefined ? (
-          <Text>Loading projects...</Text>
-        ) : projects.length === 0 ? (
-          <Empty
-            title="No projects yet"
-            detail="Create one above to start a native board."
-          />
-        ) : (
-          projects.map((project) => (
-            <Button
-              key={project._id}
-              label={`${project.name} - ${project.taskCount} tasks`}
-              systemImage="folder"
-              onPress={() => router.push(`/project/${project._id}`)}
+          },
+        },
+      ],
+      "plain-text"
+    )
+  }
+
+  return (
+    <>
+      <Stack.Screen
+        options={{
+          headerRight: () => (
+            <HeaderRow>
+              <HeaderIconButton
+                name="plus"
+                label="New project"
+                onPress={promptNewProject}
+              />
+              <HeaderAvatar />
+            </HeaderRow>
+          ),
+        }}
+      />
+      <Screen>
+        <Section title="Projects">
+          {projects === undefined ? (
+            <Text>Loading projects...</Text>
+          ) : projects.length === 0 ? (
+            <Empty
+              title="No projects yet"
+              detail="Tap + to create your first project."
             />
-          ))
-        )}
-      </Section>
-    </Screen>
+          ) : (
+            projects.map((project) => (
+              <Button
+                key={project._id}
+                label={`${project.name} - ${project.taskCount} tasks`}
+                systemImage="folder"
+                onPress={() => router.push(`/project/${project._id}`)}
+              />
+            ))
+          )}
+        </Section>
+      </Screen>
+    </>
   )
 }

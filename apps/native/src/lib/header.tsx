@@ -1,7 +1,48 @@
 import { useUser } from "@clerk/expo"
 import { Image } from "expo-image"
 import { router } from "expo-router"
-import { Pressable } from "react-native"
+import { SymbolView, type SymbolViewProps } from "expo-symbols"
+import { PlatformColor, Pressable, View } from "react-native"
+
+/**
+ * A tappable SF Symbol button sized for the navigation bar's toolbar.
+ */
+export function HeaderIconButton({
+  name,
+  label,
+  onPress,
+}: {
+  name: SymbolViewProps["name"]
+  label: string
+  onPress: () => void
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      hitSlop={8}
+      onPress={onPress}
+    >
+      <SymbolView
+        name={name}
+        size={24}
+        tintColor={PlatformColor("systemBlue")}
+      />
+    </Pressable>
+  )
+}
+
+/**
+ * Lays out multiple toolbar items in the header's trailing slot with even
+ * spacing, keeping them vertically centered next to the title.
+ */
+export function HeaderRow({ children }: { children: React.ReactNode }) {
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
+      {children}
+    </View>
+  )
+}
 
 /**
  * Avatar shown in the navigation bar's right toolbar slot. Tapping it opens the
