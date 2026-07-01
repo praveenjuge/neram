@@ -36,6 +36,22 @@ export default function TaskScreen() {
   const [description, setDescription] = useState<string | null>(null)
   const [status, setStatus] = useState<Status | null>(null)
 
+  if (!project) {
+    // Opened without a projectId (e.g. a deep link). The task list query is
+    // keyed by project, so without one the query stays skipped and would spin
+    // forever. Surface an unavailable state instead of an endless loader.
+    return (
+      <Screen>
+        <Section title="Task">
+          <Empty
+            title="Task unavailable"
+            detail="Open this task from its project or the tasks list."
+          />
+        </Section>
+      </Screen>
+    )
+  }
+
   if (tasks === undefined) {
     return (
       <Screen>
