@@ -1,0 +1,11 @@
+{
+  "$schema": "https://skills.sh/schemas/skills.sh.schema.json",
+  "notGrouped": "bottom",
+  "groupings": [
+    {
+      "title": "Neram",
+      "description": "Skills for operating Neram from agent CLIs and MCP clients.",
+      "skills": ["neram-cli", "neram-mcp"]
+    }
+  ]
+}

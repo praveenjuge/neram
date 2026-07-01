@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TasksRouteImport } from './routes/tasks'
+import { Route as DocsRouteImport } from './routes/docs'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ActivityRouteImport } from './routes/activity'
 import { Route as IndexRouteImport } from './routes/index'
@@ -19,6 +20,11 @@ import { Route as JoinTokenRouteImport } from './routes/join.$token'
 const TasksRoute = TasksRouteImport.update({
   id: '/tasks',
   path: '/tasks',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DocsRoute = DocsRouteImport.update({
+  id: '/docs',
+  path: '/docs',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DashboardRoute = DashboardRouteImport.update({
@@ -51,6 +57,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/activity': typeof ActivityRoute
   '/dashboard': typeof DashboardRoute
+  '/docs': typeof DocsRoute
   '/tasks': typeof TasksRoute
   '/join/$token': typeof JoinTokenRoute
   '/projects/$projectId': typeof ProjectsProjectIdRoute
@@ -59,6 +66,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/activity': typeof ActivityRoute
   '/dashboard': typeof DashboardRoute
+  '/docs': typeof DocsRoute
   '/tasks': typeof TasksRoute
   '/join/$token': typeof JoinTokenRoute
   '/projects/$projectId': typeof ProjectsProjectIdRoute
@@ -68,6 +76,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/activity': typeof ActivityRoute
   '/dashboard': typeof DashboardRoute
+  '/docs': typeof DocsRoute
   '/tasks': typeof TasksRoute
   '/join/$token': typeof JoinTokenRoute
   '/projects/$projectId': typeof ProjectsProjectIdRoute
@@ -78,6 +87,7 @@ export interface FileRouteTypes {
     | '/'
     | '/activity'
     | '/dashboard'
+    | '/docs'
     | '/tasks'
     | '/join/$token'
     | '/projects/$projectId'
@@ -86,6 +96,7 @@ export interface FileRouteTypes {
     | '/'
     | '/activity'
     | '/dashboard'
+    | '/docs'
     | '/tasks'
     | '/join/$token'
     | '/projects/$projectId'
@@ -94,6 +105,7 @@ export interface FileRouteTypes {
     | '/'
     | '/activity'
     | '/dashboard'
+    | '/docs'
     | '/tasks'
     | '/join/$token'
     | '/projects/$projectId'
@@ -103,6 +115,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ActivityRoute: typeof ActivityRoute
   DashboardRoute: typeof DashboardRoute
+  DocsRoute: typeof DocsRoute
   TasksRoute: typeof TasksRoute
   JoinTokenRoute: typeof JoinTokenRoute
   ProjectsProjectIdRoute: typeof ProjectsProjectIdRoute
@@ -115,6 +128,13 @@ declare module '@tanstack/react-router' {
       path: '/tasks'
       fullPath: '/tasks'
       preLoaderRoute: typeof TasksRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/docs': {
+      id: '/docs'
+      path: '/docs'
+      fullPath: '/docs'
+      preLoaderRoute: typeof DocsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/dashboard': {
@@ -159,6 +179,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ActivityRoute: ActivityRoute,
   DashboardRoute: DashboardRoute,
+  DocsRoute: DocsRoute,
   TasksRoute: TasksRoute,
   JoinTokenRoute: JoinTokenRoute,
   ProjectsProjectIdRoute: ProjectsProjectIdRoute,

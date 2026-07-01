@@ -5,7 +5,12 @@
       "dependsOn": ["^transit"]
     },
     "routes": {
-      "passThroughEnv": ["CONVEX_DEPLOY_KEY"],
+      "passThroughEnv": [
+        "CONVEX_DEPLOY_KEY",
+        "NERAM_CLERK_FRONTEND_API_URL",
+        "NERAM_CLERK_OAUTH_CLIENT_ID",
+        "NERAM_CONVEX_URL"
+      ],
       "outputs": ["src/routeTree.gen.ts"]
     },
     "codegen": {
@@ -18,7 +23,10 @@
       "passThroughEnv": [
         "CLERK_FRONTEND_API_URL",
         "CONVEX_DEPLOYMENT",
-        "CONVEX_DEPLOY_KEY"
+        "CONVEX_DEPLOY_KEY",
+        "NERAM_CLERK_FRONTEND_API_URL",
+        "NERAM_CLERK_OAUTH_CLIENT_ID",
+        "NERAM_CONVEX_URL"
       ],
       "inputs": ["$TURBO_DEFAULT$", ".env", ".env.*"],
       "outputs": ["dist/**", "convex/_generated/**"]
@@ -30,6 +38,9 @@
         "CI",
         "CLERK_FRONTEND_API_URL",
         "CONVEX_DEPLOY_KEY",
+        "NERAM_CLERK_FRONTEND_API_URL",
+        "NERAM_CLERK_OAUTH_CLIENT_ID",
+        "NERAM_CONVEX_URL",
         "VERCEL",
         "VERCEL_ENV",
         "VERCEL_GIT_COMMIT_REF"

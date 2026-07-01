@@ -1,0 +1,4 @@
+interface:
+  display_name: "Neram CLI"
+  short_description: "Operate Neram workspaces from the terminal"
+  default_prompt: "Use $neram-cli to plan and run Neram CLI commands for workspace tasks."

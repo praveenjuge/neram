@@ -1,8 +1,9 @@
 import { SignIn, useAuth } from "@clerk/react"
-import { Navigate, createFileRoute } from "@tanstack/react-router"
+import { Link, Navigate, createFileRoute } from "@tanstack/react-router"
 import { CheckCircle2 } from "lucide-react"
 
 import { Spinner } from "@/components/ui/spinner"
+import { Button } from "@/components/ui/button"
 
 export const Route = createFileRoute("/")({
   component: Home,
@@ -44,6 +45,9 @@ function Home() {
               </li>
             ))}
           </ul>
+          <Button asChild size="sm" variant="outline">
+            <Link to="/docs">Read docs</Link>
+          </Button>
         </section>
         <div
           className="flex justify-center md:justify-end"

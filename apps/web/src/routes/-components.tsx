@@ -5,6 +5,7 @@ import { Authenticated, AuthLoading, Unauthenticated } from "convex/react"
 import type { FunctionReturnType } from "convex/server"
 import {
   Activity,
+  BookOpen,
   LayoutDashboard,
   ListTodo,
   LogOut,
@@ -271,6 +272,18 @@ function AppSidebar() {
                   <Link to="/activity">
                     <Activity />
                     <span>Activity</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={pathname === "/docs"}
+                  tooltip="Docs"
+                >
+                  <Link to="/docs">
+                    <BookOpen />
+                    <span>Docs</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
