@@ -5,6 +5,7 @@
       "dependsOn": ["^transit"]
     },
     "routes": {
+      "passThroughEnv": ["CONVEX_DEPLOY_KEY"],
       "outputs": ["src/routeTree.gen.ts"]
     },
     "codegen": {
