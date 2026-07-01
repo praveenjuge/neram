@@ -1,0 +1,50 @@
+name: Publish CLI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/agent/package.json"
+      - "apps/agent/src/**"
+      - "apps/agent/README.md"
+      - "packages/convex/convex/_generated/**"
+      - "bun.lock"
+      - ".github/workflows/publish-cli.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org/
+      - run: npm install -g npm@latest
+      - run: bun install --frozen-lockfile
+      - run: bun run test
+        working-directory: apps/agent
+      - run: bun run typecheck
+        working-directory: apps/agent
+      - run: bun run build
+        working-directory: apps/agent
+      - name: Publish when package.json version is new
+        working-directory: apps/agent
+        run: |
+          set -euo pipefail
+          name=$(node -p "require('./package.json').name")
+          version=$(node -p "require('./package.json').version")
+          current=$(npm view "$name" version 2>/dev/null || true)
+          if [ "$current" = "$version" ]; then
+            echo "$name@$version is already published."
+            exit 0
+          fi
+          npm publish --access public --provenance

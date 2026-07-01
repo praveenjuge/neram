@@ -1,5 +1,5 @@
 {
-  "name": "neram",
+  "name": "neram-workspace",
   "private": true,
   "version": "0.0.1",
   "license": "MIT",
@@ -8,6 +8,9 @@
     "apps/*",
     "packages/*"
   ],
+  "dependencies": {
+    "neram": "workspace:*"
+  },
   "scripts": {
     "build": "turbo run build",
     "codegen": "turbo run codegen --filter=@neram/convex",
