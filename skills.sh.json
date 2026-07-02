@@ -4,8 +4,8 @@
   "groupings": [
     {
       "title": "Neram",
-      "description": "Skills for operating Neram from agent CLIs and MCP clients.",
-      "skills": ["neram-cli", "neram-mcp"]
+      "description": "Skill for operating Neram from agent CLIs and MCP clients.",
+      "skills": ["neram"]
     }
   ]
 }

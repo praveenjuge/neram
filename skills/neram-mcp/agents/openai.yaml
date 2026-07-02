@@ -1,4 +1,0 @@
-interface:
-  display_name: "Neram MCP"
-  short_description: "Connect AI agents to Neram over MCP"
-  default_prompt: "Use $neram-mcp to connect an AI agent to Neram through local or hosted MCP."

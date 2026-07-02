@@ -1,0 +1,4 @@
+interface:
+  display_name: "Neram"
+  short_description: "Operate Neram by CLI or MCP"
+  default_prompt: "Use $neram to run Neram workspace actions or configure Neram MCP access for an AI agent."
