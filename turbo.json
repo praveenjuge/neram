@@ -4,23 +4,15 @@
     "transit": {
       "dependsOn": ["^transit"]
     },
-    "routes": {
-      "passThroughEnv": [
-        "CONVEX_DEPLOY_KEY",
-        "NERAM_CLERK_FRONTEND_API_URL",
-        "NERAM_CLERK_OAUTH_CLIENT_ID",
-        "NERAM_CONVEX_URL"
-      ],
-      "outputs": ["src/routeTree.gen.ts"]
-    },
     "codegen": {
       "passThroughEnv": ["CONVEX_DEPLOYMENT", "CONVEX_DEPLOY_KEY"],
       "outputs": ["convex/_generated/**"]
     },
     "build": {
-      "dependsOn": ["^build", "routes"],
-      "env": ["VITE_*"],
+      "dependsOn": ["^build"],
+      "env": ["NEXT_PUBLIC_*"],
       "passThroughEnv": [
+        "CLERK_SECRET_KEY",
         "CLERK_FRONTEND_API_URL",
         "CONVEX_DEPLOYMENT",
         "CONVEX_DEPLOY_KEY",
@@ -33,21 +25,25 @@
     },
     "deploy": {
       "cache": false,
-      "env": ["VITE_*"],
+      "env": ["NEXT_PUBLIC_*"],
       "passThroughEnv": [
         "CI",
+        "CLERK_SECRET_KEY",
         "CLERK_FRONTEND_API_URL",
         "CONVEX_DEPLOY_KEY",
         "NERAM_CLERK_FRONTEND_API_URL",
         "NERAM_CLERK_OAUTH_CLIENT_ID",
         "NERAM_CONVEX_URL",
         "VERCEL",
+        "VERCEL_DEPLOYMENT_ID",
         "VERCEL_ENV",
-        "VERCEL_GIT_COMMIT_REF"
+        "VERCEL_GIT_COMMIT_REF",
+        "VERCEL_GIT_COMMIT_SHA"
       ]
     },
     "dev": {
       "cache": false,
+      "dependsOn": ["^build"],
       "persistent": true
     },
     "format": {
@@ -67,7 +63,7 @@
       "outputs": []
     },
     "typecheck": {
-      "dependsOn": ["transit", "routes"],
+      "dependsOn": ["transit"],
       "inputs": ["$TURBO_DEFAULT$", ".env", ".env.*"],
       "outputs": []
     }
