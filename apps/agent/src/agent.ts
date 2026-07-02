@@ -30,6 +30,7 @@ export const schemas = {
   }),
   check_in_project: projectRefSchema,
   summarize_project: projectRefSchema,
+  workspace_status: z.object({}),
 }
 
 type Status = z.infer<typeof statusSchema>
@@ -62,6 +63,16 @@ type Activity = {
   taskTitle?: string
   toStatus?: Status
   createdAt: number
+}
+
+export type WorkspaceStatus = {
+  identity: { name?: string; email?: string }
+  workspace: {
+    projects: number
+    ownedProjects: number
+    sharedProjects: number
+    openTasks: number
+  }
 }
 
 export class AgentError extends Error {
@@ -128,6 +139,7 @@ export type NeramApi = {
   createTask(args: z.infer<typeof schemas.capture_task> & { projectId: string }): Promise<string>
   moveTask(args: { taskId: string; status: Status; position?: number }): Promise<void>
   checkIn(projectId: string): Promise<number>
+  status(): Promise<WorkspaceStatus>
 }
 
 export function createConvexApi(convexUrl: string, token: string): NeramApi {
@@ -148,6 +160,7 @@ export function createConvexApi(convexUrl: string, token: string): NeramApi {
       await client.mutation(api.tasks.move, args)
     },
     checkIn: (projectId) => client.mutation(api.projects.markWorked, { projectId }) as Promise<number>,
+    status: () => client.query(api.agent.status, {}) as Promise<WorkspaceStatus>,
   }
 }
 
@@ -256,6 +269,10 @@ export function createTools(neram: NeramApi) {
           done: tasks.filter((t) => t.status === "done").length,
         },
       }
+    },
+    async workspace_status(raw?: z.input<typeof schemas.workspace_status>) {
+      schemas.workspace_status.parse(raw ?? {})
+      return await neram.status()
     },
   }
 }

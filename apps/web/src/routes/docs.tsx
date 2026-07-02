@@ -9,6 +9,7 @@ export const Route = createFileRoute("/docs")({
 
 const cliCommands = [
   "npx neram login",
+  "npx neram whoami",
   "npx neram doctor --json",
   "npx neram daily --json",
   "npx neram task add --project \"Project name\" --title \"Follow up\" --json",
@@ -25,6 +26,7 @@ const mcpTools = [
   "complete_task",
   "check_in_project",
   "summarize_project",
+  "workspace_status",
 ]
 
 function CodeBlock({ children }: { children: string }) {
@@ -86,17 +88,20 @@ function DocsPage() {
 
         <Section icon={Terminal} title="CLI">
           <p className="text-sm leading-6 text-muted-foreground">
-            The public npm package is `neram`. Use `--json` for stable,
-            machine-readable output.
+            The public npm package is `neram`. `login`, `logout`, and `whoami`
+            print quiet, human-friendly output by default; add `--json` for
+            stable, machine-readable output in scripts and CI.
           </p>
           <CodeBlock>{cliCommands.join("\n")}</CodeBlock>
         </Section>
 
         <Section icon={Plug} title="MCP">
           <p className="text-sm leading-6 text-muted-foreground">
-            Local agents can run stdio with `npx neram mcp`. Hosted agents can
-            call Streamable HTTP at `https://neram.praveenjuge.com/mcp` with a
-            Clerk OAuth `id_token` bearer token.
+            Local agents can run stdio with `npx neram mcp`. It fails fast with
+            a friendly message when you aren't logged in, so run `npx neram
+            login` first. Hosted agents can call Streamable HTTP at
+            `https://neram.praveenjuge.com/mcp` with a Clerk OAuth `id_token`
+            bearer token.
           </p>
           <CodeBlock>{`{
   "mcpServers": {

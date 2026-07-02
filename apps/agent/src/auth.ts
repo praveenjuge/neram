@@ -9,6 +9,7 @@ import open from "open"
 import * as z from "zod/v3"
 
 import { AgentError, createConvexApi, type NeramApi } from "./agent.js"
+import type { RevocationResult } from "./format.js"
 
 const appDir = join(homedir(), ".config", "neram")
 const credentialsFile = join(appDir, "credentials.json")
@@ -199,7 +200,7 @@ export async function login(overrides: Partial<PublicConfig> = {}) {
   }), config)
   await writeConfig(config)
   await writeSession(session)
-  return claims(session.idToken)
+  return { user: claims(session.idToken), config }
 }
 
 async function refresh(session: Session) {
@@ -221,23 +222,34 @@ export async function authClient(): Promise<{ client: NeramApi; session: Session
   return { client: createConvexApi(session.config.convexUrl, session.idToken), session }
 }
 
-export async function logout() {
+export async function logout(): Promise<{
+  revocation: RevocationResult
+  configRetained: boolean
+}> {
   const session = await readSession()
+  // Best-effort refresh-token revocation. "skipped" when there's nothing to
+  // revoke, "failed" (non-fatal) when the provider rejects or the request
+  // throws. Either way, local credentials are always cleared below.
+  let revocation: RevocationResult = "skipped"
   if (session?.refreshToken) {
     try {
       const meta = await discovery(session.config.clerkFrontendApiUrl)
       if (meta.revocation_endpoint) {
-        await fetch(meta.revocation_endpoint, {
+        const res = await fetch(meta.revocation_endpoint, {
           method: "POST",
           headers: { "content-type": "application/x-www-form-urlencoded" },
           body: new URLSearchParams({ token: session.refreshToken, client_id: session.config.oauthClientId }),
         })
+        revocation = res.ok ? "succeeded" : "failed"
       }
     } catch {
       // Local logout should still clear credentials.
+      revocation = "failed"
     }
   }
   await clearSession()
+  // Cached public config (config.json) is intentionally kept for the next login.
+  return { revocation, configRetained: true }
 }
 
 export function claims(idToken: string) {

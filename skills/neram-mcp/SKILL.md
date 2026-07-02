@@ -17,6 +17,9 @@ Authenticate first:
 npx neram login
 ```
 
+`neram mcp` fails fast with a friendly stderr message when you aren't logged in
+(run `neram login`, then `neram mcp`); it never auto-logs-in from startup.
+
 Client configuration:
 
 ```json
@@ -50,6 +53,8 @@ smoke-test result.
 - `complete_task`: mark a task done.
 - `check_in_project`: update personal project recency.
 - `summarize_project`: return compact project/task context for LLMs.
+- `workspace_status`: return the caller's identity and workspace totals
+  (visible projects, owned/shared split, open tasks). No arguments.
 
 All tools return structured content and stable error codes. Prefer project and
 task IDs for automation; name/title resolution intentionally rejects ambiguous

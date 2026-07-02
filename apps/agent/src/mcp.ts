@@ -39,6 +39,7 @@ export function createNeramMcpServer(client: NeramApi) {
   register("complete_task", "Complete Task", "Mark a task done by id, or by unambiguous project and title.", schemas.complete_task, (input) => tools.complete_task(schemas.complete_task.parse(input)))
   register("check_in_project", "Check In Project", "Update the caller's personal recency/check-in marker for a project.", schemas.check_in_project, (input) => tools.check_in_project(schemas.check_in_project.parse(input)))
   register("summarize_project", "Summarize Project", "Return compact project, task, and count context for an LLM.", schemas.summarize_project, (input) => tools.summarize_project(schemas.summarize_project.parse(input)))
+  register("workspace_status", "Workspace Status", "Return the caller's Neram identity and workspace totals: visible projects, owned/shared split, and open task count.", schemas.workspace_status, (input) => tools.workspace_status(schemas.workspace_status.parse(input)))
   server.server.onerror = (error) => {
     console.error(toAgentError(error).message)
   }

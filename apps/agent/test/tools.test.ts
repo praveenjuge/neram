@@ -18,6 +18,10 @@ function fakeApi(): NeramApi {
     createTask: vi.fn(async () => "tc"),
     moveTask: vi.fn(async () => undefined),
     checkIn: vi.fn(async () => 123),
+    status: vi.fn(async () => ({
+      identity: { name: "Ada", email: "ada@example.com" },
+      workspace: { projects: 2, ownedProjects: 2, sharedProjects: 0, openTasks: 2 },
+    })),
   }
 }
 
@@ -40,5 +44,21 @@ describe("agent tools", () => {
       status: "done",
     })
     expect(api.moveTask).toHaveBeenCalledWith({ taskId: "ta", status: "done", position: undefined })
+  })
+
+  test("workspace_status returns the canonical status payload", async () => {
+    const api = fakeApi()
+    await expect(createTools(api).workspace_status({})).resolves.toEqual({
+      identity: { name: "Ada", email: "ada@example.com" },
+      workspace: { projects: 2, ownedProjects: 2, sharedProjects: 0, openTasks: 2 },
+    })
+    expect(api.status).toHaveBeenCalledOnce()
+  })
+
+  test("workspace_status tolerates a missing argument object", async () => {
+    const api = fakeApi()
+    await expect(createTools(api).workspace_status()).resolves.toMatchObject({
+      workspace: { projects: 2 },
+    })
   })
 })
