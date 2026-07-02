@@ -1,5 +1,5 @@
 {
   "framework": "nextjs",
   "installCommand": "bun install --frozen-lockfile",
-  "buildCommand": "cd ../.. && bun run deploy"
+  "buildCommand": "cd ../.. && if [ \"$VERCEL_ENV\" = \"production\" ]; then bun run deploy; else bun run build --filter=@neram/web; fi"
 }
