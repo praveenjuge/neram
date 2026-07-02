@@ -8,9 +8,6 @@
     "apps/*",
     "packages/*"
   ],
-  "dependencies": {
-    "neram": "workspace:*"
-  },
   "scripts": {
     "build": "turbo run build",
     "codegen": "turbo run codegen --filter=@neram/convex",
@@ -19,7 +16,6 @@
     "format": "turbo run format",
     "lint": "turbo run lint",
     "preview": "turbo run preview --filter=@neram/web",
-    "routes": "turbo run routes --filter=@neram/web",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck"
   },

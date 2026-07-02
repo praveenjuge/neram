@@ -3,6 +3,7 @@ import type { IncomingMessage, ServerResponse } from "node:http"
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js"
+import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js"
 import type { AnySchema, ZodRawShapeCompat } from "@modelcontextprotocol/sdk/server/zod-compat.js"
 
 import { createTools, schemas, toAgentError, type NeramApi } from "./agent.js"
@@ -68,6 +69,35 @@ export async function handleHttpMcp(req: IncomingMessage & { body?: unknown }, r
       res.writeHead(500, { "content-type": "application/json" })
       res.end(JSON.stringify({ error: { code: err.code, message: err.message } }))
     }
+  } finally {
+    await transport.close()
+    await server.close()
+  }
+}
+
+export async function handleFetchMcp(request: Request, client: NeramApi): Promise<Response> {
+  if (request.method !== "POST") {
+    return Response.json(
+      { error: { code: "METHOD_NOT_ALLOWED", message: "Use POST for MCP Streamable HTTP." } },
+      { status: 405 }
+    )
+  }
+
+  const server = createNeramMcpServer(client)
+  const transport = new WebStandardStreamableHTTPServerTransport({
+    enableJsonResponse: true,
+    sessionIdGenerator: undefined,
+  })
+
+  try {
+    await server.connect(transport)
+    return await transport.handleRequest(request)
+  } catch (error) {
+    const err = toAgentError(error)
+    return Response.json(
+      { error: { code: err.code, message: err.message } },
+      { status: 500 }
+    )
   } finally {
     await transport.close()
     await server.close()
