@@ -10,27 +10,88 @@ export const projectRefSchema = z.object({
   projectId: z.string().optional(),
   project: z.string().min(1).optional(),
 })
+// A task can be addressed by its id, or by an (unambiguous) project + title.
+export const taskRefSchema = projectRefSchema.extend({
+  taskId: z.string().optional(),
+  taskTitle: z.string().optional(),
+})
+const titleSchema = z.string().min(1).max(120)
+const descriptionSchema = z.string().max(2000)
+const dueDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
+const projectNameSchema = z.string().min(1).max(80)
 export const schemas = {
   daily_brief: z.object({ projectLimit: z.number().int().min(1).max(20).default(8) }),
   capture_task: projectRefSchema.extend({
-    title: z.string().min(1).max(120),
-    description: z.string().max(2000).optional(),
-    dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    title: titleSchema,
+    description: descriptionSchema.optional(),
+    dueDate: dueDateSchema.optional(),
     assigneeSubject: z.string().optional(),
   }),
-  move_task: projectRefSchema.extend({
-    taskId: z.string().optional(),
-    taskTitle: z.string().optional(),
+  move_task: taskRefSchema.extend({
     status: statusSchema,
     position: z.number().optional(),
   }),
-  complete_task: projectRefSchema.extend({
-    taskId: z.string().optional(),
-    taskTitle: z.string().optional(),
-  }),
+  complete_task: taskRefSchema,
   check_in_project: projectRefSchema,
   summarize_project: projectRefSchema,
   workspace_status: z.object({}),
+  list_projects: z.object({}),
+  list_tasks: projectRefSchema.extend({ status: statusSchema.optional() }),
+  update_task: taskRefSchema.extend({
+    title: titleSchema.optional(),
+    description: descriptionSchema.optional(),
+    dueDate: dueDateSchema.optional(),
+    clearAssignee: z.boolean().optional(),
+  }),
+  delete_task: taskRefSchema,
+  move_task_to_project: taskRefSchema.extend({
+    toProjectId: z.string().optional(),
+    toProject: z.string().min(1).optional(),
+  }),
+  create_project: z.object({
+    name: projectNameSchema,
+    icon: z.string().optional(),
+    color: z.string().optional(),
+  }),
+  update_project: projectRefSchema.extend({
+    name: projectNameSchema.optional(),
+    icon: z.string().optional(),
+    color: z.string().optional(),
+  }),
+  // Deleting a project purges every task in it, so require an explicit id
+  // rather than resolving a (possibly ambiguous) name.
+  delete_project: z.object({ projectId: z.string().min(1) }),
+  recent_activity: z.object({ limit: z.number().int().min(1).max(50).default(12) }),
+}
+
+// Stable output shapes for the small, non-evolving tool results. The large
+// digest tools (daily_brief, summarize_project) and the list tools keep their
+// shapes open while they evolve, so they get no output schema.
+export const outputSchemas = {
+  capture_task: z.object({
+    taskId: z.string(),
+    projectId: z.string(),
+    projectName: z.string(),
+    title: z.string(),
+    status: statusSchema,
+  }),
+  move_task: z.object({ taskId: z.string(), status: statusSchema }),
+  complete_task: z.object({ taskId: z.string(), status: statusSchema }),
+  check_in_project: z.object({
+    projectId: z.string(),
+    projectName: z.string(),
+    lastWorkedAt: z.string().optional(),
+  }),
+  update_task: z.object({ taskId: z.string() }),
+  delete_task: z.object({ taskId: z.string(), deleted: z.boolean() }),
+  move_task_to_project: z.object({
+    taskId: z.string(),
+    projectId: z.string(),
+    projectName: z.string(),
+  }),
+  create_project: z.object({ projectId: z.string(), name: z.string() }),
+  update_project: z.object({ projectId: z.string() }),
+  delete_project: z.object({ projectId: z.string(), deleted: z.boolean() }),
 }
 
 type Status = z.infer<typeof statusSchema>
@@ -131,36 +192,84 @@ function compactActivity(activity: Activity) {
   }
 }
 
+export type CompactProject = ReturnType<typeof compactProject>
+export type CompactTask = ReturnType<typeof compactTask>
+export type CompactActivity = ReturnType<typeof compactActivity>
+
 export type NeramApi = {
   projects(): Promise<Project[]>
   tasks(projectId: string): Promise<Task[]>
   assignedTasks(): Promise<Array<Task & { projectName: string }>>
   activity(limit: number): Promise<Activity[]>
   createTask(args: z.infer<typeof schemas.capture_task> & { projectId: string }): Promise<string>
+  updateTask(args: {
+    taskId: string
+    title?: string
+    description?: string
+    dueDate?: string
+    assigneeSubject?: string
+  }): Promise<void>
   moveTask(args: { taskId: string; status: Status; position?: number }): Promise<void>
+  changeTaskProject(args: { taskId: string; projectId: string }): Promise<void>
+  removeTask(taskId: string): Promise<void>
+  createProject(args: { name: string; icon?: string; color?: string }): Promise<string>
+  updateProject(args: { projectId: string; name?: string; icon?: string; color?: string }): Promise<void>
+  removeProject(projectId: string): Promise<void>
   checkIn(projectId: string): Promise<number>
   status(): Promise<WorkspaceStatus>
 }
 
-export function createConvexApi(convexUrl: string, token: string): NeramApi {
+/** A ready token string, or a provider resolved fresh on each request. */
+export type TokenProvider = string | (() => Promise<string>)
+
+export function createConvexApi(convexUrl: string, token: TokenProvider): NeramApi {
   const client = new ConvexHttpClient(convexUrl)
-  client.setAuth(token)
+  const resolveToken = typeof token === "function" ? token : async () => token
+  // Re-authenticate before every call so a long-lived client (the MCP server)
+  // always carries a fresh id token instead of the one pinned at startup.
+  async function auth() {
+    client.setAuth(await resolveToken())
+  }
+  async function query<T>(fn: unknown, args: Record<string, unknown>): Promise<T> {
+    await auth()
+    return client.query(fn as typeof api.projects.list, args) as Promise<T>
+  }
+  async function mutation<T>(fn: unknown, args: Record<string, unknown>): Promise<T> {
+    await auth()
+    return client.mutation(fn as typeof api.tasks.create, args) as Promise<T>
+  }
   return {
-    projects: () => client.query(api.projects.list, {}) as Promise<Project[]>,
-    tasks: (projectId) => client.query(api.tasks.list, { projectId }) as Promise<Task[]>,
-    assignedTasks: () => client.query(api.tasks.listAll, {}) as Promise<Array<Task & { projectName: string }>>,
+    projects: () => query<Project[]>(api.projects.list, {}),
+    tasks: (projectId) => query<Task[]>(api.tasks.list, { projectId }),
+    assignedTasks: () => query<Array<Task & { projectName: string }>>(api.tasks.listAll, {}),
     activity: async (limit) => {
-      const page = await client.query(api.activity.list, {
+      const page = await query<{ page: Activity[] }>(api.activity.list, {
         paginationOpts: { cursor: null, numItems: limit },
-      }) as { page: Activity[] }
+      })
       return page.page
     },
-    createTask: (args) => client.mutation(api.tasks.create, args) as Promise<string>,
-    moveTask: async (args) => {
-      await client.mutation(api.tasks.move, args)
+    createTask: (args) => mutation<string>(api.tasks.create, args),
+    updateTask: async (args) => {
+      await mutation(api.tasks.update, args)
     },
-    checkIn: (projectId) => client.mutation(api.projects.markWorked, { projectId }) as Promise<number>,
-    status: () => client.query(api.agent.status, {}) as Promise<WorkspaceStatus>,
+    moveTask: async (args) => {
+      await mutation(api.tasks.move, args)
+    },
+    changeTaskProject: async (args) => {
+      await mutation(api.tasks.changeProject, args)
+    },
+    removeTask: async (taskId) => {
+      await mutation(api.tasks.remove, { taskId })
+    },
+    createProject: (args) => mutation<string>(api.projects.create, args),
+    updateProject: async (args) => {
+      await mutation(api.projects.update, args)
+    },
+    removeProject: async (projectId) => {
+      await mutation(api.projects.remove, { projectId })
+    },
+    checkIn: (projectId) => mutation<number>(api.projects.markWorked, { projectId }),
+    status: () => query<WorkspaceStatus>(api.agent.status, {}),
   }
 }
 
@@ -187,7 +296,7 @@ export function createTools(neram: NeramApi) {
     }
     throw new AgentError("NOT_FOUND", "Project not found.")
   }
-  async function resolveTask(input: z.infer<typeof schemas.move_task>) {
+  async function resolveTask(input: z.infer<typeof taskRefSchema>) {
     if (input.taskId) return input.taskId
     const project = await resolveProject(input)
     if (!input.taskTitle) throw new AgentError("VALIDATION", "Provide taskId or taskTitle.")
@@ -248,9 +357,9 @@ export function createTools(neram: NeramApi) {
     },
     async complete_task(raw: z.input<typeof schemas.complete_task>) {
       const input = schemas.complete_task.parse(raw)
-      const taskId = await resolveTask({ ...input, status: "done" })
+      const taskId = await resolveTask(input)
       await neram.moveTask({ taskId, status: "done" })
-      return { taskId, status: "done" }
+      return { taskId, status: "done" as const }
     },
     async check_in_project(raw: z.input<typeof schemas.check_in_project>) {
       const project = await resolveProject(schemas.check_in_project.parse(raw))
@@ -273,6 +382,66 @@ export function createTools(neram: NeramApi) {
     async workspace_status(raw?: z.input<typeof schemas.workspace_status>) {
       schemas.workspace_status.parse(raw ?? {})
       return await neram.status()
+    },
+    async list_projects(raw?: z.input<typeof schemas.list_projects>) {
+      schemas.list_projects.parse(raw ?? {})
+      const list = await projects()
+      return { projects: list.map(compactProject) }
+    },
+    async list_tasks(raw: z.input<typeof schemas.list_tasks>) {
+      const input = schemas.list_tasks.parse(raw)
+      const project = await resolveProject(input)
+      const tasks = await neram.tasks(project._id)
+      const filtered = input.status ? tasks.filter((t) => t.status === input.status) : tasks
+      return { project: compactProject(project), tasks: filtered.slice(0, 200).map(compactTask) }
+    },
+    async update_task(raw: z.input<typeof schemas.update_task>) {
+      const input = schemas.update_task.parse(raw)
+      const taskId = await resolveTask(input)
+      await neram.updateTask({
+        taskId,
+        title: input.title,
+        description: input.description,
+        dueDate: input.dueDate,
+        // An empty string clears the assignee on the backend; omit the field
+        // entirely to leave the current assignment untouched.
+        ...(input.clearAssignee ? { assigneeSubject: "" } : {}),
+      })
+      return { taskId }
+    },
+    async delete_task(raw: z.input<typeof schemas.delete_task>) {
+      const input = schemas.delete_task.parse(raw)
+      const taskId = await resolveTask(input)
+      await neram.removeTask(taskId)
+      return { taskId, deleted: true as const }
+    },
+    async move_task_to_project(raw: z.input<typeof schemas.move_task_to_project>) {
+      const input = schemas.move_task_to_project.parse(raw)
+      const taskId = await resolveTask(input)
+      const destination = await resolveProject({ projectId: input.toProjectId, project: input.toProject })
+      await neram.changeTaskProject({ taskId, projectId: destination._id })
+      return { taskId, projectId: destination._id, projectName: destination.name }
+    },
+    async create_project(raw: z.input<typeof schemas.create_project>) {
+      const input = schemas.create_project.parse(raw)
+      const projectId = await neram.createProject({ name: input.name, icon: input.icon, color: input.color })
+      return { projectId, name: input.name }
+    },
+    async update_project(raw: z.input<typeof schemas.update_project>) {
+      const input = schemas.update_project.parse(raw)
+      const project = await resolveProject(input)
+      await neram.updateProject({ projectId: project._id, name: input.name, icon: input.icon, color: input.color })
+      return { projectId: project._id }
+    },
+    async delete_project(raw: z.input<typeof schemas.delete_project>) {
+      const { projectId } = schemas.delete_project.parse(raw)
+      await neram.removeProject(projectId)
+      return { projectId, deleted: true as const }
+    },
+    async recent_activity(raw?: z.input<typeof schemas.recent_activity>) {
+      const { limit } = schemas.recent_activity.parse(raw ?? {})
+      const activity = await neram.activity(limit)
+      return { activity: activity.map(compactActivity) }
     },
   }
 }

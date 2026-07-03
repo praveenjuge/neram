@@ -131,6 +131,297 @@ export function formatError(err: { code: string; message: string }) {
   return hint ? `${err.message}\n${hint}` : err.message
 }
 
+// --- Workspace formatters -------------------------------------------------
+// Human-friendly renderings of the tool payloads. `--json` still emits the
+// exact tool output; these are the quiet default for interactive use. All rely
+// on the no-op color helpers above, so piped/CI output stays plain text.
+
+const STATUS_LABEL: Record<string, string> = {
+  todo: "todo",
+  inProgress: "in progress",
+  done: "done",
+}
+
+function statusLabel(status?: string) {
+  return status ? STATUS_LABEL[status] ?? status : ""
+}
+
+/** Date portion (YYYY-MM-DD) of an ISO timestamp, for compact display. */
+function shortDate(value?: string) {
+  return value ? value.slice(0, 10) : undefined
+}
+
+// A titled block: bold heading, indented body lines, or a dim "none" when empty.
+function section(title: string, lines: string[]) {
+  if (lines.length === 0) return `${bold(title)}\n  ${dim("none")}`
+  return [bold(title), ...lines].join("\n")
+}
+
+function bullet(text: string) {
+  return `  • ${text}`
+}
+
+function taskBullet(task: CompactTaskLike) {
+  const meta: string[] = []
+  const label = statusLabel(task.status)
+  if (label) meta.push(label)
+  if (task.dueDate) meta.push(`due ${task.dueDate}`)
+  if (task.assigneeName) meta.push(task.assigneeName)
+  const project = task.projectName ? ` ${dim(`— ${task.projectName}`)}` : ""
+  const tail = meta.length ? ` ${dim(`(${meta.join(", ")})`)}` : ""
+  return bullet(`${task.title}${project}${tail}`)
+}
+
+function projectBullet(project: CompactProjectLike) {
+  const worked = shortDate(project.lastWorkedAt)
+  const bits = [`${project.openTasks} open`, `${project.taskCount} total`, project.role]
+  if (worked) bits.push(`worked ${worked}`)
+  return bullet(`${project.name} ${dim(`(${bits.join(", ")})`)}`)
+}
+
+function activityBullet(item: CompactActivityLike) {
+  const parts = [item.actorName, item.type.replace(/[._]/g, " ")]
+  if (item.taskTitle) parts.push(`"${item.taskTitle}"`)
+  parts.push(`in ${item.projectName}`)
+  const when = shortDate(item.createdAt)
+  const tail = when ? ` ${dim(`(${when})`)}` : ""
+  return bullet(`${parts.join(" · ")}${tail}`)
+}
+
+// Structural shapes so this module doesn't depend on the exact zod inference.
+type CompactProjectLike = {
+  projectId: string
+  name: string
+  role: string
+  taskCount: number
+  openTasks: number
+  updatedAt?: string
+  lastWorkedAt?: string
+}
+type CompactTaskLike = {
+  taskId: string
+  projectId: string
+  projectName?: string
+  title: string
+  description?: string
+  status: string
+  dueDate?: string
+  assigneeName?: string
+  updatedAt?: string
+}
+type CompactActivityLike = {
+  type: string
+  projectName: string
+  taskTitle?: string
+  toStatus?: string
+  actorName: string
+  createdAt?: string
+}
+
+/** The `daily_brief` digest as a scannable, sectioned overview. */
+export function formatDailyBrief(brief: {
+  projects: number
+  staleProjects: CompactProjectLike[]
+  assignedOpenTasks: CompactTaskLike[]
+  openTasks: CompactTaskLike[]
+  recentActivity: CompactActivityLike[]
+  suggestedNextActions: Array<{ title: string; status: string; dueDate?: string }>
+}) {
+  return [
+    bold("Daily brief"),
+    dim(`${brief.projects} projects · ${brief.assignedOpenTasks.length} assigned · ${brief.openTasks.length} open tracked`),
+    "",
+    section("Next actions", brief.suggestedNextActions.map((a) => {
+      const meta: string[] = [statusLabel(a.status)]
+      if (a.dueDate) meta.push(`due ${a.dueDate}`)
+      return bullet(`${a.title} ${dim(`(${meta.filter(Boolean).join(", ")})`)}`)
+    })),
+    "",
+    section("Assigned to you", brief.assignedOpenTasks.map(taskBullet)),
+    "",
+    section("Stale projects", brief.staleProjects.map(projectBullet)),
+    "",
+    section("Recent activity", brief.recentActivity.map(activityBullet)),
+  ].join("\n")
+}
+
+/** The `list_projects` result as a one-line-per-project list. */
+export function formatProjectList(result: { projects: CompactProjectLike[] }) {
+  return section(`Projects (${result.projects.length})`, result.projects.map(projectBullet))
+}
+
+/** The `list_tasks` result: a project header plus one line per task. */
+export function formatTaskList(result: { project: CompactProjectLike; tasks: CompactTaskLike[] }) {
+  return [
+    bold(result.project.name),
+    dim(`${result.tasks.length} task(s)`),
+    "",
+    section("Tasks", result.tasks.map(taskBullet)),
+  ].join("\n")
+}
+
+/** The `summarize_project` result: project header, counts, and task list. */
+export function formatProjectSummary(result: {
+  project: CompactProjectLike
+  tasks: CompactTaskLike[]
+  counts: { todo: number; inProgress: number; done: number }
+}) {
+  const c = result.counts
+  return [
+    bold(result.project.name),
+    dim(`${c.todo} todo · ${c.inProgress} in progress · ${c.done} done`),
+    "",
+    section("Tasks", result.tasks.map(taskBullet)),
+  ].join("\n")
+}
+
+/** The `recent_activity` result as a newest-first feed. */
+export function formatActivity(result: { activity: CompactActivityLike[] }) {
+  return section(`Recent activity (${result.activity.length})`, result.activity.map(activityBullet))
+}
+
+/** Confirmation after `capture_task`. */
+export function formatCaptureTask(result: { taskId: string; projectName: string; title: string }) {
+  return `Created ${bold(`"${result.title}"`)} in ${result.projectName}.\n${dim(`Task ${result.taskId}`)}`
+}
+
+/** Confirmation after `move_task` / `complete_task`. */
+export function formatTaskMoved(result: { taskId: string; status: string }) {
+  return `Moved task to ${bold(statusLabel(result.status))}.\n${dim(`Task ${result.taskId}`)}`
+}
+
+/** Confirmation after `update_task`. */
+export function formatTaskUpdated(result: { taskId: string }) {
+  return `Updated task.\n${dim(`Task ${result.taskId}`)}`
+}
+
+/** Confirmation after `delete_task`. */
+export function formatTaskDeleted(result: { taskId: string }) {
+  return `Deleted task.\n${dim(`Task ${result.taskId}`)}`
+}
+
+/** Confirmation after `move_task_to_project`. */
+export function formatTaskMovedToProject(result: { taskId: string; projectName: string }) {
+  return `Moved task to ${bold(result.projectName)}.\n${dim(`Task ${result.taskId}`)}`
+}
+
+/** Confirmation after `check_in_project`. */
+export function formatCheckIn(result: { projectName: string; lastWorkedAt?: string }) {
+  const when = result.lastWorkedAt ? ` ${dim(`(last worked ${shortDate(result.lastWorkedAt)})`)}` : ""
+  return `Checked in on ${bold(result.projectName)}.${when}`
+}
+
+/** Confirmation after `create_project`. */
+export function formatProjectCreated(result: { projectId: string; name: string }) {
+  return `Created project ${bold(`"${result.name}"`)}.\n${dim(result.projectId)}`
+}
+
+/** Confirmation after `update_project`. */
+export function formatProjectUpdated(result: { projectId: string }) {
+  return `Updated project.\n${dim(result.projectId)}`
+}
+
+/** Confirmation after `delete_project`. */
+export function formatProjectDeleted(result: { projectId: string }) {
+  return `Deleted project and all of its tasks.\n${dim(result.projectId)}`
+}
+
+/** Doctor report shared with the CLI so `--json` keeps its exact payload. */
+export type DoctorReport =
+  | {
+      ok: true
+      config: { convexUrl: string; clerkFrontendApiUrl: string; oauthClientId: string }
+      token: { issuer: unknown; audience: unknown; expiresAt: string }
+      convex: { authenticated: boolean; visibleProjects: number }
+      mcp: { stdio: string; hosted: string }
+    }
+  | {
+      ok: false
+      config: { convexUrl: string; clerkFrontendApiUrl: string; oauthClientId: string }
+      auth: { authenticated: false; error: { code: string; message: string; details?: Record<string, unknown> } }
+      mcp: { stdio: string; hosted: string }
+    }
+
+/** Human diagnostics for `doctor`: config target, auth state, and MCP hints. */
+export function formatDoctor(report: DoctorReport) {
+  const lines = [
+    bold("Neram doctor"),
+    "",
+    bold("Config"),
+    `  Convex:  ${report.config.convexUrl}`,
+    `  Clerk:   ${report.config.clerkFrontendApiUrl}`,
+    "",
+  ]
+  if (report.ok) {
+    lines.push(
+      bold("Auth"),
+      "  Authenticated: yes",
+      `  Issuer:   ${String(report.token.issuer)}`,
+      `  Expires:  ${report.token.expiresAt}`,
+      `  Visible projects: ${report.convex.visibleProjects}`,
+    )
+  } else {
+    lines.push(
+      bold("Auth"),
+      "  Authenticated: no",
+      `  ${report.auth.error.code}: ${report.auth.error.message}`,
+    )
+    const hint = ERROR_HINTS[report.auth.error.code]
+    if (hint) lines.push(`  ${dim(hint)}`)
+  }
+  lines.push("", bold("MCP"), `  stdio    ${report.mcp.stdio}`, `  hosted   ${report.mcp.hosted}`)
+  return lines.join("\n")
+}
+
+// --- MCP install ----------------------------------------------------------
+// The command and config snippets are static; `mcp install` only prints them.
+const MCP_COMMAND = { command: "npx", args: ["neram", "mcp"] } as const
+
+function serverSnippet(key: "mcpServers" | "servers") {
+  return JSON.stringify({ [key]: { neram: MCP_COMMAND } }, null, 2)
+}
+
+/** Per-client setup instructions for wiring up the local stdio MCP server. */
+export function formatMcpInstall(client?: string) {
+  const target = (client ?? "generic").toLowerCase()
+  const footer = [
+    "",
+    dim(`Sign in first: ${MCP_INFO.stdio.replace("mcp", "login")} then ${MCP_INFO.stdio}`),
+    dim(`Hosted endpoint (Streamable HTTP): ${MCP_INFO.hosted}`),
+  ]
+  const blocks: Record<string, string[]> = {
+    "claude-code": [
+      bold("Claude Code"),
+      "Register the server in one step:",
+      "  claude mcp add neram -- npx neram mcp",
+      "",
+      "Or add it to your MCP config manually:",
+      serverSnippet("mcpServers"),
+    ],
+    cursor: [
+      bold("Cursor"),
+      "Add to ~/.cursor/mcp.json (global) or .cursor/mcp.json (project):",
+      serverSnippet("mcpServers"),
+    ],
+    vscode: [
+      bold("VS Code"),
+      "Add to .vscode/mcp.json:",
+      serverSnippet("servers"),
+    ],
+    generic: [
+      bold("MCP client"),
+      "Add this server to your client's MCP configuration:",
+      serverSnippet("mcpServers"),
+    ],
+  }
+  const block = blocks[target] ?? [
+    dim(`Unknown client "${target}". Showing a generic config.`),
+    "",
+    ...blocks.generic,
+  ]
+  return [...block, ...footer].join("\n")
+}
+
 /** Additive, backward-compatible JSON payload for `login`. */
 export function loginPayload(user: Claims, convexUrl: string) {
   return { ok: true as const, user, convexUrl, mcp: MCP_INFO }

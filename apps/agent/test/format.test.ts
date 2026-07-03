@@ -1,9 +1,23 @@
 import { describe, expect, test } from "vitest"
 
 import {
+  formatActivity,
+  formatCaptureTask,
+  formatCheckIn,
+  formatDailyBrief,
+  formatDoctor,
   formatError,
   formatLogin,
   formatLogout,
+  formatMcpInstall,
+  formatProjectCreated,
+  formatProjectDeleted,
+  formatProjectList,
+  formatProjectSummary,
+  formatTaskDeleted,
+  formatTaskList,
+  formatTaskMoved,
+  formatTaskMovedToProject,
   formatWhoami,
   loginPayload,
   logoutPayload,
@@ -94,5 +108,137 @@ describe("additive JSON payloads", () => {
       configRetained: true,
       revocation: "failed",
     })
+  })
+})
+
+const project = {
+  projectId: "pa",
+  name: "Agent",
+  role: "owner",
+  taskCount: 3,
+  openTasks: 2,
+  updatedAt: "2026-01-02T00:00:00.000Z",
+  lastWorkedAt: "2026-01-03T00:00:00.000Z",
+}
+const task = {
+  taskId: "ta",
+  projectId: "pa",
+  projectName: "Agent",
+  title: "Ship CLI",
+  status: "inProgress",
+  dueDate: "2026-02-01",
+  updatedAt: "2026-01-02T00:00:00.000Z",
+}
+
+describe("workspace formatters (non-TTY plain output)", () => {
+  test("daily brief renders sectioned, plain-text output", () => {
+    const text = formatDailyBrief({
+      projects: 4,
+      staleProjects: [project],
+      assignedOpenTasks: [task],
+      openTasks: [task],
+      recentActivity: [
+        { type: "task.created", projectName: "Agent", taskTitle: "Ship CLI", actorName: "Ada", createdAt: "2026-01-04T00:00:00.000Z" },
+      ],
+      suggestedNextActions: [{ title: "Ship CLI", status: "inProgress", dueDate: "2026-02-01" }],
+    })
+    expect(text).toContain("Daily brief")
+    expect(text).toContain("Next actions")
+    expect(text).toContain("Ship CLI")
+    expect(text).toContain("Stale projects")
+    // Non-TTY output carries no ANSI escape codes.
+    expect(text).not.toContain("\u001b[")
+  })
+
+  test("project list shows a count and one line per project", () => {
+    const text = formatProjectList({ projects: [project] })
+    expect(text).toContain("Projects (1)")
+    expect(text).toContain("Agent")
+    expect(text).toContain("2 open")
+  })
+
+  test("empty project list renders none", () => {
+    expect(formatProjectList({ projects: [] })).toContain("none")
+  })
+
+  test("task list shows the project header and tasks", () => {
+    const text = formatTaskList({ project, tasks: [task] })
+    expect(text).toContain("Agent")
+    expect(text).toContain("Ship CLI")
+    expect(text).toContain("in progress")
+  })
+
+  test("project summary shows counts", () => {
+    const text = formatProjectSummary({ project, tasks: [task], counts: { todo: 1, inProgress: 1, done: 1 } })
+    expect(text).toContain("1 todo · 1 in progress · 1 done")
+  })
+
+  test("activity feed lists actor and project", () => {
+    const text = formatActivity({
+      activity: [{ type: "task.moved", projectName: "Agent", taskTitle: "Ship CLI", actorName: "Ada", createdAt: "2026-01-04T00:00:00.000Z" }],
+    })
+    expect(text).toContain("Recent activity (1)")
+    expect(text).toContain("Ada")
+    expect(text).toContain("Agent")
+  })
+
+  test("mutation confirmations are concise", () => {
+    expect(formatCaptureTask({ taskId: "ta", projectName: "Agent", title: "Ship CLI" })).toContain("Created")
+    expect(formatTaskMoved({ taskId: "ta", status: "done" })).toContain("done")
+    expect(formatTaskDeleted({ taskId: "ta" })).toContain("Deleted task")
+    expect(formatTaskMovedToProject({ taskId: "ta", projectName: "Agent Ops" })).toContain("Agent Ops")
+    expect(formatCheckIn({ projectName: "Agent", lastWorkedAt: "2026-01-03T00:00:00.000Z" })).toContain("Checked in")
+    expect(formatProjectCreated({ projectId: "pa", name: "Agent" })).toContain("Created project")
+    expect(formatProjectDeleted({ projectId: "pa" })).toContain("Deleted project")
+  })
+
+  test("doctor renders an authenticated report", () => {
+    const text = formatDoctor({
+      ok: true,
+      config: { convexUrl: "https://x.convex.cloud", clerkFrontendApiUrl: "https://clerk.example", oauthClientId: "cid" },
+      token: { issuer: "https://clerk.example", audience: "convex", expiresAt: "2026-01-02T00:00:00.000Z" },
+      convex: { authenticated: true, visibleProjects: 4 },
+      mcp: { stdio: MCP_INFO.stdio, hosted: MCP_INFO.hosted },
+    })
+    expect(text).toContain("Neram doctor")
+    expect(text).toContain("Authenticated: yes")
+    expect(text).toContain("Visible projects: 4")
+  })
+
+  test("doctor renders an auth failure with a hint", () => {
+    const text = formatDoctor({
+      ok: false,
+      config: { convexUrl: "https://x.convex.cloud", clerkFrontendApiUrl: "https://clerk.example", oauthClientId: "cid" },
+      auth: { authenticated: false, error: { code: "UNAUTHENTICATED", message: "Run `neram login` first." } },
+      mcp: { stdio: MCP_INFO.stdio, hosted: MCP_INFO.hosted },
+    })
+    expect(text).toContain("Authenticated: no")
+    expect(text).toContain("UNAUTHENTICATED")
+  })
+})
+
+describe("mcp install instructions", () => {
+  test("cursor uses the mcpServers config key", () => {
+    const text = formatMcpInstall("cursor")
+    expect(text).toContain("Cursor")
+    expect(text).toContain("mcpServers")
+    expect(text).toContain("\"neram\"")
+    expect(text).toContain(MCP_INFO.hosted)
+  })
+
+  test("vscode uses the servers config key", () => {
+    const text = formatMcpInstall("vscode")
+    expect(text).toContain("VS Code")
+    expect(text).toContain("\"servers\"")
+  })
+
+  test("claude-code shows the add command", () => {
+    expect(formatMcpInstall("claude-code")).toContain("claude mcp add neram")
+  })
+
+  test("unknown client falls back to a generic config", () => {
+    const text = formatMcpInstall("emacs")
+    expect(text).toContain("Unknown client")
+    expect(text).toContain("mcpServers")
   })
 })

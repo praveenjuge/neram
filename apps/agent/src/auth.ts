@@ -17,6 +17,9 @@ const configFile = join(appDir, "config.json")
 const service = "neram"
 const account = "default"
 const defaultConfigUrl = "https://neram.praveenjuge.com/.well-known/neram-agent.json"
+// Refresh a little ahead of the hard expiry so an in-flight request never races
+// the token going stale. Shared by refresh() and the per-request provider.
+const REFRESH_WINDOW_MS = 90_000
 
 const publicConfigSchema = z.object({
   convexUrl: z.string().url(),
@@ -204,7 +207,7 @@ export async function login(overrides: Partial<PublicConfig> = {}) {
 }
 
 async function refresh(session: Session) {
-  if (session.expiresAt - Date.now() > 90_000 || !session.refreshToken) return session
+  if (session.expiresAt - Date.now() > REFRESH_WINDOW_MS || !session.refreshToken) return session
   const meta = await discovery(session.config.clerkFrontendApiUrl)
   const next = await exchange(meta.token_endpoint, new URLSearchParams({
     grant_type: "refresh_token",
@@ -219,7 +222,22 @@ export async function authClient(): Promise<{ client: NeramApi; session: Session
   const stored = await readSession()
   if (!stored) throw new AgentError("UNAUTHENTICATED", "Run `neram login` first.")
   const session = await refresh(stored)
-  return { client: createConvexApi(session.config.convexUrl, session.idToken), session }
+  // Cache the session in the closure so the hot path (token still comfortably
+  // valid) returns synchronously without touching disk, keyring, or the
+  // network. Only when the token nears expiry do we re-read the latest stored
+  // session (another process may have already refreshed it) and refresh. This
+  // keeps a one-shot CLI call cheap and lets the long-lived MCP process survive
+  // token expiry for as long as a refresh token exists. When no refresh token
+  // is available the stale token surfaces the usual UNAUTHENTICATED error.
+  let current = session
+  const provider = async () => {
+    if (current.expiresAt - Date.now() > REFRESH_WINDOW_MS) return current.idToken
+    const latest = await readSession()
+    if (!latest) throw new AgentError("UNAUTHENTICATED", "Run `neram login` first.")
+    current = await refresh(latest)
+    return current.idToken
+  }
+  return { client: createConvexApi(session.config.convexUrl, provider), session }
 }
 
 export async function logout(): Promise<{
