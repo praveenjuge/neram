@@ -10,9 +10,10 @@ npx neram daily --json
 npx neram mcp
 ```
 
-`login`, `logout`, and `whoami` print quiet, human-friendly output by default.
-Add `--json` to any command for stable, machine-readable output; the JSON shape
-is additive and backward compatible.
+Every command prints quiet, human-friendly output by default. Add `--json` to
+any command for stable, machine-readable output; the JSON shape is additive and
+backward compatible, so the `--json` payload is exactly the underlying tool
+result.
 
 - `neram login` completes Clerk OAuth (PKCE) and stores tokens in the OS
   keychain, with a chmod-600 file fallback. It makes no live workspace calls.
@@ -21,9 +22,52 @@ is additive and backward compatible.
 - `neram logout` clears local credentials, best-effort revokes the refresh
   token, and keeps the cached public config for your next login.
 - `neram mcp` starts the local stdio MCP server and fails fast with a friendly
-  message when you aren't logged in.
+  message when you aren't logged in. It refreshes the auth token per request, so
+  a long-lived server keeps working past the ~1h id-token lifetime as long as a
+  refresh token exists.
+- `neram mcp install [claude-code|cursor|vscode]` prints (does not write) the
+  config snippet for wiring the server into a client.
 
-The MCP server exposes `daily_brief`, `capture_task`, `move_task`,
-`complete_task`, `check_in_project`, `summarize_project`, and `workspace_status`.
+## Workspace commands
+
+```bash
+neram daily [--project-limit <n>]        # daily execution digest
+neram activity [--limit <n>]             # recent activity feed
+
+neram task list -p <project> [--status <todo|inProgress|done>]
+neram task add -p <project> -t <title> [-d <desc>] [--due <yyyy-mm-dd>]
+neram task move -t <title> -p <project> --status <status>
+neram task done -t <title> -p <project>
+neram task update --task-id <id> [--title <t>] [--description <d>] [--due <date>] [--clear-assignee]
+neram task rm --task-id <id>
+neram task move-to --task-id <id> --to-project <name>
+
+neram project list
+neram project add --name <name> [--icon <icon>] [--color <color>]
+neram project update -p <project> [--name <name>] [--icon <icon>] [--color <color>]
+neram project rm --project-id <id>       # id required; purges the project's tasks
+neram project check-in -p <project>
+neram project summary -p <project>
+```
+
+Tasks and projects can be addressed by id (`--task-id` / `--project-id`) or by an
+unambiguous name (`--project` / `--title`). An ambiguous name returns an
+`AMBIGUOUS` error whose details list the candidate ids to retry with.
+
+## MCP tools
+
+Read-only: `daily_brief`, `workspace_status`, `list_projects`, `list_tasks`,
+`summarize_project`, `recent_activity`.
+
+Mutations: `capture_task`, `update_task`, `move_task`, `complete_task`,
+`move_task_to_project`, `delete_task`, `check_in_project`, `create_project`,
+`update_project`, `delete_project`.
+
+Tools carry annotations (read-only / idempotent / destructive) and stable output
+schemas for the small mutation shapes. Tool failures come back as `isError`
+results carrying `{ error: { code, message, details } }` rather than
+protocol-level exceptions, so agents can read `AMBIGUOUS` candidate lists and act
+on stable codes. `delete_project` requires an explicit `projectId` because it
+purges every task in the project.
 
 Docs: https://neram.praveenjuge.com/docs
