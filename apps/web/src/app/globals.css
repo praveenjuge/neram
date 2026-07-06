@@ -128,3 +128,15 @@
     @apply font-sans;
   }
 }
+
+/* Shiki code blocks. Light theme colors are written inline by Shiki; the
+   surrounding container owns the background, so drop Shiki's. Under .dark, swap
+   each token to its `--shiki-dark` variable (needs !important to beat Shiki's
+   inline light color). */
+.shiki {
+  background-color: transparent !important;
+}
+.dark .shiki,
+.dark .shiki span {
+  color: var(--shiki-dark) !important;
+}

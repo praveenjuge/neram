@@ -1,40 +1,145 @@
-import { ArrowLeft, Box, ClipboardCheck, Plug, Terminal } from "lucide-react"
+import { ArrowLeft, Plug, Sparkles, Terminal } from "lucide-react"
 import Link from "next/link"
 import type { ReactNode } from "react"
 
 import { Button } from "@/components/ui/button"
+import { type CodeLang, highlightCode } from "@/lib/shiki"
 
 export const metadata = {
   title: "Docs",
 }
 
-const cliCommands = [
-  "npx neram login",
-  "npx neram whoami",
-  "npx neram doctor --json",
-  "npx neram daily --json",
-  "npx neram task add --project \"Project name\" --title \"Follow up\" --json",
-  "npx neram task move --task-id TASK_ID --status inProgress --json",
-  "npx neram task done --task-id TASK_ID --json",
-  "npx neram project check-in --project \"Project name\" --json",
-  "npx neram project summary --project \"Project name\" --json",
-]
+const setupCommands = `npx neram login          # Clerk OAuth (PKCE); tokens in OS keychain
+                         # fallback: ~/.config/neram/credentials.json (chmod 600)
+npx neram doctor --json  # config, auth, and MCP readiness
+npx neram whoami --json  # identity + workspace totals
+npx neram logout         # clear creds; best-effort revoke refresh token`
 
-const mcpTools = [
-  "daily_brief",
-  "capture_task",
-  "move_task",
-  "complete_task",
-  "check_in_project",
-  "summarize_project",
-  "workspace_status",
-]
+const whoamiExample = `{
+  "ok": true,
+  "user": { "name": "Ada Lovelace", "email": "ada@example.com" },
+  "convexUrl": "https://your-team.convex.cloud",
+  "workspace": {
+    "projects": 8,
+    "ownedProjects": 5,
+    "sharedProjects": 3,
+    "openTasks": 12
+  },
+  "mcp": {
+    "stdio": "neram mcp",
+    "hosted": "https://neram.praveenjuge.com/mcp"
+  }
+}`
 
-function CodeBlock({ children }: { children: string }) {
+const dailyCommands = `npx neram daily --json                    # compact execution digest
+npx neram daily --project-limit 5 --json  # scan fewer projects
+npx neram activity --limit 20 --json      # recent activity feed`
+
+const taskCommands = `npx neram task list --project "Project name" --status inProgress
+npx neram task add --project "Project name" --title "Follow up" --due 2026-02-01
+npx neram task move --task-id TASK_ID --status inProgress
+npx neram task done --task-id TASK_ID
+npx neram task update --task-id TASK_ID --title "New title" --clear-assignee
+npx neram task move-to --task-id TASK_ID --to-project "Other project"
+npx neram task rm --task-id TASK_ID`
+
+const projectCommands = `npx neram project list --json
+npx neram project add --name "Project name" --icon rocket --color blue
+npx neram project update --project "Project name" --name "Renamed"
+npx neram project summary --project "Project name" --json
+npx neram project check-in --project "Project name"
+npx neram project rm --project-id PROJECT_ID   # id required; purges tasks`
+
+const mcpStdioCommands = `npx neram login   # sign in first
+npx neram mcp     # stdio server; refreshes the token per request
+
+# print a client config without writing files (also: cursor, vscode)
+npx neram mcp install claude-code`
+
+const mcpConfig = `{
+  "mcpServers": {
+    "neram": {
+      "command": "npx",
+      "args": ["neram", "mcp"]
+    }
+  }
+}`
+
+const mcpHosted = `# hosted Streamable HTTP; send a Clerk id_token
+curl -s https://neram.praveenjuge.com/mcp \\
+  -H "Authorization: Bearer $NERAM_ID_TOKEN"`
+
+const mcpTools = `# read-only
+daily_brief
+workspace_status
+list_projects
+list_tasks
+summarize_project
+recent_activity
+
+# mutations
+capture_task
+update_task
+move_task
+complete_task
+move_task_to_project
+delete_task
+check_in_project
+create_project
+update_project
+delete_project          # destructive — purges every task`
+
+const skillsReference = `skills/neram/SKILL.md   # teaches an agent to use Neram via CLI + MCP
+                        # grouped as "Neram" in skills.sh.json (skills.sh)
+
+# loads on demand for tasks like:
+#   login / doctor / daily brief
+#   create / move / complete tasks
+#   check-in / summarize projects
+#   script Neram from a shell or CI with --json
+#   configure an MCP client (Claude, Codex, Cursor)`
+
+const skillsCommands = `# pick "neram" from the list
+npx skills add praveenjuge/neram
+
+# or add it directly
+npx skills add praveenjuge/neram -s neram
+
+npx neram login   # sign in so the agent acts as your Neram user`
+
+async function CodeBlock({
+  children,
+  label,
+  lang,
+}: {
+  children: string
+  label?: string
+  lang: CodeLang
+}) {
+  const html = await highlightCode(children, lang)
   return (
-    <pre className="overflow-x-auto rounded-md border bg-muted/40 p-3 text-sm leading-6">
-      <code>{children}</code>
-    </pre>
+    <div className="grid gap-1.5">
+      {label ? (
+        <span className="text-xs font-medium text-muted-foreground">
+          {label}
+        </span>
+      ) : null}
+      <div
+        className="overflow-x-auto rounded-md border bg-muted/40 p-3 text-sm leading-6"
+        // Shiki output is generated server-side from static strings in this file.
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+    </div>
+  )
+}
+
+function Prose({ children }: { children: ReactNode }) {
+  return <p className="text-sm leading-6 text-muted-foreground">{children}</p>
+}
+
+function SubHeading({ children }: { children: ReactNode }) {
+  return (
+    <h3 className="pt-1 text-sm font-medium text-foreground">{children}</h3>
   )
 }
 
@@ -72,61 +177,70 @@ export default function DocsPage() {
             Neram Docs
           </h1>
           <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-            Neram is a Clerk and Convex workspace for projects, tasks, shared
-            boards, personal recency, activity, an npm CLI, and MCP tools for AI
-            agents.
+            Agent surfaces for the Neram workspace: the npm CLI, the MCP tools,
+            and the Neram agent skill. Agent and browser actions share the same
+            signed-in Clerk identity.
           </p>
         </header>
 
-        <Section icon={Box} title="App">
-          <p className="text-sm leading-6 text-muted-foreground">
-            The web app keeps projects, assigned tasks, activity, invite-based
-            collaboration, due dates, and kanban status in one authenticated
-            workspace. Convex enforces access from the signed-in Clerk user, so
-            agent actions and browser actions share the same identity.
-          </p>
-        </Section>
-
         <Section icon={Terminal} title="CLI">
-          <p className="text-sm leading-6 text-muted-foreground">
-            The public npm package is `neram`. `login`, `logout`, and `whoami`
-            print quiet, human-friendly output by default; add `--json` for
-            stable, machine-readable output in scripts and CI.
-          </p>
-          <CodeBlock>{cliCommands.join("\n")}</CodeBlock>
+          <Prose>
+            Package <code>neram</code>. Commands print human text by default;
+            add <code>--json</code> for the exact, backward-compatible tool
+            payload. Address tasks and projects by exact id (
+            <code>--task-id</code>, <code>--project-id</code>) or by name.
+          </Prose>
+
+          <SubHeading>Sign in and check readiness</SubHeading>
+          <CodeBlock lang="bash">{setupCommands}</CodeBlock>
+          <CodeBlock label="neram whoami --json" lang="json">
+            {whoamiExample}
+          </CodeBlock>
+
+          <SubHeading>Daily work</SubHeading>
+          <CodeBlock lang="bash">{dailyCommands}</CodeBlock>
+
+          <SubHeading>Tasks</SubHeading>
+          <CodeBlock lang="bash">{taskCommands}</CodeBlock>
+
+          <SubHeading>Projects</SubHeading>
+          <CodeBlock lang="bash">{projectCommands}</CodeBlock>
         </Section>
 
         <Section icon={Plug} title="MCP">
-          <p className="text-sm leading-6 text-muted-foreground">
-            Local agents can run stdio with `npx neram mcp`. It fails fast with
-            a friendly message when you aren't logged in, so run `npx neram
-            login` first. Hosted agents can call Streamable HTTP at
-            `https://neram.praveenjuge.com/mcp` with a Clerk OAuth `id_token`
-            bearer token.
-          </p>
-          <CodeBlock>{`{
-  "mcpServers": {
-    "neram": {
-      "command": "npx",
-      "args": ["neram", "mcp"]
-    }
-  }
-}`}</CodeBlock>
-          <p className="text-sm leading-6 text-muted-foreground">
-            Tools: {mcpTools.join(", ")}.
-          </p>
+          <Prose>
+            Local stdio and hosted Streamable HTTP run the same tools, so agents
+            get identical behavior either way.
+          </Prose>
+
+          <SubHeading>Local stdio</SubHeading>
+          <CodeBlock lang="bash">{mcpStdioCommands}</CodeBlock>
+          <CodeBlock label="MCP client config" lang="json">
+            {mcpConfig}
+          </CodeBlock>
+
+          <SubHeading>Hosted Streamable HTTP</SubHeading>
+          <CodeBlock lang="bash">{mcpHosted}</CodeBlock>
+
+          <SubHeading>Tools</SubHeading>
+          <CodeBlock lang="bash">{mcpTools}</CodeBlock>
         </Section>
 
-        <Section icon={ClipboardCheck} title="Publishing">
-          <p className="text-sm leading-6 text-muted-foreground">
-            CLI releases publish to npm when `apps/agent/package.json` contains
-            a new version on `main`. GitHub Actions builds, tests, typechecks,
-            and publishes with npm provenance.
-          </p>
-          <p className="text-sm leading-6 text-muted-foreground">
-            Agent skills live in `skills/neram-cli` and `skills/neram-mcp`, with
-            `skills.sh.json` grouping them for skills.sh discovery.
-          </p>
+        <Section icon={Sparkles} title="Skills">
+          <Prose>
+            The <code>neram</code> skill teaches an agent to use the CLI and MCP
+            surfaces above instead of browser automation.
+          </Prose>
+          <CodeBlock lang="bash">{skillsReference}</CodeBlock>
+
+          <SubHeading>Install into your agent</SubHeading>
+          <Prose>
+            The <code>skills</code> CLI detects your agents, asks for a scope,
+            and writes the skill into <code>.claude/skills</code> or{" "}
+            <code>.agents/skills</code>, tracking it in{" "}
+            <code>skills-lock.json</code>.
+          </Prose>
+          <CodeBlock lang="bash">{skillsCommands}</CodeBlock>
         </Section>
       </div>
     </main>
