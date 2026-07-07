@@ -31,13 +31,7 @@ import { getProjectColorText } from "@/lib/project-colors"
 import { ProjectIcon } from "@/lib/project-icons"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { DialogTrigger } from "@/components/ui/dialog"
 import { Spinner } from "@/components/ui/spinner"
 import {
@@ -77,38 +71,38 @@ export function DashboardClient() {
 
   return (
     <section className="mx-auto grid w-full max-w-6xl gap-6 p-5">
-        <div className="flex items-center justify-between gap-3">
-          <h1 className="font-heading text-lg font-medium">Projects</h1>
-          <NewProjectDialog
-            trigger={
-              <DialogTrigger asChild>
-                <Button data-testid="new-project-trigger">
-                  <FolderPlus /> New project
-                </Button>
-              </DialogTrigger>
-            }
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="font-heading text-lg font-medium">Projects</h1>
+        <NewProjectDialog
+          trigger={
+            <DialogTrigger asChild>
+              <Button data-testid="new-project-trigger">
+                <FolderPlus /> New project
+              </Button>
+            </DialogTrigger>
+          }
+        />
+      </div>
+      {projects === undefined ? (
+        <div className="grid min-h-[40vh] place-items-center">
+          <Spinner className="size-6 text-muted-foreground" />
+        </div>
+      ) : projects.length === 0 ? (
+        <EmptyState />
+      ) : (
+        <div className="grid gap-8">
+          <Section
+            projects={groups!.recent}
+            title="Recently worked"
+            tone="recent"
+          />
+          <Section
+            projects={groups!.needsLove}
+            title="Needs love"
+            tone="needsLove"
           />
         </div>
-        {projects === undefined ? (
-          <div className="grid min-h-[40vh] place-items-center">
-            <Spinner className="size-6 text-muted-foreground" />
-          </div>
-        ) : projects.length === 0 ? (
-          <EmptyState />
-        ) : (
-          <div className="grid gap-8">
-            <Section
-              projects={groups!.recent}
-              title="Recently worked"
-              tone="recent"
-            />
-            <Section
-              projects={groups!.needsLove}
-              title="Needs love"
-              tone="needsLove"
-            />
-          </div>
-        )}
+      )}
     </section>
   )
 }
@@ -129,15 +123,15 @@ function Section({
 }) {
   if (projects.length === 0) return null
   return (
-    <div className="grid gap-3" data-testid={`dashboard-section-${tone}`}>
+    <div className="grid gap-2" data-testid={`dashboard-section-${tone}`}>
       <div className="flex items-center gap-2">
         <span className={cn("size-2 rounded-full", toneDot[tone])} />
         <h2 className="text-sm font-medium">{title}</h2>
         <span className="text-xs text-muted-foreground">{projects.length}</span>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-0 divide-y divide-border rounded-lg border">
         {projects.map((project) => (
-          <ProjectCard key={project._id} project={project} />
+          <ProjectRow key={project._id} project={project} />
         ))}
       </div>
     </div>
@@ -150,8 +144,6 @@ function MarkWorkedButton({ id, name }: { id: Id<"projects">; name: string }) {
   )
 
   function onMarkWorked() {
-    // Fire optimistically: the card stamps "worked just now" and jumps to the
-    // top of the dashboard before the server confirms. A quiet toast confirms.
     void markWorked({ projectId: id })
       .then(() => toast(`Marked ${name} as worked on.`))
       .catch((error) =>
@@ -177,51 +169,42 @@ function MarkWorkedButton({ id, name }: { id: Id<"projects">; name: string }) {
   )
 }
 
-function ProjectCard({ project }: { project: DashboardProject }) {
+function ProjectRow({ project }: { project: DashboardProject }) {
   const prefetch = useProjectPrefetch()
-  // Only surface buckets that actually have tasks so the card stays quiet.
   const counts = [
     { label: "Todo", value: project.todoCount },
     { label: "Doing", value: project.inProgressCount },
     { label: "Done", value: project.doneCount },
-  ].filter((count) => count.value > 0)
+  ]
+
   return (
-    <Card className="h-full shadow-none" size="sm">
+    <div className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/50">
       <Link
-        className="flex flex-1 flex-col gap-(--card-spacing)"
+        className="flex min-w-0 flex-1 items-center gap-3"
         data-testid="project-card"
         href={`/projects/${project._id}`}
         onFocus={() => prefetch(project._id)}
         onMouseEnter={() => prefetch(project._id)}
       >
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <ProjectIcon
-              className={cn(
-                "size-4 shrink-0",
-                getProjectColorText(project.color)
-              )}
-              name={project.icon}
-            />
-            <span className="truncate">{project.name}</span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-          {counts.length === 0 ? (
-            <span>No tasks yet</span>
-          ) : (
-            counts.map((count) => (
-              <span key={count.label}>
-                <span className="font-medium text-foreground">
-                  {count.value}
-                </span>{" "}
-                {count.label}
-              </span>
-            ))
-          )}
-        </CardContent>
+        <ProjectIcon
+          className={cn("size-4 shrink-0", getProjectColorText(project.color))}
+          name={project.icon}
+        />
+        <span className="min-w-0 flex-1 truncate text-sm font-medium">
+          {project.name}
+        </span>
+        <div className="flex items-center gap-4 text-xs text-muted-foreground">
+          {counts.map((count) => (
+            <span key={count.label} className="whitespace-nowrap">
+              <span className="font-medium text-foreground">
+                {count.value}
+              </span>{" "}
+              {count.label}
+            </span>
+          ))}
+        </div>
       </Link>
-      <CardFooter className="gap-1">
+      <div className="flex shrink-0 items-center gap-0.5">
         <AddTaskDialog
           id={project._id}
           name={project.name}
@@ -229,88 +212,86 @@ function ProjectCard({ project }: { project: DashboardProject }) {
             <DialogTrigger asChild>
               <Button
                 data-testid="add-task-trigger"
-                size="sm"
-                variant="outline"
+                size="icon-sm"
+                variant="ghost"
               >
-                <Plus /> Add task
+                <Plus />
               </Button>
             </DialogTrigger>
           }
         />
-        <div className="ml-auto flex items-center gap-0.5">
-          <MarkWorkedButton id={project._id} name={project.name} />
-          <EditProjectDialog
-            color={project.color}
-            icon={project.icon}
+        <MarkWorkedButton id={project._id} name={project.name} />
+        <EditProjectDialog
+          color={project.color}
+          icon={project.icon}
+          id={project._id}
+          name={project.name}
+          role={project.role}
+          trigger={
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DialogTrigger asChild>
+                  <Button
+                    aria-label="Edit project"
+                    data-testid="edit-project-trigger"
+                    size="icon-sm"
+                    variant="ghost"
+                  >
+                    <Pencil />
+                  </Button>
+                </DialogTrigger>
+              </TooltipTrigger>
+              <TooltipContent>Edit project</TooltipContent>
+            </Tooltip>
+          }
+        />
+        {project.role === "owner" ? (
+          <ShareProjectDialog
             id={project._id}
             name={project.name}
-            role={project.role}
             trigger={
               <Tooltip>
                 <TooltipTrigger asChild>
                   <DialogTrigger asChild>
                     <Button
-                      aria-label="Edit project"
-                      data-testid="edit-project-trigger"
+                      aria-label="Share project"
+                      data-testid="share-project-trigger"
                       size="icon-sm"
                       variant="ghost"
                     >
-                      <Pencil />
+                      <Share2 />
                     </Button>
                   </DialogTrigger>
                 </TooltipTrigger>
-                <TooltipContent>Edit project</TooltipContent>
+                <TooltipContent>Share project</TooltipContent>
               </Tooltip>
             }
           />
-          {project.role === "owner" ? (
-            <ShareProjectDialog
-              id={project._id}
-              name={project.name}
-              trigger={
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <DialogTrigger asChild>
-                      <Button
-                        aria-label="Share project"
-                        data-testid="share-project-trigger"
-                        size="icon-sm"
-                        variant="ghost"
-                      >
-                        <Share2 />
-                      </Button>
-                    </DialogTrigger>
-                  </TooltipTrigger>
-                  <TooltipContent>Share project</TooltipContent>
-                </Tooltip>
-              }
-            />
-          ) : (
-            <LeaveProjectDialog
-              id={project._id}
-              name={project.name}
-              trigger={
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <DialogTrigger asChild>
-                      <Button
-                        aria-label="Leave project"
-                        data-testid="leave-project-trigger"
-                        size="icon-sm"
-                        variant="ghost"
-                      >
-                        <LogOut />
-                      </Button>
-                    </DialogTrigger>
-                  </TooltipTrigger>
-                  <TooltipContent>Leave project</TooltipContent>
-                </Tooltip>
-              }
-            />
-          )}
-        </div>
-      </CardFooter>
-    </Card>
+        ) : (
+          <LeaveProjectDialog
+            id={project._id}
+            name={project.name}
+            trigger={
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DialogTrigger asChild>
+                    <Button
+                      aria-label="Leave project"
+                      data-testid="leave-project-trigger"
+                      size="icon-sm"
+                      variant="ghost"
+                    >
+                      <LogOut />
+                    </Button>
+                  </DialogTrigger>
+                </TooltipTrigger>
+                <TooltipContent>Leave project</TooltipContent>
+              </Tooltip>
+            }
+          />
+        )}
+      </div>
+    </div>
   )
 }
 
