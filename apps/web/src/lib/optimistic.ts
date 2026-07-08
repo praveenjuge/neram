@@ -5,6 +5,7 @@ import { api } from "@neram/convex/api"
 import type { Id } from "@neram/convex/data-model"
 
 type ProjectSummary = FunctionReturnType<typeof api.projects.list>[number]
+type ProjectName = FunctionReturnType<typeof api.projects.names>[number]
 type TaskItem = FunctionReturnType<typeof api.tasks.list>[number]
 type Status = TaskItem["status"]
 
@@ -405,6 +406,16 @@ export function archiveProjectOptimistic(
       list.filter((project) => project._id !== args.projectId)
     )
   }
+  // The sidebar reads a separate `names` cache; drop the project there too so
+  // it doesn't linger in the sidebar until the server refetch lands.
+  const names = store.getQuery(api.projects.names, {})
+  if (names) {
+    store.setQuery(
+      api.projects.names,
+      {},
+      names.filter((project) => project._id !== args.projectId)
+    )
+  }
   const archived = store.getQuery(api.projects.listArchived, {})
   if (archived && moved) {
     store.setQuery(api.projects.listArchived, {}, [moved, ...archived])
@@ -437,5 +448,20 @@ export function unarchiveProjectOptimistic(
       {},
       [moved, ...list].sort(byPersonalRecency)
     )
+  }
+  // Restore the project to the sidebar's separate `names` cache as well, rebuilt
+  // from the summary (openCount = todo + in-progress), so it reappears instantly.
+  const names = store.getQuery(api.projects.names, {})
+  if (names && moved && !names.some((p) => p._id === moved!._id)) {
+    const entry: ProjectName = {
+      _id: moved._id,
+      name: moved.name,
+      icon: moved.icon,
+      color: moved.color,
+      role: moved.role,
+      openCount: moved.todoCount + moved.inProgressCount,
+      lastWorkedAt: moved.lastWorkedAt,
+    }
+    store.setQuery(api.projects.names, {}, [entry, ...names])
   }
 }

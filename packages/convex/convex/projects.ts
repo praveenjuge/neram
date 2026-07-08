@@ -107,9 +107,15 @@ export async function accessibleProjects(
 ): Promise<
   Array<{ project: Doc<"projects">; role: ProjectRole; lastWorkedAt?: number }>
 > {
+  // Read only *active* owned projects (archivedAt unset), newest-updated first.
+  // Pinning archivedAt to undefined in the index means archived projects live
+  // in a different slice entirely, so they can never consume this bounded read
+  // and push active projects out of the window.
   const owned = await ctx.db
     .query("projects")
-    .withIndex("by_owner_updated", (q) => q.eq("ownerSubject", subject))
+    .withIndex("by_owner_archived_updated", (q) =>
+      q.eq("ownerSubject", subject).eq("archivedAt", undefined)
+    )
     .order("desc")
     .take(MAX_PROJECTS)
 
@@ -206,14 +212,14 @@ export const listArchived = query({
   returns: v.array(projectSummary),
   handler: async (ctx) => {
     const { subject } = await actor(ctx)
-    // Read archived projects straight off the by_owner_archived index. The
+    // Read only *archived* owned projects off the shared index. The
     // `gt("archivedAt", 0)` lower bound excludes active projects (whose
     // archivedAt is undefined and sorts below any timestamp), so a large number
     // of active projects can never push archived ones out of this bounded read.
     // `order("desc")` yields newest-archived first.
     const archived = await ctx.db
       .query("projects")
-      .withIndex("by_owner_archived", (q) =>
+      .withIndex("by_owner_archived_updated", (q) =>
         q.eq("ownerSubject", subject).gt("archivedAt", 0)
       )
       .order("desc")

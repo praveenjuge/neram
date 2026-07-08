@@ -95,7 +95,7 @@ test("listArchived returns an archived project even behind many newer active pro
 
   // Then create a batch of active projects, each with a newer updatedAt. With a
   // naive "take newest, then filter archived" approach these would crowd the
-  // archived one out of a bounded read; the by_owner_archived index avoids that.
+  // archived one out of a bounded read; the archived index slice avoids that.
   for (let i = 0; i < 25; i++) {
     await alice.mutation(api.projects.create, { name: `Active ${i}` })
   }
