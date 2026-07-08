@@ -148,6 +148,9 @@ export async function accessibleProjects(
 
   return (
     [...byId.values()]
+      // Archived projects are hidden from every active list; they live only on
+      // the owner's Archived page (see `listArchived`).
+      .filter((entry) => entry.project.archivedAt === undefined)
       .map((entry) => ({
         ...entry,
         lastWorkedAt: lastWorkedByProject.get(entry.project._id),
@@ -189,6 +192,29 @@ export const list = query({
     return projects.map(({ project, role, lastWorkedAt }) =>
       summarize(project, role, lastWorkedAt)
     )
+  },
+})
+
+/**
+ * The caller's archived projects, newest-archived first. Owner-only: archiving
+ * (and deleting) is an owner action, so only the owner's own archived projects
+ * are listed here. Powers the Archived page, where each project can be
+ * unarchived or permanently deleted.
+ */
+export const listArchived = query({
+  args: {},
+  returns: v.array(projectSummary),
+  handler: async (ctx) => {
+    const { subject } = await actor(ctx)
+    const owned = await ctx.db
+      .query("projects")
+      .withIndex("by_owner_updated", (q) => q.eq("ownerSubject", subject))
+      .order("desc")
+      .take(MAX_PROJECTS)
+    return owned
+      .filter((project) => project.archivedAt !== undefined)
+      .sort((a, b) => (b.archivedAt ?? 0) - (a.archivedAt ?? 0))
+      .map((project) => summarize(project, "owner"))
   },
 })
 
@@ -342,6 +368,42 @@ export const markWorked = mutation({
   handler: async (ctx, args) => {
     const { actor: who } = await requireProjectAccess(ctx, args.projectId)
     return await touchProjectWorkState(ctx, who.subject, args.projectId)
+  },
+})
+
+/**
+ * Archive a project: hide it from every active list (dashboard + sidebar) for
+ * the owner and all collaborators. The project and its tasks are untouched, so
+ * it can be unarchived later. Owner-only; a no-op if already archived.
+ */
+export const archive = mutation({
+  args: { projectId: v.id("projects") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { project } = await requireProjectOwner(ctx, args.projectId)
+    if (project.archivedAt !== undefined) return null
+    const now = Date.now()
+    await ctx.db.patch(args.projectId, { archivedAt: now, updatedAt: now })
+    return null
+  },
+})
+
+/**
+ * Unarchive a project, restoring it to the active lists. Owner-only; a no-op if
+ * the project isn't archived.
+ */
+export const unarchive = mutation({
+  args: { projectId: v.id("projects") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { project } = await requireProjectOwner(ctx, args.projectId)
+    if (project.archivedAt === undefined) return null
+    // Patching a field to `undefined` removes it, marking the project active.
+    await ctx.db.patch(args.projectId, {
+      archivedAt: undefined,
+      updatedAt: Date.now(),
+    })
+    return null
   },
 })
 

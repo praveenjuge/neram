@@ -8,6 +8,7 @@ import { Authenticated, AuthLoading, Unauthenticated } from "convex/react"
 import type { FunctionReturnType } from "convex/server"
 import {
   Activity,
+  Archive,
   BookOpen,
   LayoutDashboard,
   ListTodo,
@@ -17,7 +18,6 @@ import {
   Plus,
   Share2,
   Sparkles,
-  Trash2,
 } from "lucide-react"
 import { type ReactNode, useState } from "react"
 
@@ -25,7 +25,7 @@ import { api } from "@neram/convex/api"
 import { ThemeMenuItem } from "@/components/theme-toggle"
 import {
   AddTaskDialog,
-  DeleteProjectDialog,
+  ArchiveProjectDialog,
   EditProjectDialog,
   LeaveProjectDialog,
   NewProjectDialog,
@@ -65,7 +65,7 @@ import { ProjectIcon } from "@/lib/project-icons"
 
 type SidebarProject = FunctionReturnType<typeof api.projects.names>[number]
 
-type DialogKind = "add" | "edit" | "share" | "leave" | "delete"
+type DialogKind = "add" | "edit" | "share" | "leave" | "archive"
 
 export function Protected({
   children,
@@ -121,11 +121,8 @@ function ProjectActions({ project }: { project: SidebarProject }) {
                 <Share2 /> Share
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onSelect={() => setDialog("delete")}
-                variant="destructive"
-              >
-                <Trash2 /> Delete
+              <DropdownMenuItem onSelect={() => setDialog("archive")}>
+                <Archive /> Archive
               </DropdownMenuItem>
             </>
           ) : (
@@ -162,11 +159,11 @@ function ProjectActions({ project }: { project: SidebarProject }) {
             onOpenChange={onOpenChange}
             open={dialog === "share"}
           />
-          <DeleteProjectDialog
+          <ArchiveProjectDialog
             id={project._id}
             name={project.name}
             onOpenChange={onOpenChange}
-            open={dialog === "delete"}
+            open={dialog === "archive"}
           />
         </>
       ) : (
@@ -275,6 +272,18 @@ function AppSidebar() {
                   <Link href="/activity">
                     <Activity />
                     <span>Activity</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={pathname === "/archived"}
+                  tooltip="Archived"
+                >
+                  <Link href="/archived">
+                    <Archive />
+                    <span>Archived</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

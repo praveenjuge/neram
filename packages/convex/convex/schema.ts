@@ -32,6 +32,10 @@ export default defineSchema({
     color: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
+    // When set, the project is archived: it's hidden from every active list
+    // (dashboard + sidebar) and only surfaces on the owner's Archived page,
+    // where it can be unarchived or permanently deleted. Absent = active.
+    archivedAt: v.optional(v.number()),
     // Denormalized task counters, kept in sync by the task mutations.
     taskCount: v.number(),
     todoCount: v.number(),

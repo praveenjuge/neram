@@ -355,7 +355,11 @@ export function updateProjectOptimistic(
   }))
 }
 
-/** Optimistically remove a project from the dashboard and clear its board cache. */
+/**
+ * Optimistically remove a project from the dashboard, the archived list, and
+ * clear its board cache. Deletion happens from the Archived page, so the
+ * archived list is the one the user is looking at when it fires.
+ */
 export function removeProjectOptimistic(
   store: OptimisticLocalStore,
   args: { projectId: Id<"projects"> }
@@ -368,7 +372,70 @@ export function removeProjectOptimistic(
       list.filter((project) => project._id !== args.projectId)
     )
   }
+  const archived = store.getQuery(api.projects.listArchived, {})
+  if (archived) {
+    store.setQuery(
+      api.projects.listArchived,
+      {},
+      archived.filter((project) => project._id !== args.projectId)
+    )
+  }
   const single = store.getQuery(api.projects.get, { projectId: args.projectId })
   if (single)
     store.setQuery(api.projects.get, { projectId: args.projectId }, null)
+}
+
+/**
+ * Optimistically archive a project: drop it from the active dashboard list and
+ * prepend it to the archived list (when that cache is loaded) so it moves over
+ * instantly. Mirrors the server, which hides archived projects from every
+ * active list.
+ */
+export function archiveProjectOptimistic(
+  store: OptimisticLocalStore,
+  args: { projectId: Id<"projects"> }
+) {
+  const list = store.getQuery(api.projects.list, {})
+  let moved: ProjectSummary | undefined
+  if (list) {
+    moved = list.find((project) => project._id === args.projectId)
+    store.setQuery(
+      api.projects.list,
+      {},
+      list.filter((project) => project._id !== args.projectId)
+    )
+  }
+  const archived = store.getQuery(api.projects.listArchived, {})
+  if (archived && moved) {
+    store.setQuery(api.projects.listArchived, {}, [moved, ...archived])
+  }
+}
+
+/**
+ * Optimistically unarchive a project: drop it from the archived list and add it
+ * back to the active dashboard list (when that cache is loaded), resorted to
+ * mirror the server's personal-recency ordering.
+ */
+export function unarchiveProjectOptimistic(
+  store: OptimisticLocalStore,
+  args: { projectId: Id<"projects"> }
+) {
+  const archived = store.getQuery(api.projects.listArchived, {})
+  let moved: ProjectSummary | undefined
+  if (archived) {
+    moved = archived.find((project) => project._id === args.projectId)
+    store.setQuery(
+      api.projects.listArchived,
+      {},
+      archived.filter((project) => project._id !== args.projectId)
+    )
+  }
+  const list = store.getQuery(api.projects.list, {})
+  if (list && moved) {
+    store.setQuery(
+      api.projects.list,
+      {},
+      [moved, ...list].sort(byPersonalRecency)
+    )
+  }
 }
