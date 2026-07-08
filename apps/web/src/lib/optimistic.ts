@@ -357,8 +357,32 @@ export function updateProjectOptimistic(
 }
 
 /**
- * Optimistically remove a project from the dashboard, the archived list, and
- * clear its board cache. Deletion happens from the Archived page, so the
+ * Remove a project from every cached page of the paginated `listArchived`
+ * query, returning its summary if it was found. `usePaginatedQuery` stores each
+ * loaded page as a separate query keyed by its `paginationOpts`, so we sweep
+ * them all via `getAllQueries` rather than a single fixed-args read.
+ */
+function removeFromArchivedPages(
+  store: OptimisticLocalStore,
+  projectId: Id<"projects">
+): ProjectSummary | undefined {
+  let removed: ProjectSummary | undefined
+  for (const { args, value } of store.getAllQueries(api.projects.listArchived)) {
+    if (!value) continue
+    const found = value.page.find((project) => project._id === projectId)
+    if (found) removed = found
+    if (!found) continue
+    store.setQuery(api.projects.listArchived, args, {
+      ...value,
+      page: value.page.filter((project) => project._id !== projectId),
+    })
+  }
+  return removed
+}
+
+/**
+ * Optimistically remove a project from the dashboard and every archived page,
+ * and clear its board cache. Deletion happens from the Archived page, so the
  * archived list is the one the user is looking at when it fires.
  */
 export function removeProjectOptimistic(
@@ -373,14 +397,7 @@ export function removeProjectOptimistic(
       list.filter((project) => project._id !== args.projectId)
     )
   }
-  const archived = store.getQuery(api.projects.listArchived, {})
-  if (archived) {
-    store.setQuery(
-      api.projects.listArchived,
-      {},
-      archived.filter((project) => project._id !== args.projectId)
-    )
-  }
+  removeFromArchivedPages(store, args.projectId)
   const single = store.getQuery(api.projects.get, { projectId: args.projectId })
   if (single)
     store.setQuery(api.projects.get, { projectId: args.projectId }, null)
@@ -388,18 +405,16 @@ export function removeProjectOptimistic(
 
 /**
  * Optimistically archive a project: drop it from the active dashboard list and
- * prepend it to the archived list (when that cache is loaded) so it moves over
- * instantly. Mirrors the server, which hides archived projects from every
- * active list.
+ * the sidebar's separate `names` cache so it disappears instantly. The archived
+ * list is a paginated, server-reactive query the user isn't on when archiving
+ * (there's no archive action there), so it refreshes on its own.
  */
 export function archiveProjectOptimistic(
   store: OptimisticLocalStore,
   args: { projectId: Id<"projects"> }
 ) {
   const list = store.getQuery(api.projects.list, {})
-  let moved: ProjectSummary | undefined
   if (list) {
-    moved = list.find((project) => project._id === args.projectId)
     store.setQuery(
       api.projects.list,
       {},
@@ -416,31 +431,19 @@ export function archiveProjectOptimistic(
       names.filter((project) => project._id !== args.projectId)
     )
   }
-  const archived = store.getQuery(api.projects.listArchived, {})
-  if (archived && moved) {
-    store.setQuery(api.projects.listArchived, {}, [moved, ...archived])
-  }
 }
 
 /**
- * Optimistically unarchive a project: drop it from the archived list and add it
- * back to the active dashboard list (when that cache is loaded), resorted to
- * mirror the server's personal-recency ordering.
+ * Optimistically unarchive a project: drop it from the archived pages and add it
+ * back to the active dashboard list (resorted to mirror the server's
+ * personal-recency ordering) and the sidebar's `names` cache, so it moves back
+ * instantly from the Archived page the user is on.
  */
 export function unarchiveProjectOptimistic(
   store: OptimisticLocalStore,
   args: { projectId: Id<"projects"> }
 ) {
-  const archived = store.getQuery(api.projects.listArchived, {})
-  let moved: ProjectSummary | undefined
-  if (archived) {
-    moved = archived.find((project) => project._id === args.projectId)
-    store.setQuery(
-      api.projects.listArchived,
-      {},
-      archived.filter((project) => project._id !== args.projectId)
-    )
-  }
+  const moved = removeFromArchivedPages(store, args.projectId)
   const list = store.getQuery(api.projects.list, {})
   if (list && moved) {
     store.setQuery(
@@ -452,7 +455,7 @@ export function unarchiveProjectOptimistic(
   // Restore the project to the sidebar's separate `names` cache as well, rebuilt
   // from the summary (openCount = todo + in-progress), so it reappears instantly.
   const names = store.getQuery(api.projects.names, {})
-  if (names && moved && !names.some((p) => p._id === moved!._id)) {
+  if (names && moved && !names.some((p) => p._id === moved._id)) {
     const entry: ProjectName = {
       _id: moved._id,
       name: moved.name,

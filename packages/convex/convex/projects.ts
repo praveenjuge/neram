@@ -1,3 +1,4 @@
+import { paginationOptsValidator } from "convex/server"
 import { ConvexError, v } from "convex/values"
 
 import { internal } from "./_generated/api"
@@ -204,27 +205,30 @@ export const list = query({
 /**
  * The caller's archived projects, newest-archived first. Owner-only: archiving
  * (and deleting) is an owner action, so only the owner's own archived projects
- * are listed here. Powers the Archived page, where each project can be
- * unarchived or permanently deleted.
+ * are listed here. Paginated so the Archived page can reach every archived
+ * project (via "load more") no matter how many there are — the only UI path to
+ * unarchive or permanently delete them.
  */
 export const listArchived = query({
-  args: {},
-  returns: v.array(projectSummary),
-  handler: async (ctx) => {
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => {
     const { subject } = await actor(ctx)
     // Read only *archived* owned projects off the shared index. The
     // `gt("archivedAt", 0)` lower bound excludes active projects (whose
-    // archivedAt is undefined and sorts below any timestamp), so a large number
-    // of active projects can never push archived ones out of this bounded read.
-    // `order("desc")` yields newest-archived first.
-    const archived = await ctx.db
+    // archivedAt is undefined and sorts below any timestamp), so active
+    // projects never leak into this list. `order("desc")` yields
+    // newest-archived first.
+    const result = await ctx.db
       .query("projects")
       .withIndex("by_owner_archived_updated", (q) =>
         q.eq("ownerSubject", subject).gt("archivedAt", 0)
       )
       .order("desc")
-      .take(MAX_PROJECTS)
-    return archived.map((project) => summarize(project, "owner"))
+      .paginate(args.paginationOpts)
+    return {
+      ...result,
+      page: result.page.map((project) => summarize(project, "owner")),
+    }
   },
 })
 

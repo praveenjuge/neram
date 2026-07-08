@@ -1,7 +1,6 @@
 "use client"
 
-import { useMutation } from "convex/react"
-import { useQuery } from "convex-helpers/react/cache"
+import { useMutation, usePaginatedQuery } from "convex/react"
 import type { FunctionReturnType } from "convex/server"
 import { ArchiveRestore, Inbox, Trash2 } from "lucide-react"
 import { toast } from "sonner"
@@ -26,10 +25,16 @@ import { cn } from "@/lib/utils"
 
 type ArchivedProject = FunctionReturnType<
   typeof api.projects.listArchived
->[number]
+>["page"][number]
+
+const PAGE_SIZE = 30
 
 export function ArchivedClient() {
-  const projects = useQuery(api.projects.listArchived)
+  const { results, status, loadMore } = usePaginatedQuery(
+    api.projects.listArchived,
+    {},
+    { initialNumItems: PAGE_SIZE }
+  )
 
   return (
     <section className="mx-auto grid w-full max-w-6xl gap-6 p-5">
@@ -39,17 +44,32 @@ export function ArchivedClient() {
           Unarchive a project to bring it back, or permanently delete it here.
         </p>
       </div>
-      {projects === undefined ? (
+      {status === "LoadingFirstPage" ? (
         <div className="grid min-h-[40vh] place-items-center">
           <Spinner className="size-6 text-muted-foreground" />
         </div>
-      ) : projects.length === 0 ? (
+      ) : results.length === 0 ? (
         <EmptyState />
       ) : (
-        <div className="grid gap-0 divide-y divide-border rounded-lg border">
-          {projects.map((project) => (
-            <ArchivedRow key={project._id} project={project} />
-          ))}
+        <div className="grid gap-3">
+          <div className="grid gap-0 divide-y divide-border rounded-lg border">
+            {results.map((project) => (
+              <ArchivedRow key={project._id} project={project} />
+            ))}
+          </div>
+          {status === "CanLoadMore" || status === "LoadingMore" ? (
+            <div className="grid place-items-center pt-1">
+              <Button
+                data-testid="load-more-archived"
+                disabled={status === "LoadingMore"}
+                onClick={() => loadMore(PAGE_SIZE)}
+                size="sm"
+                variant="outline"
+              >
+                {status === "LoadingMore" ? "Loading…" : "Load more"}
+              </Button>
+            </div>
+          ) : null}
         </div>
       )}
     </section>
