@@ -206,15 +206,19 @@ export const listArchived = query({
   returns: v.array(projectSummary),
   handler: async (ctx) => {
     const { subject } = await actor(ctx)
-    const owned = await ctx.db
+    // Read archived projects straight off the by_owner_archived index. The
+    // `gt("archivedAt", 0)` lower bound excludes active projects (whose
+    // archivedAt is undefined and sorts below any timestamp), so a large number
+    // of active projects can never push archived ones out of this bounded read.
+    // `order("desc")` yields newest-archived first.
+    const archived = await ctx.db
       .query("projects")
-      .withIndex("by_owner_updated", (q) => q.eq("ownerSubject", subject))
+      .withIndex("by_owner_archived", (q) =>
+        q.eq("ownerSubject", subject).gt("archivedAt", 0)
+      )
       .order("desc")
       .take(MAX_PROJECTS)
-    return owned
-      .filter((project) => project.archivedAt !== undefined)
-      .sort((a, b) => (b.archivedAt ?? 0) - (a.archivedAt ?? 0))
-      .map((project) => summarize(project, "owner"))
+    return archived.map((project) => summarize(project, "owner"))
   },
 })
 

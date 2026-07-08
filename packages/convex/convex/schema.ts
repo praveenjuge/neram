@@ -41,7 +41,12 @@ export default defineSchema({
     todoCount: v.number(),
     inProgressCount: v.number(),
     doneCount: v.number(),
-  }).index("by_owner_updated", ["ownerSubject", "updatedAt"]),
+  })
+    .index("by_owner_updated", ["ownerSubject", "updatedAt"])
+    // Lets the Archived page read an owner's archived projects directly,
+    // ordered by when they were archived, so they're never crowded out of a
+    // bounded read by a large number of recently-updated active projects.
+    .index("by_owner_archived", ["ownerSubject", "archivedAt"]),
   tasks: defineTable({
     ownerSubject: v.string(),
     projectId: v.id("projects"),
