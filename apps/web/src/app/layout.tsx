@@ -30,7 +30,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html className={GeistSans.variable} lang="en" suppressHydrationWarning>
-      <body>
+      <body className="antialiased text-sm">
         <Providers>
           <SwRegistration />
           {children}
