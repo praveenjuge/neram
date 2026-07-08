@@ -1,3 +1,4 @@
+import { paginationOptsValidator } from "convex/server"
 import { ConvexError, v } from "convex/values"
 
 import { internal } from "./_generated/api"
@@ -107,9 +108,15 @@ export async function accessibleProjects(
 ): Promise<
   Array<{ project: Doc<"projects">; role: ProjectRole; lastWorkedAt?: number }>
 > {
+  // Read only *active* owned projects (archivedAt unset), newest-updated first.
+  // Pinning archivedAt to undefined in the index means archived projects live
+  // in a different slice entirely, so they can never consume this bounded read
+  // and push active projects out of the window.
   const owned = await ctx.db
     .query("projects")
-    .withIndex("by_owner_updated", (q) => q.eq("ownerSubject", subject))
+    .withIndex("by_owner_archived_updated", (q) =>
+      q.eq("ownerSubject", subject).eq("archivedAt", undefined)
+    )
     .order("desc")
     .take(MAX_PROJECTS)
 
@@ -148,6 +155,9 @@ export async function accessibleProjects(
 
   return (
     [...byId.values()]
+      // Archived projects are hidden from every active list; they live only on
+      // the owner's Archived page (see `listArchived`).
+      .filter((entry) => entry.project.archivedAt === undefined)
       .map((entry) => ({
         ...entry,
         lastWorkedAt: lastWorkedByProject.get(entry.project._id),
@@ -189,6 +199,36 @@ export const list = query({
     return projects.map(({ project, role, lastWorkedAt }) =>
       summarize(project, role, lastWorkedAt)
     )
+  },
+})
+
+/**
+ * The caller's archived projects, newest-archived first. Owner-only: archiving
+ * (and deleting) is an owner action, so only the owner's own archived projects
+ * are listed here. Paginated so the Archived page can reach every archived
+ * project (via "load more") no matter how many there are — the only UI path to
+ * unarchive or permanently delete them.
+ */
+export const listArchived = query({
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => {
+    const { subject } = await actor(ctx)
+    // Read only *archived* owned projects off the shared index. The
+    // `gt("archivedAt", 0)` lower bound excludes active projects (whose
+    // archivedAt is undefined and sorts below any timestamp), so active
+    // projects never leak into this list. `order("desc")` yields
+    // newest-archived first.
+    const result = await ctx.db
+      .query("projects")
+      .withIndex("by_owner_archived_updated", (q) =>
+        q.eq("ownerSubject", subject).gt("archivedAt", 0)
+      )
+      .order("desc")
+      .paginate(args.paginationOpts)
+    return {
+      ...result,
+      page: result.page.map((project) => summarize(project, "owner")),
+    }
   },
 })
 
@@ -342,6 +382,42 @@ export const markWorked = mutation({
   handler: async (ctx, args) => {
     const { actor: who } = await requireProjectAccess(ctx, args.projectId)
     return await touchProjectWorkState(ctx, who.subject, args.projectId)
+  },
+})
+
+/**
+ * Archive a project: hide it from every active list (dashboard + sidebar) for
+ * the owner and all collaborators. The project and its tasks are untouched, so
+ * it can be unarchived later. Owner-only; a no-op if already archived.
+ */
+export const archive = mutation({
+  args: { projectId: v.id("projects") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { project } = await requireProjectOwner(ctx, args.projectId)
+    if (project.archivedAt !== undefined) return null
+    const now = Date.now()
+    await ctx.db.patch(args.projectId, { archivedAt: now, updatedAt: now })
+    return null
+  },
+})
+
+/**
+ * Unarchive a project, restoring it to the active lists. Owner-only; a no-op if
+ * the project isn't archived.
+ */
+export const unarchive = mutation({
+  args: { projectId: v.id("projects") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { project } = await requireProjectOwner(ctx, args.projectId)
+    if (project.archivedAt === undefined) return null
+    // Patching a field to `undefined` removes it, marking the project active.
+    await ctx.db.patch(args.projectId, {
+      archivedAt: undefined,
+      updatedAt: Date.now(),
+    })
+    return null
   },
 })
 

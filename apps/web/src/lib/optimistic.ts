@@ -5,6 +5,7 @@ import { api } from "@neram/convex/api"
 import type { Id } from "@neram/convex/data-model"
 
 type ProjectSummary = FunctionReturnType<typeof api.projects.list>[number]
+type ProjectName = FunctionReturnType<typeof api.projects.names>[number]
 type TaskItem = FunctionReturnType<typeof api.tasks.list>[number]
 type Status = TaskItem["status"]
 
@@ -355,7 +356,35 @@ export function updateProjectOptimistic(
   }))
 }
 
-/** Optimistically remove a project from the dashboard and clear its board cache. */
+/**
+ * Remove a project from every cached page of the paginated `listArchived`
+ * query, returning its summary if it was found. `usePaginatedQuery` stores each
+ * loaded page as a separate query keyed by its `paginationOpts`, so we sweep
+ * them all via `getAllQueries` rather than a single fixed-args read.
+ */
+function removeFromArchivedPages(
+  store: OptimisticLocalStore,
+  projectId: Id<"projects">
+): ProjectSummary | undefined {
+  let removed: ProjectSummary | undefined
+  for (const { args, value } of store.getAllQueries(api.projects.listArchived)) {
+    if (!value) continue
+    const found = value.page.find((project) => project._id === projectId)
+    if (found) removed = found
+    if (!found) continue
+    store.setQuery(api.projects.listArchived, args, {
+      ...value,
+      page: value.page.filter((project) => project._id !== projectId),
+    })
+  }
+  return removed
+}
+
+/**
+ * Optimistically remove a project from the dashboard and every archived page,
+ * and clear its board cache. Deletion happens from the Archived page, so the
+ * archived list is the one the user is looking at when it fires.
+ */
 export function removeProjectOptimistic(
   store: OptimisticLocalStore,
   args: { projectId: Id<"projects"> }
@@ -368,7 +397,74 @@ export function removeProjectOptimistic(
       list.filter((project) => project._id !== args.projectId)
     )
   }
+  removeFromArchivedPages(store, args.projectId)
   const single = store.getQuery(api.projects.get, { projectId: args.projectId })
   if (single)
     store.setQuery(api.projects.get, { projectId: args.projectId }, null)
+}
+
+/**
+ * Optimistically archive a project: drop it from the active dashboard list and
+ * the sidebar's separate `names` cache so it disappears instantly. The archived
+ * list is a paginated, server-reactive query the user isn't on when archiving
+ * (there's no archive action there), so it refreshes on its own.
+ */
+export function archiveProjectOptimistic(
+  store: OptimisticLocalStore,
+  args: { projectId: Id<"projects"> }
+) {
+  const list = store.getQuery(api.projects.list, {})
+  if (list) {
+    store.setQuery(
+      api.projects.list,
+      {},
+      list.filter((project) => project._id !== args.projectId)
+    )
+  }
+  // The sidebar reads a separate `names` cache; drop the project there too so
+  // it doesn't linger in the sidebar until the server refetch lands.
+  const names = store.getQuery(api.projects.names, {})
+  if (names) {
+    store.setQuery(
+      api.projects.names,
+      {},
+      names.filter((project) => project._id !== args.projectId)
+    )
+  }
+}
+
+/**
+ * Optimistically unarchive a project: drop it from the archived pages and add it
+ * back to the active dashboard list (resorted to mirror the server's
+ * personal-recency ordering) and the sidebar's `names` cache, so it moves back
+ * instantly from the Archived page the user is on.
+ */
+export function unarchiveProjectOptimistic(
+  store: OptimisticLocalStore,
+  args: { projectId: Id<"projects"> }
+) {
+  const moved = removeFromArchivedPages(store, args.projectId)
+  const list = store.getQuery(api.projects.list, {})
+  if (list && moved) {
+    store.setQuery(
+      api.projects.list,
+      {},
+      [moved, ...list].sort(byPersonalRecency)
+    )
+  }
+  // Restore the project to the sidebar's separate `names` cache as well, rebuilt
+  // from the summary (openCount = todo + in-progress), so it reappears instantly.
+  const names = store.getQuery(api.projects.names, {})
+  if (names && moved && !names.some((p) => p._id === moved._id)) {
+    const entry: ProjectName = {
+      _id: moved._id,
+      name: moved.name,
+      icon: moved.icon,
+      color: moved.color,
+      role: moved.role,
+      openCount: moved.todoCount + moved.inProgressCount,
+      lastWorkedAt: moved.lastWorkedAt,
+    }
+    store.setQuery(api.projects.names, {}, [entry, ...names])
+  }
 }

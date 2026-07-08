@@ -1,5 +1,5 @@
 import { useMutation } from "convex/react"
-import { Trash2 } from "lucide-react"
+import { Archive } from "lucide-react"
 import type { FormEvent } from "react"
 import { useState } from "react"
 import { toast } from "sonner"
@@ -8,7 +8,7 @@ import { api } from "@neram/convex/api"
 import type { Id } from "@neram/convex/data-model"
 import { messageFromError } from "@/lib/errors"
 import {
-  removeProjectOptimistic,
+  archiveProjectOptimistic,
   updateProjectOptimistic,
 } from "@/lib/optimistic"
 import {
@@ -62,8 +62,8 @@ export function EditProjectDialog({
   const updateProject = useMutation(api.projects.update).withOptimisticUpdate(
     updateProjectOptimistic
   )
-  const deleteProject = useMutation(api.projects.remove).withOptimisticUpdate(
-    removeProjectOptimistic
+  const archiveProject = useMutation(api.projects.archive).withOptimisticUpdate(
+    archiveProjectOptimistic
   )
   const [open, setOpen] = useControlledOpen(openProp, onOpenChange)
   const [nextName, setNextName] = useState(name)
@@ -73,7 +73,7 @@ export function EditProjectDialog({
   const [nextColor, setNextColor] = useState<ProjectColorName>(
     (color as ProjectColorName) ?? DEFAULT_PROJECT_COLOR
   )
-  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [confirmArchive, setConfirmArchive] = useState(false)
 
   // Reset the form to the project's current values each time the dialog opens.
   const [prevOpen, setPrevOpen] = useState(open)
@@ -83,7 +83,7 @@ export function EditProjectDialog({
       setNextName(name)
       setNextIcon((icon as ProjectIconName) ?? DEFAULT_PROJECT_ICON)
       setNextColor((color as ProjectColorName) ?? DEFAULT_PROJECT_COLOR)
-      setConfirmDelete(false)
+      setConfirmArchive(false)
     }
   }
 
@@ -114,12 +114,12 @@ export function EditProjectDialog({
     setOpen(false)
   }
 
-  function onDelete() {
-    // Optimistic remove drops the card immediately; close and let it run.
-    void deleteProject({ projectId: id })
-      .then(() => toast.success("Project deleted."))
+  function onArchive() {
+    // Optimistic archive moves the card out immediately; close and let it run.
+    void archiveProject({ projectId: id })
+      .then(() => toast.success(`Archived ${name}.`))
       .catch((error) =>
-        toast.error(messageFromError(error, "Could not delete the project."))
+        toast.error(messageFromError(error, "Could not archive the project."))
       )
     setOpen(false)
   }
@@ -131,7 +131,7 @@ export function EditProjectDialog({
         <DialogHeader>
           <DialogTitle>Edit project</DialogTitle>
           <DialogDescription>
-            Update the name, icon, and color, or delete this project.
+            Update the name, icon, and color, or archive this project.
           </DialogDescription>
         </DialogHeader>
         <form className="grid gap-4" onSubmit={onSubmit}>
@@ -166,26 +166,26 @@ export function EditProjectDialog({
             <Label>Icon</Label>
             <IconPicker onChange={setNextIcon} value={nextIcon} />
           </div>
-          {confirmDelete && role === "owner" ? (
-            <div className="grid gap-3 rounded-2xl border border-destructive/30 bg-destructive/5 p-3">
+          {confirmArchive && role === "owner" ? (
+            <div className="grid gap-3 rounded-2xl border border-border bg-muted/40 p-3">
               <p className="text-sm text-muted-foreground">
-                This permanently deletes the project and all of its tasks.
+                This hides the project from your dashboard and sidebar. You can
+                unarchive or permanently delete it later from the Archived page.
               </p>
               <div className="flex justify-end gap-2">
                 <Button
-                  onClick={() => setConfirmDelete(false)}
+                  onClick={() => setConfirmArchive(false)}
                   type="button"
                   variant="ghost"
                 >
                   Cancel
                 </Button>
                 <Button
-                  data-testid="confirm-delete-project-button"
-                  onClick={onDelete}
+                  data-testid="confirm-archive-project-button"
+                  onClick={onArchive}
                   type="button"
-                  variant="destructive"
                 >
-                  <Trash2 /> Delete project
+                  <Archive /> Archive project
                 </Button>
               </div>
             </div>
@@ -195,13 +195,13 @@ export function EditProjectDialog({
           >
             {role === "owner" ? (
               <Button
-                className={confirmDelete ? "invisible" : undefined}
-                data-testid="delete-project-trigger"
-                onClick={() => setConfirmDelete(true)}
+                className={confirmArchive ? "invisible" : undefined}
+                data-testid="archive-project-trigger"
+                onClick={() => setConfirmArchive(true)}
                 type="button"
-                variant="destructive"
+                variant="outline"
               >
-                <Trash2 /> Delete
+                <Archive /> Archive
               </Button>
             ) : null}
             <div className="flex gap-2">

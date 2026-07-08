@@ -32,12 +32,26 @@ export default defineSchema({
     color: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
+    // When set, the project is archived: it's hidden from every active list
+    // (dashboard + sidebar) and only surfaces on the owner's Archived page,
+    // where it can be unarchived or permanently deleted. Absent = active.
+    archivedAt: v.optional(v.number()),
     // Denormalized task counters, kept in sync by the task mutations.
     taskCount: v.number(),
     todoCount: v.number(),
     inProgressCount: v.number(),
     doneCount: v.number(),
-  }).index("by_owner_updated", ["ownerSubject", "updatedAt"]),
+  })
+    // Partitions an owner's projects by archived state, then orders each
+    // partition by recency. Active projects (archivedAt unset) and archived
+    // projects (archivedAt set) each read from their own slice of the index, so
+    // neither can crowd the other out of a bounded read, and both stay ordered
+    // by updatedAt.
+    .index("by_owner_archived_updated", [
+      "ownerSubject",
+      "archivedAt",
+      "updatedAt",
+    ]),
   tasks: defineTable({
     ownerSubject: v.string(),
     projectId: v.id("projects"),
