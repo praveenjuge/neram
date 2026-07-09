@@ -9,7 +9,6 @@ import {
   requireProjectAccess,
   resolveAssignee,
   statusCountField,
-  touchProjectWorkState,
   type Actor,
   type ProjectCounts,
 } from "./model"
@@ -225,8 +224,6 @@ export const create = mutation({
         assigneeName: assignee.name,
       })
     }
-    // The actor just worked on this project; bump their personal recency.
-    await touchProjectWorkState(ctx, actor.subject, args.projectId, now)
     return taskId
   },
 })
@@ -255,7 +252,8 @@ export const update = mutation({
       ctx,
       current.projectId
     )
-    const patch: Partial<Doc<"tasks">> = { updatedAt: Date.now() }
+    const now = Date.now()
+    const patch: Partial<Doc<"tasks">> = { updatedAt: now }
     if (args.title !== undefined) patch.title = cleanTitle(args.title)
     if (args.description !== undefined) {
       patch.description = cleanDescription(args.description)
@@ -284,6 +282,9 @@ export const update = mutation({
     }
 
     await ctx.db.patch(args.taskId, patch)
+    // Editing a task counts as activity on its project, so bump the project's
+    // updatedAt to keep it near the top of the updatedAt-ordered project list.
+    await ctx.db.patch(current.projectId, { updatedAt: now })
 
     if (newlyAssigned) {
       await recordActivity(ctx, {
@@ -295,8 +296,6 @@ export const update = mutation({
         assigneeName: newlyAssigned.name,
       })
     }
-    // Editing a task counts as working on its project for the actor.
-    await touchProjectWorkState(ctx, actor.subject, current.projectId)
     return null
   },
 })
@@ -343,9 +342,6 @@ export const move = mutation({
         toStatus: args.status,
       })
     }
-    // Moving or reordering a card counts as working on the project, even when
-    // the status is unchanged (a pure within-column reorder).
-    await touchProjectWorkState(ctx, actor.subject, current.projectId, now)
     return null
   },
 })
@@ -366,7 +362,7 @@ export const changeProject = mutation({
     if (current.projectId === args.projectId) return null
 
     // The caller must be able to access both ends of the move.
-    const { project: source, actor } = await requireProjectAccess(
+    const { project: source } = await requireProjectAccess(
       ctx,
       current.projectId
     )
@@ -425,9 +421,6 @@ export const changeProject = mutation({
     toPatch[field] = projectCounts(destination)[field] + 1
     await ctx.db.patch(destination._id, toPatch)
 
-    // The actor just worked on both projects.
-    await touchProjectWorkState(ctx, actor.subject, source._id, now)
-    await touchProjectWorkState(ctx, actor.subject, destination._id, now)
     return null
   },
 })
@@ -459,8 +452,6 @@ export const remove = mutation({
       type: "task.deleted",
       taskTitle: current.title,
     })
-    // Deleting a task is still working on the project for the actor.
-    await touchProjectWorkState(ctx, actor.subject, current.projectId, now)
     return null
   },
 })

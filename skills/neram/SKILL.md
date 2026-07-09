@@ -1,6 +1,6 @@
 ---
 name: neram
-description: Operate Neram workspaces and connect AI agents to Neram. Use when a user wants an agent to log in with Neram, run workspace diagnostics, get daily briefs, create/move/complete tasks, check in on projects, summarize projects, script Neram from shell/CI with JSON output, or configure Codex, Claude, Cursor, or another MCP client through local stdio or hosted Streamable HTTP at https://neram.praveenjuge.com/mcp.
+description: Operate Neram workspaces and connect AI agents to Neram. Use when a user wants an agent to log in with Neram, run workspace diagnostics, get daily briefs, create/move/complete tasks, summarize projects, script Neram from shell/CI with JSON output, or configure Codex, Claude, Cursor, or another MCP client through local stdio or hosted Streamable HTTP at https://neram.praveenjuge.com/mcp.
 ---
 
 # Neram
@@ -35,7 +35,6 @@ npx neram daily --json
 npx neram task add --project "Project name" --title "Follow up" --json
 npx neram task move --task-id TASK_ID --status inProgress --json
 npx neram task done --task-id TASK_ID --json
-npx neram project check-in --project "Project name" --json
 npx neram project summary --project "Project name" --json
 ```
 
@@ -100,7 +99,6 @@ smoke-test result.
 - `capture_task`: create a task in a project.
 - `move_task`: move/reorder/update task status.
 - `complete_task`: mark a task done.
-- `check_in_project`: update personal project recency.
 - `summarize_project`: return compact project/task context for LLMs.
 - `workspace_status`: return the caller's identity and workspace totals
   (visible projects, owned/shared split, open tasks). No arguments.

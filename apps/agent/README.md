@@ -46,7 +46,6 @@ neram project list
 neram project add --name <name> [--icon <icon>] [--color <color>]
 neram project update -p <project> [--name <name>] [--icon <icon>] [--color <color>]
 neram project rm --project-id <id>       # id required; purges the project's tasks
-neram project check-in -p <project>
 neram project summary -p <project>
 ```
 
@@ -60,8 +59,8 @@ Read-only: `daily_brief`, `workspace_status`, `list_projects`, `list_tasks`,
 `summarize_project`, `recent_activity`.
 
 Mutations: `capture_task`, `update_task`, `move_task`, `complete_task`,
-`move_task_to_project`, `delete_task`, `check_in_project`, `create_project`,
-`update_project`, `delete_project`.
+`move_task_to_project`, `delete_task`, `create_project`, `update_project`,
+`delete_project`.
 
 Tools carry annotations (read-only / idempotent / destructive) and stable output
 schemas for the small mutation shapes. Tool failures come back as `isError`

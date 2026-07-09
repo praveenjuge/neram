@@ -75,9 +75,9 @@ export function createNeramMcpServer(client: NeramApi) {
     }
   })
 
-  register("daily_brief", "Daily Brief", "Compact daily execution digest with open work, stale projects, recent activity, and next actions.", schemas.daily_brief, readOnly, (input) => tools.daily_brief(schemas.daily_brief.parse(input)))
+  register("daily_brief", "Daily Brief", "Compact daily execution digest with open work, assigned tasks, recent activity, and next actions.", schemas.daily_brief, readOnly, (input) => tools.daily_brief(schemas.daily_brief.parse(input)))
   register("workspace_status", "Workspace Status", "Return the caller's Neram identity and workspace totals: visible projects, owned/shared split, and open task count.", schemas.workspace_status, readOnly, (input) => tools.workspace_status(schemas.workspace_status.parse(input)))
-  register("list_projects", "List Projects", "List every project the caller can see with role, task count, and recency.", schemas.list_projects, readOnly, (input) => tools.list_projects(schemas.list_projects.parse(input)))
+  register("list_projects", "List Projects", "List every project the caller can see with role and task counts, most recently updated first.", schemas.list_projects, readOnly, (input) => tools.list_projects(schemas.list_projects.parse(input)))
   register("list_tasks", "List Tasks", "List a project's tasks (resolved by id or unambiguous name), optionally filtered by status.", schemas.list_tasks, readOnly, (input) => tools.list_tasks(schemas.list_tasks.parse(input)))
   register("summarize_project", "Summarize Project", "Return compact project, task, and count context for an LLM.", schemas.summarize_project, readOnly, (input) => tools.summarize_project(schemas.summarize_project.parse(input)))
   register("recent_activity", "Recent Activity", "Return the caller's recent activity feed across every accessible project, newest first.", schemas.recent_activity, readOnly, (input) => tools.recent_activity(schemas.recent_activity.parse(input)))
@@ -88,7 +88,6 @@ export function createNeramMcpServer(client: NeramApi) {
   register("complete_task", "Complete Task", "Mark a task done by id, or by unambiguous project and title.", schemas.complete_task, idempotent, (input) => tools.complete_task(schemas.complete_task.parse(input)), outputSchemas.complete_task)
   register("move_task_to_project", "Move Task To Project", "Move a task to another project the caller can access, resolving both ends by id or unambiguous name.", schemas.move_task_to_project, idempotent, (input) => tools.move_task_to_project(schemas.move_task_to_project.parse(input)), outputSchemas.move_task_to_project)
   register("delete_task", "Delete Task", "Permanently delete a task by id, or by unambiguous project and title.", schemas.delete_task, destructive, (input) => tools.delete_task(schemas.delete_task.parse(input)), outputSchemas.delete_task)
-  register("check_in_project", "Check In Project", "Update the caller's personal recency/check-in marker for a project.", schemas.check_in_project, idempotent, (input) => tools.check_in_project(schemas.check_in_project.parse(input)), outputSchemas.check_in_project)
   register("create_project", "Create Project", "Create a new project owned by the caller.", schemas.create_project, creates, (input) => tools.create_project(schemas.create_project.parse(input)), outputSchemas.create_project)
   register("update_project", "Update Project", "Update a project's name, icon, or color. Address it by id or unambiguous name.", schemas.update_project, idempotent, (input) => tools.update_project(schemas.update_project.parse(input)), outputSchemas.update_project)
   register("delete_project", "Delete Project", "Permanently delete a project and all of its tasks. Requires an explicit projectId.", schemas.delete_project, destructive, (input) => tools.delete_project(schemas.delete_project.parse(input)), outputSchemas.delete_project)

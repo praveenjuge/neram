@@ -60,19 +60,33 @@ function patchProjectSummaries(
 }
 
 /**
- * Mirror the server's personal-recency ordering for `projects.list`: most
- * recently worked first, tie-broken by the project's own `updatedAt`, with
- * never-worked projects sorted last.
+ * Mirror the server's ordering for `projects.list`: most recently updated
+ * first.
  */
-function byPersonalRecency(a: ProjectSummary, b: ProjectSummary): number {
-  if (a.lastWorkedAt !== undefined && b.lastWorkedAt !== undefined) {
-    if (b.lastWorkedAt !== a.lastWorkedAt)
-      return b.lastWorkedAt - a.lastWorkedAt
-    return b.updatedAt - a.updatedAt
-  }
-  if (a.lastWorkedAt !== undefined) return -1
-  if (b.lastWorkedAt !== undefined) return 1
+function byUpdatedAt(a: ProjectSummary, b: ProjectSummary): number {
   return b.updatedAt - a.updatedAt
+}
+
+/**
+ * Mirror the server: stamp a project's summary `updatedAt` to `now` (in both
+ * the list and single-project caches) and resort the dashboard list so the
+ * touched project moves to the top instantly, matching `projects.list`'s
+ * updated-at ordering. Call this wherever the corresponding server mutation
+ * patches the project's `updatedAt`.
+ */
+function bumpProjectUpdatedAt(
+  store: OptimisticLocalStore,
+  projectId: Id<"projects">,
+  now: number
+) {
+  patchProjectSummaries(store, projectId, (summary) => ({
+    ...summary,
+    updatedAt: now,
+  }))
+  const list = store.getQuery(api.projects.list, {})
+  if (list) {
+    store.setQuery(api.projects.list, {}, [...list].sort(byUpdatedAt))
+  }
 }
 
 /** Optimistically move/reorder a task and shift the project's counters. */
@@ -106,6 +120,9 @@ export function moveTaskOptimistic(projectId: Id<"projects">) {
       patchProjectSummaries(store, projectId, (summary) =>
         applyCounts(summary, deltas)
       )
+      // The server bumps the project's updatedAt on a status change (a pure
+      // within-column reorder does not), so mirror that and resort.
+      bumpProjectUpdatedAt(store, projectId, Date.now())
     }
   }
 }
@@ -145,6 +162,8 @@ export function createTaskOptimistic(projectId: Id<"projects">) {
     patchProjectSummaries(store, projectId, (summary) =>
       applyCounts(summary, { taskCount: 1, todoCount: 1 })
     )
+    // The server bumps the project's updatedAt on task create; mirror it.
+    bumpProjectUpdatedAt(store, projectId, Date.now())
   }
 }
 
@@ -163,6 +182,7 @@ export function updateTaskOptimistic(projectId: Id<"projects">) {
   ) => {
     const tasks = store.getQuery(api.tasks.list, { projectId })
     if (!tasks) return
+    const now = Date.now()
     store.setQuery(
       api.tasks.list,
       { projectId },
@@ -197,10 +217,13 @@ export function updateTaskOptimistic(projectId: Id<"projects">) {
               : undefined,
           assigneeSubject,
           assigneeName,
-          updatedAt: Date.now(),
+          updatedAt: now,
         }
       })
     )
+    // Mirror the server: editing a task bumps its project's updatedAt, so
+    // resort the dashboard list to keep the project's updatedAt order in sync.
+    bumpProjectUpdatedAt(store, projectId, now)
   }
 }
 
@@ -221,6 +244,8 @@ export function removeTaskOptimistic(projectId: Id<"projects">) {
       patchProjectSummaries(store, projectId, (summary) =>
         applyCounts(summary, deltas)
       )
+      // The server bumps the project's updatedAt on task delete; mirror it.
+      bumpProjectUpdatedAt(store, projectId, Date.now())
     }
   }
 }
@@ -254,12 +279,15 @@ export function changeProjectTaskOptimistic(sourceProjectId: Id<"projects">) {
         sourceTasks.filter((task) => task._id !== args.taskId)
       )
     }
+    const now = Date.now()
     if (moving) {
       const deltas: CountDeltas = { taskCount: -1 }
       deltas[statusCountKey[moving.status]] = -1
       patchProjectSummaries(store, sourceProjectId, (summary) =>
         applyCounts(summary, deltas)
       )
+      // The server bumps both projects' updatedAt on a cross-project move.
+      bumpProjectUpdatedAt(store, sourceProjectId, now)
     }
 
     // Add the card to the destination board (when it's cached) and shift its
@@ -285,6 +313,7 @@ export function changeProjectTaskOptimistic(sourceProjectId: Id<"projects">) {
       patchProjectSummaries(store, destinationProjectId, (summary) =>
         applyCounts(summary, deltas)
       )
+      bumpProjectUpdatedAt(store, destinationProjectId, now)
     }
   }
 }
@@ -311,30 +340,8 @@ export function createProjectOptimistic(
     doneCount: 0,
     // The creator is always the owner of their freshly created project.
     role: "owner",
-    // A brand-new project starts with no personal work state ("Needs love").
-    lastWorkedAt: undefined,
   }
   store.setQuery(api.projects.list, {}, [temp, ...list])
-}
-
-/**
- * Optimistically record a personal "worked on" check-in: stamp the project's
- * `lastWorkedAt` to now and resort the dashboard list to mirror the server's
- * recency ordering, so the card jumps to the top instantly.
- */
-export function markWorkedOptimistic(
-  store: OptimisticLocalStore,
-  args: { projectId: Id<"projects"> }
-) {
-  const now = Date.now()
-  patchProjectSummaries(store, args.projectId, (summary) => ({
-    ...summary,
-    lastWorkedAt: now,
-  }))
-  const list = store.getQuery(api.projects.list, {})
-  if (list) {
-    store.setQuery(api.projects.list, {}, [...list].sort(byPersonalRecency))
-  }
 }
 
 /** Optimistically apply name/icon/color edits to a project. */
@@ -347,13 +354,19 @@ export function updateProjectOptimistic(
     color?: string
   }
 ) {
+  const now = Date.now()
   patchProjectSummaries(store, args.projectId, (summary) => ({
     ...summary,
     name: args.name ?? summary.name,
     icon: args.icon ?? summary.icon,
     color: args.color ?? summary.color,
-    updatedAt: Date.now(),
+    updatedAt: now,
   }))
+  // The server bumps updatedAt on a project edit, so resort the dashboard list.
+  const list = store.getQuery(api.projects.list, {})
+  if (list) {
+    store.setQuery(api.projects.list, {}, [...list].sort(byUpdatedAt))
+  }
 }
 
 /**
@@ -436,8 +449,8 @@ export function archiveProjectOptimistic(
 /**
  * Optimistically unarchive a project: drop it from the archived pages and add it
  * back to the active dashboard list (resorted to mirror the server's
- * personal-recency ordering) and the sidebar's `names` cache, so it moves back
- * instantly from the Archived page the user is on.
+ * most-recently-updated ordering) and the sidebar's `names` cache, so it moves
+ * back instantly from the Archived page the user is on.
  */
 export function unarchiveProjectOptimistic(
   store: OptimisticLocalStore,
@@ -446,11 +459,7 @@ export function unarchiveProjectOptimistic(
   const moved = removeFromArchivedPages(store, args.projectId)
   const list = store.getQuery(api.projects.list, {})
   if (list && moved) {
-    store.setQuery(
-      api.projects.list,
-      {},
-      [moved, ...list].sort(byPersonalRecency)
-    )
+    store.setQuery(api.projects.list, {}, [moved, ...list].sort(byUpdatedAt))
   }
   // Restore the project to the sidebar's separate `names` cache as well, rebuilt
   // from the summary (openCount = todo + in-progress), so it reappears instantly.
@@ -463,7 +472,6 @@ export function unarchiveProjectOptimistic(
       color: moved.color,
       role: moved.role,
       openCount: moved.todoCount + moved.inProgressCount,
-      lastWorkedAt: moved.lastWorkedAt,
     }
     store.setQuery(api.projects.names, {}, [entry, ...names])
   }

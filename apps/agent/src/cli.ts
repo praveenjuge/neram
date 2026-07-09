@@ -6,7 +6,6 @@ import { authClient, claims, loadPublicConfig, login, logout } from "./auth.js"
 import {
   formatActivity,
   formatCaptureTask,
-  formatCheckIn,
   formatDailyBrief,
   formatDoctor,
   formatError,
@@ -348,15 +347,6 @@ project.command("rm")
   .action((opts) => wrap(opts, async () => {
     const result = await (await tools()).delete_project({ projectId: opts.projectId })
     emit(opts, formatProjectDeleted(result), result)
-  }))
-project.command("check-in")
-  .description("Update your personal recency marker for a project")
-  .option("-p, --project <name>")
-  .option("--project-id <id>")
-  .option("--json")
-  .action((opts) => wrap(opts, async () => {
-    const result = await (await tools()).check_in_project({ ...projectRef(opts) })
-    emit(opts, formatCheckIn(result), result)
   }))
 project.command("summary")
   .description("Show a project's tasks and status counts")
