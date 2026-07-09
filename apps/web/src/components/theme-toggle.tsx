@@ -1,55 +1,49 @@
-import { Monitor, Moon, Sun } from "lucide-react"
+"use client"
+
+import { UserButton } from "@clerk/nextjs"
+import { BookOpen, Monitor, Moon, Sun } from "lucide-react"
 
 import { useTheme } from "@/components/theme-provider"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { SidebarMenuButton } from "@/components/ui/sidebar"
 
-const options = [
-  { value: "light", label: "Light", icon: Sun },
-  { value: "dark", label: "Dark", icon: Moon },
-  { value: "system", label: "System", icon: Monitor },
-] as const
+const iconClassName = "size-4"
 
-export function ThemeMenuItem() {
-  const { theme, setTheme } = useTheme()
+export function AppUserButton() {
+  const { setTheme } = useTheme()
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <SidebarMenuButton
-          aria-label="Change theme"
-          data-testid="theme-toggle"
-          tooltip="Theme"
-        >
-          <Sun className="dark:hidden" />
-          <Moon className="hidden dark:block" />
-          <span>Theme</span>
-        </SidebarMenuButton>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="start"
-        className="min-w-36"
-        side="right"
-        sideOffset={8}
-      >
-        <DropdownMenuRadioGroup
-          onValueChange={(value) => setTheme(value as typeof theme)}
-          value={theme}
-        >
-          {options.map((option) => (
-            <DropdownMenuRadioItem key={option.value} value={option.value}>
-              <option.icon className="text-muted-foreground" />
-              {option.label}
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <UserButton
+      appearance={{
+        elements: {
+          rootBox: "flex size-8 items-center justify-center",
+          avatarBox: "size-8",
+          userButtonTrigger:
+            "size-8 rounded-full ring-sidebar-ring outline-hidden focus-visible:ring-3",
+          userButtonAvatarBox: "size-8",
+        },
+      }}
+    >
+      <UserButton.MenuItems>
+        <UserButton.Link
+          href="/docs"
+          label="Docs"
+          labelIcon={<BookOpen className={iconClassName} />}
+        />
+        <UserButton.Action
+          label="Light theme"
+          labelIcon={<Sun className={iconClassName} />}
+          onClick={() => setTheme("light")}
+        />
+        <UserButton.Action
+          label="Dark theme"
+          labelIcon={<Moon className={iconClassName} />}
+          onClick={() => setTheme("dark")}
+        />
+        <UserButton.Action
+          label="System theme"
+          labelIcon={<Monitor className={iconClassName} />}
+          onClick={() => setTheme("system")}
+        />
+      </UserButton.MenuItems>
+    </UserButton>
   )
 }

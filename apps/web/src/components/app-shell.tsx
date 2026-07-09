@@ -1,6 +1,6 @@
 "use client"
 
-import { RedirectToSignIn, UserButton } from "@clerk/nextjs"
+import { RedirectToSignIn } from "@clerk/nextjs"
 import Link from "next/link"
 import { useParams, usePathname } from "next/navigation"
 import { useQuery } from "convex-helpers/react/cache"
@@ -9,7 +9,6 @@ import type { FunctionReturnType } from "convex/server"
 import {
   Activity,
   Archive,
-  BookOpen,
   LayoutDashboard,
   ListTodo,
   LogOut,
@@ -22,7 +21,7 @@ import {
 import { type ReactNode, useState } from "react"
 
 import { api } from "@neram/convex/api"
-import { ThemeMenuItem } from "@/components/theme-toggle"
+import { AppUserButton } from "@/components/theme-toggle"
 import {
   AddTaskDialog,
   ArchiveProjectDialog,
@@ -224,14 +223,18 @@ function AppSidebar() {
     <Sidebar collapsible="icon">
       <SidebarHeader>
         <SidebarMenu>
-          <SidebarMenuItem className="flex items-center justify-between gap-2">
-            <SidebarMenuButton asChild tooltip="Neram">
-              <Link href="/dashboard">
-                <Sparkles className="text-primary" />
-                <span className="font-medium">Neram</span>
-              </Link>
-            </SidebarMenuButton>
-            <UserButton />
+          <SidebarMenuItem>
+            <div className="flex w-full items-center gap-2 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:gap-1">
+              <SidebarMenuButton asChild tooltip="Neram">
+                <Link href="/dashboard">
+                  <Sparkles className="text-primary" />
+                  <span className="font-medium">Neram</span>
+                </Link>
+              </SidebarMenuButton>
+              <div className="ml-auto flex shrink-0 items-center justify-center group-data-[collapsible=icon]:ml-0">
+                <AppUserButton />
+              </div>
+            </div>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
@@ -286,21 +289,6 @@ function AppSidebar() {
                     <span>Archived</span>
                   </Link>
                 </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  asChild
-                  isActive={pathname === "/docs"}
-                  tooltip="Docs"
-                >
-                  <Link href="/docs">
-                    <BookOpen />
-                    <span>Docs</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <ThemeMenuItem />
               </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
