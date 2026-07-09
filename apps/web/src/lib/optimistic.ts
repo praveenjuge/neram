@@ -67,6 +67,28 @@ function byUpdatedAt(a: ProjectSummary, b: ProjectSummary): number {
   return b.updatedAt - a.updatedAt
 }
 
+/**
+ * Mirror the server: stamp a project's summary `updatedAt` to `now` (in both
+ * the list and single-project caches) and resort the dashboard list so the
+ * touched project moves to the top instantly, matching `projects.list`'s
+ * updated-at ordering. Call this wherever the corresponding server mutation
+ * patches the project's `updatedAt`.
+ */
+function bumpProjectUpdatedAt(
+  store: OptimisticLocalStore,
+  projectId: Id<"projects">,
+  now: number
+) {
+  patchProjectSummaries(store, projectId, (summary) => ({
+    ...summary,
+    updatedAt: now,
+  }))
+  const list = store.getQuery(api.projects.list, {})
+  if (list) {
+    store.setQuery(api.projects.list, {}, [...list].sort(byUpdatedAt))
+  }
+}
+
 /** Optimistically move/reorder a task and shift the project's counters. */
 export function moveTaskOptimistic(projectId: Id<"projects">) {
   return (
@@ -98,6 +120,9 @@ export function moveTaskOptimistic(projectId: Id<"projects">) {
       patchProjectSummaries(store, projectId, (summary) =>
         applyCounts(summary, deltas)
       )
+      // The server bumps the project's updatedAt on a status change (a pure
+      // within-column reorder does not), so mirror that and resort.
+      bumpProjectUpdatedAt(store, projectId, Date.now())
     }
   }
 }
@@ -137,6 +162,8 @@ export function createTaskOptimistic(projectId: Id<"projects">) {
     patchProjectSummaries(store, projectId, (summary) =>
       applyCounts(summary, { taskCount: 1, todoCount: 1 })
     )
+    // The server bumps the project's updatedAt on task create; mirror it.
+    bumpProjectUpdatedAt(store, projectId, Date.now())
   }
 }
 
@@ -196,14 +223,7 @@ export function updateTaskOptimistic(projectId: Id<"projects">) {
     )
     // Mirror the server: editing a task bumps its project's updatedAt, so
     // resort the dashboard list to keep the project's recency order in sync.
-    patchProjectSummaries(store, projectId, (summary) => ({
-      ...summary,
-      updatedAt: now,
-    }))
-    const list = store.getQuery(api.projects.list, {})
-    if (list) {
-      store.setQuery(api.projects.list, {}, [...list].sort(byUpdatedAt))
-    }
+    bumpProjectUpdatedAt(store, projectId, now)
   }
 }
 
@@ -224,6 +244,8 @@ export function removeTaskOptimistic(projectId: Id<"projects">) {
       patchProjectSummaries(store, projectId, (summary) =>
         applyCounts(summary, deltas)
       )
+      // The server bumps the project's updatedAt on task delete; mirror it.
+      bumpProjectUpdatedAt(store, projectId, Date.now())
     }
   }
 }
@@ -257,12 +279,15 @@ export function changeProjectTaskOptimistic(sourceProjectId: Id<"projects">) {
         sourceTasks.filter((task) => task._id !== args.taskId)
       )
     }
+    const now = Date.now()
     if (moving) {
       const deltas: CountDeltas = { taskCount: -1 }
       deltas[statusCountKey[moving.status]] = -1
       patchProjectSummaries(store, sourceProjectId, (summary) =>
         applyCounts(summary, deltas)
       )
+      // The server bumps both projects' updatedAt on a cross-project move.
+      bumpProjectUpdatedAt(store, sourceProjectId, now)
     }
 
     // Add the card to the destination board (when it's cached) and shift its
@@ -288,6 +313,7 @@ export function changeProjectTaskOptimistic(sourceProjectId: Id<"projects">) {
       patchProjectSummaries(store, destinationProjectId, (summary) =>
         applyCounts(summary, deltas)
       )
+      bumpProjectUpdatedAt(store, destinationProjectId, now)
     }
   }
 }
@@ -328,13 +354,19 @@ export function updateProjectOptimistic(
     color?: string
   }
 ) {
+  const now = Date.now()
   patchProjectSummaries(store, args.projectId, (summary) => ({
     ...summary,
     name: args.name ?? summary.name,
     icon: args.icon ?? summary.icon,
     color: args.color ?? summary.color,
-    updatedAt: Date.now(),
+    updatedAt: now,
   }))
+  // The server bumps updatedAt on a project edit, so resort the dashboard list.
+  const list = store.getQuery(api.projects.list, {})
+  if (list) {
+    store.setQuery(api.projects.list, {}, [...list].sort(byUpdatedAt))
+  }
 }
 
 /**
