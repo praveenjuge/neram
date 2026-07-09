@@ -75,9 +75,9 @@ export function createNeramMcpServer(client: NeramApi) {
     }
   })
 
-  register("daily_brief", "Daily Brief", "Compact daily execution digest with open work, stale projects, recent activity, and next actions.", schemas.daily_brief, readOnly, (input) => tools.daily_brief(schemas.daily_brief.parse(input)))
+  register("daily_brief", "Daily Brief", "Compact daily execution digest with open work, assigned tasks, recent activity, and next actions.", schemas.daily_brief, readOnly, (input) => tools.daily_brief(schemas.daily_brief.parse(input)))
   register("workspace_status", "Workspace Status", "Return the caller's Neram identity and workspace totals: visible projects, owned/shared split, and open task count.", schemas.workspace_status, readOnly, (input) => tools.workspace_status(schemas.workspace_status.parse(input)))
-  register("list_projects", "List Projects", "List every project the caller can see with role, task count, and recency.", schemas.list_projects, readOnly, (input) => tools.list_projects(schemas.list_projects.parse(input)))
+  register("list_projects", "List Projects", "List every project the caller can see with role and task counts, most recently updated first.", schemas.list_projects, readOnly, (input) => tools.list_projects(schemas.list_projects.parse(input)))
   register("list_tasks", "List Tasks", "List a project's tasks (resolved by id or unambiguous name), optionally filtered by status.", schemas.list_tasks, readOnly, (input) => tools.list_tasks(schemas.list_tasks.parse(input)))
   register("summarize_project", "Summarize Project", "Return compact project, task, and count context for an LLM.", schemas.summarize_project, readOnly, (input) => tools.summarize_project(schemas.summarize_project.parse(input)))
   register("recent_activity", "Recent Activity", "Return the caller's recent activity feed across every accessible project, newest first.", schemas.recent_activity, readOnly, (input) => tools.recent_activity(schemas.recent_activity.parse(input)))

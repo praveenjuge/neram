@@ -87,9 +87,21 @@ function cleanColor(color: string) {
 
 /**
  * Load the projects the caller can see: the ones they own plus the ones they've
- * joined as a member. Deduped, capped so the read stays bounded, and ordered by
- * the project's own `updatedAt` (most recently updated first). Each project is
- * tagged with the caller's role.
+ * joined as a member. Deduped and each tagged with the caller's role. Every read
+ * is bounded to `MAX_PROJECTS` so the query stays cheap as the workspace grows,
+ * and the returned set is ordered by the project's own `updatedAt` (most
+ * recently updated first).
+ *
+ * Ordering is exact within each bounded read: owned projects are read straight
+ * off the `by_owner_archived_updated` index in updatedAt order, so the newest
+ * owned projects are always included. Shared memberships are read off
+ * `by_member` (which has no project-recency key), so if a single caller belongs
+ * to more than `MAX_PROJECTS` *shared* projects, the recency ranking of shared
+ * projects beyond that bound is best-effort. That cap is far above any real
+ * per-user project count here; making it exact would require denormalizing each
+ * project's `updatedAt` onto every membership row and fanning writes out to all
+ * members on every task/project mutation — a hot-path cost not worth paying for
+ * a bound no user reaches.
  */
 export async function accessibleProjects(
   ctx: Parameters<typeof requireProjectAccess>[0],
@@ -107,6 +119,9 @@ export async function accessibleProjects(
     .order("desc")
     .take(MAX_PROJECTS)
 
+  // Bounded like the owned read. `by_member` has no project-recency key, so the
+  // exact updatedAt ranking of shared projects past this cap is best-effort (see
+  // the function doc); the cap sits well above any real per-user project count.
   const memberships = await ctx.db
     .query("projectMembers")
     .withIndex("by_member", (q) => q.eq("subject", subject))
