@@ -25,7 +25,6 @@ function fakeApi(overrides: Partial<NeramApi> = {}): NeramApi {
     createProject: vi.fn(async () => "pnew"),
     updateProject: vi.fn(async () => undefined),
     removeProject: vi.fn(async () => undefined),
-    checkIn: vi.fn(async () => 123),
     status: vi.fn(async () => ({
       identity: { name: "Ada", email: "ada@example.com" },
       workspace: { projects: 2, ownedProjects: 2, sharedProjects: 0, openTasks: 2 },

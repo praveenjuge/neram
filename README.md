@@ -54,7 +54,6 @@ neram daily --json
 neram task add --project "Project name" --title "Follow up" --json
 neram task move --task-id TASK_ID --status inProgress --json
 neram task done --task-id TASK_ID --json
-neram project check-in --project "Project name" --json
 neram project summary --project "Project name" --json
 neram mcp
 ```

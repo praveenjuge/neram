@@ -60,18 +60,10 @@ function patchProjectSummaries(
 }
 
 /**
- * Mirror the server's personal-recency ordering for `projects.list`: most
- * recently worked first, tie-broken by the project's own `updatedAt`, with
- * never-worked projects sorted last.
+ * Mirror the server's ordering for `projects.list`: most recently updated
+ * first.
  */
-function byPersonalRecency(a: ProjectSummary, b: ProjectSummary): number {
-  if (a.lastWorkedAt !== undefined && b.lastWorkedAt !== undefined) {
-    if (b.lastWorkedAt !== a.lastWorkedAt)
-      return b.lastWorkedAt - a.lastWorkedAt
-    return b.updatedAt - a.updatedAt
-  }
-  if (a.lastWorkedAt !== undefined) return -1
-  if (b.lastWorkedAt !== undefined) return 1
+function byUpdatedAt(a: ProjectSummary, b: ProjectSummary): number {
   return b.updatedAt - a.updatedAt
 }
 
@@ -311,30 +303,8 @@ export function createProjectOptimistic(
     doneCount: 0,
     // The creator is always the owner of their freshly created project.
     role: "owner",
-    // A brand-new project starts with no personal work state ("Needs love").
-    lastWorkedAt: undefined,
   }
   store.setQuery(api.projects.list, {}, [temp, ...list])
-}
-
-/**
- * Optimistically record a personal "worked on" check-in: stamp the project's
- * `lastWorkedAt` to now and resort the dashboard list to mirror the server's
- * recency ordering, so the card jumps to the top instantly.
- */
-export function markWorkedOptimistic(
-  store: OptimisticLocalStore,
-  args: { projectId: Id<"projects"> }
-) {
-  const now = Date.now()
-  patchProjectSummaries(store, args.projectId, (summary) => ({
-    ...summary,
-    lastWorkedAt: now,
-  }))
-  const list = store.getQuery(api.projects.list, {})
-  if (list) {
-    store.setQuery(api.projects.list, {}, [...list].sort(byPersonalRecency))
-  }
 }
 
 /** Optimistically apply name/icon/color edits to a project. */
@@ -436,8 +406,8 @@ export function archiveProjectOptimistic(
 /**
  * Optimistically unarchive a project: drop it from the archived pages and add it
  * back to the active dashboard list (resorted to mirror the server's
- * personal-recency ordering) and the sidebar's `names` cache, so it moves back
- * instantly from the Archived page the user is on.
+ * most-recently-updated ordering) and the sidebar's `names` cache, so it moves
+ * back instantly from the Archived page the user is on.
  */
 export function unarchiveProjectOptimistic(
   store: OptimisticLocalStore,
@@ -446,11 +416,7 @@ export function unarchiveProjectOptimistic(
   const moved = removeFromArchivedPages(store, args.projectId)
   const list = store.getQuery(api.projects.list, {})
   if (list && moved) {
-    store.setQuery(
-      api.projects.list,
-      {},
-      [moved, ...list].sort(byPersonalRecency)
-    )
+    store.setQuery(api.projects.list, {}, [moved, ...list].sort(byUpdatedAt))
   }
   // Restore the project to the sidebar's separate `names` cache as well, rebuilt
   // from the summary (openCount = todo + in-progress), so it reappears instantly.
@@ -463,7 +429,6 @@ export function unarchiveProjectOptimistic(
       color: moved.color,
       role: moved.role,
       openCount: moved.todoCount + moved.inProgressCount,
-      lastWorkedAt: moved.lastWorkedAt,
     }
     store.setQuery(api.projects.names, {}, [entry, ...names])
   }

@@ -7,7 +7,6 @@ import { Alert } from "react-native"
 
 import { HeaderIconButton } from "@/lib/header"
 import {
-  Button,
   Empty,
   Row,
   Screen,
@@ -25,7 +24,6 @@ export default function ProjectScreen() {
   const project = useQuery(api.projects.get, { projectId: id })
   const tasks = useQuery(api.tasks.list, { projectId: id })
   const members = useQuery(api.members.list, { projectId: id })
-  const markWorked = useMutation(api.projects.markWorked)
   const createTask = useMutation(api.tasks.create)
 
   const visibleTasks = useMemo(
@@ -80,11 +78,6 @@ export default function ProjectScreen() {
             <>
               <Text>{project.name}</Text>
               <Text>{`${project.taskCount} tasks - ${project.todoCount} todo - ${project.inProgressCount} active - ${project.doneCount} done`}</Text>
-              <Button
-                label="Check in"
-                systemImage="clock"
-                onPress={() => void markWorked({ projectId: id })}
-              />
             </>
           )}
         </Section>

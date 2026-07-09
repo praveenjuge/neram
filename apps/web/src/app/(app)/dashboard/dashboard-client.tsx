@@ -1,22 +1,11 @@
 "use client"
 
-import { useMutation } from "convex/react"
 import { useQuery } from "convex-helpers/react/cache"
 import type { FunctionReturnType } from "convex/server"
-import {
-  FolderPlus,
-  Heart,
-  ListChecks,
-  LogOut,
-  Pencil,
-  Plus,
-  Share2,
-} from "lucide-react"
-import { toast } from "sonner"
+import { FolderPlus, ListChecks, LogOut, Pencil, Plus, Share2 } from "lucide-react"
 
 import Link from "next/link"
 import { api } from "@neram/convex/api"
-import type { Id } from "@neram/convex/data-model"
 import {
   AddTaskDialog,
   EditProjectDialog,
@@ -24,8 +13,6 @@ import {
   NewProjectDialog,
   ShareProjectDialog,
 } from "@/components/project-dialogs"
-import { messageFromError } from "@/lib/errors"
-import { markWorkedOptimistic } from "@/lib/optimistic"
 import { useProjectPrefetch } from "@/lib/prefetch"
 import { getProjectColorText } from "@/lib/project-colors"
 import { ProjectIcon } from "@/lib/project-icons"
@@ -42,32 +29,10 @@ import {
 
 type DashboardProject = FunctionReturnType<typeof api.projects.list>[number]
 
-type SectionTone = "recent" | "needsLove"
-
-// How recently a project must have been worked on to stay in "Recently worked".
-// After this window of neglect it falls back to "Needs love".
-const RECENTLY_WORKED_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
-
-// Split the dashboard by the caller's personal recency: projects worked on
-// within the last week (newest first) versus everything else — stale projects
-// they haven't touched in a week plus ones they've never touched. The list
-// already arrives sorted by recency, so a straight partition is enough.
-function groupByRecency(projects: DashboardProject[]) {
-  const cutoff = Date.now() - RECENTLY_WORKED_WINDOW_MS
-  const recent = projects.filter(
-    (project) =>
-      project.lastWorkedAt !== undefined && project.lastWorkedAt >= cutoff
-  )
-  const needsLove = projects.filter(
-    (project) =>
-      project.lastWorkedAt === undefined || project.lastWorkedAt < cutoff
-  )
-  return { recent, needsLove }
-}
-
 export function DashboardClient() {
+  // The list already arrives ordered by most recently updated first, so the
+  // freshest projects surface at the top with no client-side grouping.
   const projects = useQuery(api.projects.list)
-  const groups = projects ? groupByRecency(projects) : null
 
   return (
     <section className="mx-auto grid w-full max-w-6xl gap-6 p-5">
@@ -90,82 +55,16 @@ export function DashboardClient() {
       ) : projects.length === 0 ? (
         <EmptyState />
       ) : (
-        <div className="grid gap-8">
-          <Section
-            projects={groups!.recent}
-            title="Recently worked"
-            tone="recent"
-          />
-          <Section
-            projects={groups!.needsLove}
-            title="Needs love"
-            tone="needsLove"
-          />
+        <div
+          className="grid gap-0 divide-y divide-border rounded-lg border"
+          data-testid="dashboard-project-list"
+        >
+          {projects.map((project) => (
+            <ProjectRow key={project._id} project={project} />
+          ))}
         </div>
       )}
     </section>
-  )
-}
-
-const toneDot: Record<SectionTone, string> = {
-  recent: "bg-green-500",
-  needsLove: "bg-amber-500",
-}
-
-function Section({
-  title,
-  tone,
-  projects,
-}: {
-  title: string
-  tone: SectionTone
-  projects: DashboardProject[]
-}) {
-  if (projects.length === 0) return null
-  return (
-    <div className="grid gap-2" data-testid={`dashboard-section-${tone}`}>
-      <div className="flex items-center gap-2">
-        <span className={cn("size-2 rounded-full", toneDot[tone])} />
-        <h2 className="text-sm font-medium">{title}</h2>
-        <span className="text-xs text-muted-foreground">{projects.length}</span>
-      </div>
-      <div className="grid gap-0 divide-y divide-border rounded-lg border">
-        {projects.map((project) => (
-          <ProjectRow key={project._id} project={project} />
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function MarkWorkedButton({ id, name }: { id: Id<"projects">; name: string }) {
-  const markWorked = useMutation(api.projects.markWorked).withOptimisticUpdate(
-    markWorkedOptimistic
-  )
-
-  function onMarkWorked() {
-    void markWorked({ projectId: id })
-      .then(() => toast(`Marked ${name} as worked on.`))
-      .catch((error) =>
-        toast.error(messageFromError(error, "Could not update recency."))
-      )
-  }
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          aria-label="Mark as worked on"
-          data-testid="mark-worked-trigger"
-          onClick={onMarkWorked}
-          size="icon-sm"
-          variant="ghost"
-        >
-          <Heart />
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>Mark as worked on</TooltipContent>
-    </Tooltip>
   )
 }
 
@@ -220,7 +119,6 @@ function ProjectRow({ project }: { project: DashboardProject }) {
             </DialogTrigger>
           }
         />
-        <MarkWorkedButton id={project._id} name={project.name} />
         <EditProjectDialog
           color={project.color}
           icon={project.icon}

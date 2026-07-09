@@ -1,0 +1,63 @@
+/// <reference types="vite/client" />
+import { convexTest } from "convex-test"
+import { afterEach, beforeEach, expect, test, vi } from "vitest"
+
+import { api } from "./_generated/api"
+import schema from "./schema"
+
+const modules = import.meta.glob("./**/*.ts")
+
+function setup() {
+  const t = convexTest(schema, modules)
+  const alice = t.withIdentity({
+    name: "Alice",
+    subject: "alice",
+    tokenIdentifier: "alice",
+  })
+  return { t, alice }
+}
+
+// Drive the clock so each mutation stamps a distinct updatedAt; otherwise
+// operations inside a single millisecond tie and the ordering isn't observable.
+beforeEach(() => {
+  vi.useFakeTimers()
+  vi.setSystemTime(1_000)
+})
+afterEach(() => {
+  vi.useRealTimers()
+})
+
+test("projects.list surfaces the most recently updated project first", async () => {
+  const { alice } = setup()
+  const alpha = await alice.mutation(api.projects.create, { name: "Alpha" })
+  vi.setSystemTime(2_000)
+  await alice.mutation(api.projects.create, { name: "Beta" })
+  vi.setSystemTime(3_000)
+  await alice.mutation(api.projects.create, { name: "Gamma" })
+
+  // Editing Alpha bumps its updatedAt to the newest, so it should jump to the
+  // front of the list even though it was created first.
+  vi.setSystemTime(4_000)
+  await alice.mutation(api.projects.update, {
+    projectId: alpha,
+    name: "Alpha v2",
+  })
+
+  const list = await alice.query(api.projects.list, {})
+  expect(list[0]._id).toBe(alpha)
+  expect(list[0].name).toBe("Alpha v2")
+})
+
+test("creating a task bumps its project to the top of the list", async () => {
+  const { alice } = setup()
+  await alice.mutation(api.projects.create, { name: "Alpha" })
+  vi.setSystemTime(2_000)
+  const beta = await alice.mutation(api.projects.create, { name: "Beta" })
+
+  // Adding a task patches the project's updatedAt, so Beta moves ahead.
+  vi.setSystemTime(3_000)
+  await alice.mutation(api.tasks.create, { projectId: beta, title: "Ship it" })
+
+  const list = await alice.query(api.projects.list, {})
+  expect(list[0]._id).toBe(beta)
+})

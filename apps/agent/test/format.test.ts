@@ -3,7 +3,6 @@ import { describe, expect, test } from "vitest"
 import {
   formatActivity,
   formatCaptureTask,
-  formatCheckIn,
   formatDailyBrief,
   formatDoctor,
   formatError,
@@ -118,7 +117,6 @@ const project = {
   taskCount: 3,
   openTasks: 2,
   updatedAt: "2026-01-02T00:00:00.000Z",
-  lastWorkedAt: "2026-01-03T00:00:00.000Z",
 }
 const task = {
   taskId: "ta",
@@ -134,7 +132,6 @@ describe("workspace formatters (non-TTY plain output)", () => {
   test("daily brief renders sectioned, plain-text output", () => {
     const text = formatDailyBrief({
       projects: 4,
-      staleProjects: [project],
       assignedOpenTasks: [task],
       openTasks: [task],
       recentActivity: [
@@ -145,7 +142,7 @@ describe("workspace formatters (non-TTY plain output)", () => {
     expect(text).toContain("Daily brief")
     expect(text).toContain("Next actions")
     expect(text).toContain("Ship CLI")
-    expect(text).toContain("Stale projects")
+    expect(text).toContain("Assigned to you")
     // Non-TTY output carries no ANSI escape codes.
     expect(text).not.toContain("\u001b[")
   })
@@ -187,7 +184,6 @@ describe("workspace formatters (non-TTY plain output)", () => {
     expect(formatTaskMoved({ taskId: "ta", status: "done" })).toContain("done")
     expect(formatTaskDeleted({ taskId: "ta" })).toContain("Deleted task")
     expect(formatTaskMovedToProject({ taskId: "ta", projectName: "Agent Ops" })).toContain("Agent Ops")
-    expect(formatCheckIn({ projectName: "Agent", lastWorkedAt: "2026-01-03T00:00:00.000Z" })).toContain("Checked in")
     expect(formatProjectCreated({ projectId: "pa", name: "Agent" })).toContain("Created project")
     expect(formatProjectDeleted({ projectId: "pa" })).toContain("Deleted project")
   })

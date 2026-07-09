@@ -10,7 +10,6 @@ import {
   recordActivity,
   requireProjectAccess,
   requireProjectOwner,
-  touchProjectWorkState,
   type ProjectRole,
 } from "./model"
 
@@ -31,9 +30,6 @@ const projectSummary = v.object({
   inProgressCount: v.number(),
   doneCount: v.number(),
   role: v.union(v.literal("owner"), v.literal("editor")),
-  // The caller's own "last worked on" timestamp for this project, or undefined
-  // if they've never checked in. Personal to the caller; never an owner field.
-  lastWorkedAt: v.optional(v.number()),
 })
 
 function publicProject(project: Doc<"projects">) {
@@ -48,16 +44,11 @@ function publicProject(project: Doc<"projects">) {
   }
 }
 
-function summarize(
-  project: Doc<"projects">,
-  role: ProjectRole,
-  lastWorkedAt?: number
-) {
+function summarize(project: Doc<"projects">, role: ProjectRole) {
   return {
     ...publicProject(project),
     ...projectCounts(project),
     role,
-    lastWorkedAt,
   }
 }
 
@@ -97,17 +88,13 @@ function cleanColor(color: string) {
 /**
  * Load the projects the caller can see: the ones they own plus the ones they've
  * joined as a member. Deduped, capped so the read stays bounded, and ordered by
- * the caller's personal recency (most recently worked first) so the bounded
- * window keeps the projects they actually touched rather than dropping a freshly
- * checked-in one. Each project is tagged with the caller's role and their
- * personal `lastWorkedAt` (undefined if they've never checked in).
+ * the project's own `updatedAt` (most recently updated first). Each project is
+ * tagged with the caller's role.
  */
 export async function accessibleProjects(
   ctx: Parameters<typeof requireProjectAccess>[0],
   subject: string
-): Promise<
-  Array<{ project: Doc<"projects">; role: ProjectRole; lastWorkedAt?: number }>
-> {
+): Promise<Array<{ project: Doc<"projects">; role: ProjectRole }>> {
   // Read only *active* owned projects (archivedAt unset), newest-updated first.
   // Pinning archivedAt to undefined in the index means archived projects live
   // in a different slice entirely, so they can never consume this bounded read
@@ -138,55 +125,15 @@ export async function accessibleProjects(
     if (project) byId.set(project._id, { project, role: "editor" })
   }
 
-  // The caller's personal work states, keyed by project. A single indexed read
-  // off `by_subject_project` (subject prefix) returns every check-in they own.
-  // Collected in full (not take-capped): the rows are scoped to one subject and
-  // bounded by the projects they can access — and deleting a project purges its
-  // rows — so a take cap here would instead silently drop recency for some
-  // projects (the index orders by projectId, not by how recently worked).
-  const workStates = await ctx.db
-    .query("projectWorkStates")
-    .withIndex("by_subject_project", (q) => q.eq("subject", subject))
-    .collect()
-  const lastWorkedByProject = new Map<string, number>()
-  for (const state of workStates) {
-    lastWorkedByProject.set(state.projectId, state.lastWorkedAt)
-  }
-
   return (
     [...byId.values()]
       // Archived projects are hidden from every active list; they live only on
       // the owner's Archived page (see `listArchived`).
       .filter((entry) => entry.project.archivedAt === undefined)
-      .map((entry) => ({
-        ...entry,
-        lastWorkedAt: lastWorkedByProject.get(entry.project._id),
-      }))
-      // Sort by personal recency *before* slicing so a project the caller just
-      // checked in on (which does not bump project.updatedAt) is never dropped
-      // from the bounded window in favor of a more-recently-edited one.
-      .sort(byPersonalRecency)
+      // Most recently updated first, so the freshest projects surface on top.
+      .sort((a, b) => b.project.updatedAt - a.project.updatedAt)
       .slice(0, MAX_PROJECTS)
   )
-}
-
-/**
- * Order projects by the caller's personal recency: most recently worked first,
- * tie-broken by the project's own `updatedAt`. Projects the caller has never
- * checked in on sort last, regardless of how recently they changed.
- */
-function byPersonalRecency(
-  a: { project: Doc<"projects">; lastWorkedAt?: number },
-  b: { project: Doc<"projects">; lastWorkedAt?: number }
-): number {
-  if (a.lastWorkedAt !== undefined && b.lastWorkedAt !== undefined) {
-    if (b.lastWorkedAt !== a.lastWorkedAt)
-      return b.lastWorkedAt - a.lastWorkedAt
-    return b.project.updatedAt - a.project.updatedAt
-  }
-  if (a.lastWorkedAt !== undefined) return -1
-  if (b.lastWorkedAt !== undefined) return 1
-  return b.project.updatedAt - a.project.updatedAt
 }
 
 export const list = query({
@@ -194,11 +141,9 @@ export const list = query({
   returns: v.array(projectSummary),
   handler: async (ctx) => {
     const { subject } = await actor(ctx)
-    // accessibleProjects already returns personal-recency order.
+    // accessibleProjects already returns most-recently-updated order.
     const projects = await accessibleProjects(ctx, subject)
-    return projects.map(({ project, role, lastWorkedAt }) =>
-      summarize(project, role, lastWorkedAt)
-    )
+    return projects.map(({ project, role }) => summarize(project, role))
   },
 })
 
@@ -250,15 +195,12 @@ export const names = query({
       color: v.optional(v.string()),
       role: v.union(v.literal("owner"), v.literal("editor")),
       openCount: v.number(),
-      // The caller's personal "last worked on" timestamp, surfaced so the nav
-      // can hint at recency too. Undefined until the caller checks in.
-      lastWorkedAt: v.optional(v.number()),
     })
   ),
   handler: async (ctx) => {
     const { subject } = await actor(ctx)
     const projects = await accessibleProjects(ctx, subject)
-    return projects.map(({ project, role, lastWorkedAt }) => {
+    return projects.map(({ project, role }) => {
       const counts = projectCounts(project)
       return {
         _id: project._id,
@@ -267,7 +209,6 @@ export const names = query({
         color: project.color,
         role,
         openCount: counts.todoCount + counts.inProgressCount,
-        lastWorkedAt,
       }
     })
   },
@@ -280,15 +221,8 @@ export const get = query({
     const { subject } = await actor(ctx)
     const project = await ctx.db.get(args.projectId)
     if (!project) return null
-    const workState = await ctx.db
-      .query("projectWorkStates")
-      .withIndex("by_subject_project", (q) =>
-        q.eq("subject", subject).eq("projectId", args.projectId)
-      )
-      .unique()
-    const lastWorkedAt = workState?.lastWorkedAt
     if (project.ownerSubject === subject) {
-      return summarize(project, "owner", lastWorkedAt)
+      return summarize(project, "owner")
     }
     const membership = await ctx.db
       .query("projectMembers")
@@ -297,7 +231,7 @@ export const get = query({
       )
       .unique()
     if (!membership) return null
-    return summarize(project, "editor", lastWorkedAt)
+    return summarize(project, "editor")
   },
 })
 
@@ -359,29 +293,7 @@ export const update = mutation({
       actor: who,
       type: "project.updated",
     })
-    // Editing the project counts as personally working on it (creation does not).
-    await touchProjectWorkState(
-      ctx,
-      who.subject,
-      args.projectId,
-      patch.updatedAt
-    )
     return null
-  },
-})
-
-/**
- * Mark that the caller personally worked on a project right now. Requires
- * access (owner or editor) and only ever touches the caller's own work state,
- * so checking in never disturbs a collaborator's dashboard recency. Writes no
- * shared Activity feed row. Returns the timestamp that was stored.
- */
-export const markWorked = mutation({
-  args: { projectId: v.id("projects") },
-  returns: v.number(),
-  handler: async (ctx, args) => {
-    const { actor: who } = await requireProjectAccess(ctx, args.projectId)
-    return await touchProjectWorkState(ctx, who.subject, args.projectId)
   },
 })
 
@@ -442,9 +354,9 @@ export const remove = mutation({
     for (const invite of invites) await ctx.db.delete(invite._id)
 
     // Remove the project immediately so it disappears from the dashboard, then
-    // delete its tasks and every member's personal work-state row in background
-    // batches. Batching keeps each transaction bounded and, unlike an inline
-    // cap, never silently leaves rows behind for projects with many members.
+    // delete its tasks in background batches. Batching keeps each transaction
+    // bounded and, unlike an inline cap, never silently leaves rows behind for
+    // projects with many tasks.
     await ctx.db.delete(args.projectId)
     await ctx.scheduler.runAfter(0, internal.projects.purgeProjectData, {
       projectId: args.projectId,
@@ -457,22 +369,14 @@ const PURGE_BATCH = 100
 
 /**
  * Background cleanup for a deleted project's child rows. Deletes one batch of
- * personal work states and one batch of tasks per run, rescheduling itself
- * until both are drained. This keeps cleanup uncapped (no orphaned rows for
- * large projects) while each transaction stays within its document limits.
+ * tasks per run, rescheduling itself until they're drained. This keeps cleanup
+ * uncapped (no orphaned rows for large projects) while each transaction stays
+ * within its document limits.
  */
 export const purgeProjectData = internalMutation({
   args: { projectId: v.id("projects") },
   returns: v.null(),
   handler: async (ctx, args) => {
-    // Personal work-state rows (one per member who worked on the project),
-    // reachable by the by_project reverse index.
-    const workStates = await ctx.db
-      .query("projectWorkStates")
-      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
-      .take(PURGE_BATCH)
-    for (const state of workStates) await ctx.db.delete(state._id)
-
     const tasks = await ctx.db
       .query("tasks")
       .withIndex("by_project_position", (q) =>
@@ -481,7 +385,7 @@ export const purgeProjectData = internalMutation({
       .take(PURGE_BATCH)
     for (const task of tasks) await ctx.db.delete(task._id)
 
-    if (workStates.length === PURGE_BATCH || tasks.length === PURGE_BATCH) {
+    if (tasks.length === PURGE_BATCH) {
       await ctx.scheduler.runAfter(0, internal.projects.purgeProjectData, args)
     }
     return null

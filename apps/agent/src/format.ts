@@ -173,9 +173,7 @@ function taskBullet(task: CompactTaskLike) {
 }
 
 function projectBullet(project: CompactProjectLike) {
-  const worked = shortDate(project.lastWorkedAt)
   const bits = [`${project.openTasks} open`, `${project.taskCount} total`, project.role]
-  if (worked) bits.push(`worked ${worked}`)
   return bullet(`${project.name} ${dim(`(${bits.join(", ")})`)}`)
 }
 
@@ -196,7 +194,6 @@ type CompactProjectLike = {
   taskCount: number
   openTasks: number
   updatedAt?: string
-  lastWorkedAt?: string
 }
 type CompactTaskLike = {
   taskId: string
@@ -221,7 +218,6 @@ type CompactActivityLike = {
 /** The `daily_brief` digest as a scannable, sectioned overview. */
 export function formatDailyBrief(brief: {
   projects: number
-  staleProjects: CompactProjectLike[]
   assignedOpenTasks: CompactTaskLike[]
   openTasks: CompactTaskLike[]
   recentActivity: CompactActivityLike[]
@@ -238,8 +234,6 @@ export function formatDailyBrief(brief: {
     })),
     "",
     section("Assigned to you", brief.assignedOpenTasks.map(taskBullet)),
-    "",
-    section("Stale projects", brief.staleProjects.map(projectBullet)),
     "",
     section("Recent activity", brief.recentActivity.map(activityBullet)),
   ].join("\n")
@@ -303,12 +297,6 @@ export function formatTaskDeleted(result: { taskId: string }) {
 /** Confirmation after `move_task_to_project`. */
 export function formatTaskMovedToProject(result: { taskId: string; projectName: string }) {
   return `Moved task to ${bold(result.projectName)}.\n${dim(`Task ${result.taskId}`)}`
-}
-
-/** Confirmation after `check_in_project`. */
-export function formatCheckIn(result: { projectName: string; lastWorkedAt?: string }) {
-  const when = result.lastWorkedAt ? ` ${dim(`(last worked ${shortDate(result.lastWorkedAt)})`)}` : ""
-  return `Checked in on ${bold(result.projectName)}.${when}`
 }
 
 /** Confirmation after `create_project`. */

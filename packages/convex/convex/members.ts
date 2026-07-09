@@ -67,15 +67,6 @@ export const remove = mutation({
     if (!membership) return null
 
     await ctx.db.delete(membership._id)
-    // Drop the removed member's personal recency for this project so it doesn't
-    // linger as an orphaned work-state row once they've lost access.
-    const workState = await ctx.db
-      .query("projectWorkStates")
-      .withIndex("by_subject_project", (q) =>
-        q.eq("subject", args.subject).eq("projectId", args.projectId)
-      )
-      .unique()
-    if (workState) await ctx.db.delete(workState._id)
     // Attribute the entry to the removed member so the feed reads naturally
     // ("X was removed"). They're already deleted, so they won't receive a row.
     await recordActivity(ctx, {
@@ -118,15 +109,6 @@ export const leave = mutation({
     if (!membership) return null
 
     await ctx.db.delete(membership._id)
-    // Clear your own personal recency for the project you're leaving so it
-    // doesn't linger as an orphaned work-state row after you lose access.
-    const workState = await ctx.db
-      .query("projectWorkStates")
-      .withIndex("by_subject_project", (q) =>
-        q.eq("subject", who.subject).eq("projectId", args.projectId)
-      )
-      .unique()
-    if (workState) await ctx.db.delete(workState._id)
     await recordActivity(ctx, {
       project,
       actor: who,

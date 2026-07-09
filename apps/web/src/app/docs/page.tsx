@@ -47,7 +47,6 @@ const projectCommands = `npx neram project list --json
 npx neram project add --name "Project name" --icon rocket --color blue
 npx neram project update --project "Project name" --name "Renamed"
 npx neram project summary --project "Project name" --json
-npx neram project check-in --project "Project name"
 npx neram project rm --project-id PROJECT_ID   # id required; purges tasks`
 
 const mcpStdioCommands = `npx neram login   # sign in first
@@ -84,7 +83,6 @@ move_task
 complete_task
 move_task_to_project
 delete_task
-check_in_project
 create_project
 update_project
 delete_project          # destructive — purges every task`
@@ -95,7 +93,7 @@ const skillsReference = `skills/neram/SKILL.md   # teaches an agent to use Neram
 # loads on demand for tasks like:
 #   login / doctor / daily brief
 #   create / move / complete tasks
-#   check-in / summarize projects
+#   summarize projects
 #   script Neram from a shell or CI with --json
 #   configure an MCP client (Claude, Codex, Cursor)`
 

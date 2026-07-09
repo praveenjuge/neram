@@ -32,7 +32,6 @@ export const schemas = {
     position: z.number().optional(),
   }),
   complete_task: taskRefSchema,
-  check_in_project: projectRefSchema,
   summarize_project: projectRefSchema,
   workspace_status: z.object({}),
   list_projects: z.object({}),
@@ -77,11 +76,6 @@ export const outputSchemas = {
   }),
   move_task: z.object({ taskId: z.string(), status: statusSchema }),
   complete_task: z.object({ taskId: z.string(), status: statusSchema }),
-  check_in_project: z.object({
-    projectId: z.string(),
-    projectName: z.string(),
-    lastWorkedAt: z.string().optional(),
-  }),
   update_task: z.object({ taskId: z.string() }),
   delete_task: z.object({ taskId: z.string(), deleted: z.boolean() }),
   move_task_to_project: z.object({
@@ -104,7 +98,6 @@ type Project = {
   inProgressCount: number
   doneCount: number
   updatedAt: number
-  lastWorkedAt?: number
 }
 type Task = {
   _id: string
@@ -163,7 +156,6 @@ function compactProject(project: Project) {
     taskCount: project.taskCount,
     openTasks: project.todoCount + project.inProgressCount,
     updatedAt: iso(project.updatedAt),
-    lastWorkedAt: iso(project.lastWorkedAt),
   }
 }
 
@@ -215,7 +207,6 @@ export type NeramApi = {
   createProject(args: { name: string; icon?: string; color?: string }): Promise<string>
   updateProject(args: { projectId: string; name?: string; icon?: string; color?: string }): Promise<void>
   removeProject(projectId: string): Promise<void>
-  checkIn(projectId: string): Promise<number>
   status(): Promise<WorkspaceStatus>
 }
 
@@ -268,7 +259,6 @@ export function createConvexApi(convexUrl: string, token: TokenProvider): NeramA
     removeProject: async (projectId) => {
       await mutation(api.projects.remove, { projectId })
     },
-    checkIn: (projectId) => mutation<number>(api.projects.markWorked, { projectId }),
     status: () => query<WorkspaceStatus>(api.agent.status, {}),
   }
 }
@@ -324,10 +314,8 @@ export function createTools(neram: NeramApi) {
       const selected = allProjects.slice(0, projectLimit)
       const boards = await Promise.all(selected.map((p) => neram.tasks(p._id)))
       const openTasks = boards.flat().filter((t) => t.status !== "done").slice(0, 40)
-      const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
       return {
         projects: allProjects.length,
-        staleProjects: allProjects.filter((p) => (p.lastWorkedAt ?? 0) < weekAgo).slice(0, 10).map(compactProject),
         assignedOpenTasks: assigned.filter((t) => t.status !== "done").slice(0, 20).map(compactTask),
         openTasks: openTasks.map(compactTask),
         recentActivity: recent.map(compactActivity),
@@ -360,11 +348,6 @@ export function createTools(neram: NeramApi) {
       const taskId = await resolveTask(input)
       await neram.moveTask({ taskId, status: "done" })
       return { taskId, status: "done" as const }
-    },
-    async check_in_project(raw: z.input<typeof schemas.check_in_project>) {
-      const project = await resolveProject(schemas.check_in_project.parse(raw))
-      const lastWorkedAt = await neram.checkIn(project._id)
-      return { projectId: project._id, projectName: project.name, lastWorkedAt: iso(lastWorkedAt) }
     },
     async summarize_project(raw: z.input<typeof schemas.summarize_project>) {
       const project = await resolveProject(schemas.summarize_project.parse(raw))
