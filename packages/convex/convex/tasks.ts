@@ -283,7 +283,7 @@ export const update = mutation({
 
     await ctx.db.patch(args.taskId, patch)
     // Editing a task counts as activity on its project, so bump the project's
-    // updatedAt to keep it near the top of the recency-ordered project list.
+    // updatedAt to keep it near the top of the updatedAt-ordered project list.
     await ctx.db.patch(current.projectId, { updatedAt: now })
 
     if (newlyAssigned) {

@@ -95,9 +95,9 @@ function cleanColor(color: string) {
  * Ordering is exact within each bounded read: owned projects are read straight
  * off the `by_owner_archived_updated` index in updatedAt order, so the newest
  * owned projects are always included. Shared memberships are read off
- * `by_member` (which has no project-recency key), so if a single caller belongs
- * to more than `MAX_PROJECTS` *shared* projects, the recency ranking of shared
- * projects beyond that bound is best-effort. That cap is far above any real
+ * `by_member` (which has no project-updatedAt key), so if a single caller
+ * belongs to more than `MAX_PROJECTS` *shared* projects, the updatedAt ranking
+ * of shared projects beyond that bound is best-effort. That cap is far above any real
  * per-user project count here; making it exact would require denormalizing each
  * project's `updatedAt` onto every membership row and fanning writes out to all
  * members on every task/project mutation — a hot-path cost not worth paying for
@@ -119,9 +119,9 @@ export async function accessibleProjects(
     .order("desc")
     .take(MAX_PROJECTS)
 
-  // Bounded like the owned read. `by_member` has no project-recency key, so the
-  // exact updatedAt ranking of shared projects past this cap is best-effort (see
-  // the function doc); the cap sits well above any real per-user project count.
+  // Bounded like the owned read. `by_member` has no project-updatedAt key, so
+  // the exact updatedAt ranking of shared projects past this cap is best-effort
+  // (see the function doc); the cap sits well above any real per-user count.
   const memberships = await ctx.db
     .query("projectMembers")
     .withIndex("by_member", (q) => q.eq("subject", subject))

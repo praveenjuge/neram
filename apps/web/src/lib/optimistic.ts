@@ -222,7 +222,7 @@ export function updateTaskOptimistic(projectId: Id<"projects">) {
       })
     )
     // Mirror the server: editing a task bumps its project's updatedAt, so
-    // resort the dashboard list to keep the project's recency order in sync.
+    // resort the dashboard list to keep the project's updatedAt order in sync.
     bumpProjectUpdatedAt(store, projectId, now)
   }
 }

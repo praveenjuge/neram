@@ -1,6 +1,6 @@
 ---
 name: neram
-description: Operate Neram workspaces and connect AI agents to Neram. Use when a user wants an agent to log in with Neram, run workspace diagnostics, get daily briefs, create/move/complete tasks, check in on projects, summarize projects, script Neram from shell/CI with JSON output, or configure Codex, Claude, Cursor, or another MCP client through local stdio or hosted Streamable HTTP at https://neram.praveenjuge.com/mcp.
+description: Operate Neram workspaces and connect AI agents to Neram. Use when a user wants an agent to log in with Neram, run workspace diagnostics, get daily briefs, create/move/complete tasks, summarize projects, script Neram from shell/CI with JSON output, or configure Codex, Claude, Cursor, or another MCP client through local stdio or hosted Streamable HTTP at https://neram.praveenjuge.com/mcp.
 ---
 
 # Neram
