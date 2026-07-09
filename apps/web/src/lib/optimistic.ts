@@ -155,6 +155,7 @@ export function updateTaskOptimistic(projectId: Id<"projects">) {
   ) => {
     const tasks = store.getQuery(api.tasks.list, { projectId })
     if (!tasks) return
+    const now = Date.now()
     store.setQuery(
       api.tasks.list,
       { projectId },
@@ -189,10 +190,20 @@ export function updateTaskOptimistic(projectId: Id<"projects">) {
               : undefined,
           assigneeSubject,
           assigneeName,
-          updatedAt: Date.now(),
+          updatedAt: now,
         }
       })
     )
+    // Mirror the server: editing a task bumps its project's updatedAt, so
+    // resort the dashboard list to keep the project's recency order in sync.
+    patchProjectSummaries(store, projectId, (summary) => ({
+      ...summary,
+      updatedAt: now,
+    }))
+    const list = store.getQuery(api.projects.list, {})
+    if (list) {
+      store.setQuery(api.projects.list, {}, [...list].sort(byUpdatedAt))
+    }
   }
 }
 

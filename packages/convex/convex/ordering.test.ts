@@ -61,3 +61,23 @@ test("creating a task bumps its project to the top of the list", async () => {
   const list = await alice.query(api.projects.list, {})
   expect(list[0]._id).toBe(beta)
 })
+
+test("editing a task bumps its project to the top of the list", async () => {
+  const { alice } = setup()
+  const alpha = await alice.mutation(api.projects.create, { name: "Alpha" })
+  const taskId = await alice.mutation(api.tasks.create, {
+    projectId: alpha,
+    title: "Ship it",
+  })
+  vi.setSystemTime(2_000)
+  const beta = await alice.mutation(api.projects.create, { name: "Beta" })
+  // Beta is now the most recently updated project.
+  expect((await alice.query(api.projects.list, {}))[0]._id).toBe(beta)
+
+  // Editing Alpha's task must bump Alpha's updatedAt so it moves back to top.
+  vi.setSystemTime(3_000)
+  await alice.mutation(api.tasks.update, { taskId, title: "Ship it now" })
+
+  const list = await alice.query(api.projects.list, {})
+  expect(list[0]._id).toBe(alpha)
+})

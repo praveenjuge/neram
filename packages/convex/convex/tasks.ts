@@ -252,7 +252,8 @@ export const update = mutation({
       ctx,
       current.projectId
     )
-    const patch: Partial<Doc<"tasks">> = { updatedAt: Date.now() }
+    const now = Date.now()
+    const patch: Partial<Doc<"tasks">> = { updatedAt: now }
     if (args.title !== undefined) patch.title = cleanTitle(args.title)
     if (args.description !== undefined) {
       patch.description = cleanDescription(args.description)
@@ -281,6 +282,9 @@ export const update = mutation({
     }
 
     await ctx.db.patch(args.taskId, patch)
+    // Editing a task counts as activity on its project, so bump the project's
+    // updatedAt to keep it near the top of the recency-ordered project list.
+    await ctx.db.patch(current.projectId, { updatedAt: now })
 
     if (newlyAssigned) {
       await recordActivity(ctx, {
