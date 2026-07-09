@@ -16,7 +16,6 @@ import {
   Pencil,
   Plus,
   Share2,
-  Sparkles,
 } from "lucide-react"
 import { type ReactNode, useState } from "react"
 
@@ -227,7 +226,14 @@ function AppSidebar() {
             <div className="flex w-full items-center gap-2 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:gap-1">
               <SidebarMenuButton asChild tooltip="Neram">
                 <Link href="/dashboard">
-                  <Sparkles className="text-primary" />
+                  {/* eslint-disable-next-line @next/next/no-img-element -- static brand mark from /public */}
+                  <img
+                    alt=""
+                    className="size-4 shrink-0 rounded-sm"
+                    height={16}
+                    src="/pwa-icon.svg"
+                    width={16}
+                  />
                   <span className="font-medium">Neram</span>
                 </Link>
               </SidebarMenuButton>
@@ -258,11 +264,11 @@ function AppSidebar() {
                 <SidebarMenuButton
                   asChild
                   isActive={pathname === "/tasks"}
-                  tooltip="My Tasks"
+                  tooltip="Tasks"
                 >
                   <Link href="/tasks">
                     <ListTodo />
-                    <span>My Tasks</span>
+                    <span>Tasks</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

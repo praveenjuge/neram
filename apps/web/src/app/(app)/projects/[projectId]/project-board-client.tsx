@@ -3,7 +3,7 @@
 import { useQuery } from "convex-helpers/react/cache"
 import { useMutation } from "convex/react"
 import { ArrowLeft } from "lucide-react"
-import { Fragment, useState } from "react"
+import { useState } from "react"
 import { toast } from "sonner"
 
 import Link from "next/link"
@@ -11,20 +11,16 @@ import { api } from "@neram/convex/api"
 import type { Id } from "@neram/convex/data-model"
 import { messageFromError } from "@/lib/errors"
 import { moveTaskOptimistic } from "@/lib/optimistic"
-import { cn } from "@/lib/utils"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
 
 import {
-  columns,
-  DropIndicator,
   positionFor,
   type Status,
 } from "@/components/project-board/board-shared"
+import { KanbanBoard } from "@/components/project-board/kanban-board"
 import { NewTaskDialog } from "@/components/project-board/new-task-dialog"
-import { TaskCard } from "@/components/project-board/task-card"
 import { TaskDialog } from "@/components/project-board/task-dialog"
 
 export function ProjectBoardClient({ projectId }: { projectId: string }) {
@@ -34,9 +30,6 @@ export function ProjectBoardClient({ projectId }: { projectId: string }) {
   const moveTask = useMutation(api.tasks.move).withOptimisticUpdate(
     moveTaskOptimistic(projectIdArg)
   )
-  const [draggingId, setDraggingId] = useState<Id<"tasks"> | null>(null)
-  const [overColumn, setOverColumn] = useState<Status | null>(null)
-  const [overIndex, setOverIndex] = useState<number | null>(null)
   // The opened task dialog is tracked here (not inside each card) so it stays
   // open when a status change moves the card into a different column, which
   // would otherwise unmount the card and its dialog.
@@ -47,9 +40,6 @@ export function ProjectBoardClient({ projectId }: { projectId: string }) {
     status: Status,
     insertIndex: number
   ) {
-    setOverColumn(null)
-    setOverIndex(null)
-    setDraggingId(null)
     const moving = tasks?.find((item) => item._id === taskId)
     if (!moving) return
     const dest = (tasks ?? [])
@@ -81,135 +71,43 @@ export function ProjectBoardClient({ projectId }: { projectId: string }) {
   if (project === null) {
     return (
       <section className="mx-auto grid w-full max-w-7xl gap-4 p-5">
-          <Button asChild className="w-fit" size="sm" variant="ghost">
-            <Link href="/dashboard">
-              <ArrowLeft /> Back to projects
-            </Link>
-          </Button>
-          <Card className="items-center gap-2 border border-dashed py-12 text-center shadow-none ring-0">
-            <CardContent className="space-y-1">
-              <p className="font-medium">Project not found</p>
-              <p className="text-sm text-muted-foreground">
-                It may have been removed, or the link is incorrect.
-              </p>
-            </CardContent>
-          </Card>
-        </section>
+        <Button asChild className="w-fit" size="sm" variant="ghost">
+          <Link href="/dashboard">
+            <ArrowLeft /> Back to projects
+          </Link>
+        </Button>
+        <Card className="items-center gap-2 border border-dashed py-12 text-center shadow-none ring-0">
+          <CardContent className="space-y-1">
+            <p className="font-medium">Project not found</p>
+            <p className="text-sm text-muted-foreground">
+              It may have been removed, or the link is incorrect.
+            </p>
+          </CardContent>
+        </Card>
+      </section>
     )
   }
 
   return (
     <section className="mx-auto grid w-full max-w-7xl gap-5 p-5">
-        <div className="flex items-center justify-between gap-3">
-          <h1 className="truncate font-heading text-lg font-medium">
-            {project.name}
-          </h1>
-          <NewTaskDialog projectId={projectIdArg} />
-        </div>
-        <div className="grid gap-3 lg:grid-cols-3">
-          {columns.map((column) => {
-            const columnTasks = tasks
-              .filter((task) => task.status === column.key)
-              .sort((a, b) => a.position - b.position)
-            const isOver = overColumn === column.key
-            return (
-              <section
-                aria-label={`${column.label} column`}
-                className={cn(
-                  "flex min-h-72 flex-col gap-3 rounded-[min(var(--radius-4xl),24px)] bg-muted/40 p-3 transition-colors",
-                  isOver && "bg-muted ring-2 ring-primary/40"
-                )}
-                data-testid={`column-${column.key}`}
-                key={column.key}
-                onDragLeave={(event) => {
-                  if (
-                    !event.currentTarget.contains(
-                      event.relatedTarget as Node | null
-                    )
-                  ) {
-                    setOverColumn((current) =>
-                      current === column.key ? null : current
-                    )
-                    setOverIndex(null)
-                  }
-                }}
-                onDragOver={(event) => {
-                  if (!draggingId) return
-                  event.preventDefault()
-                  event.dataTransfer.dropEffect = "move"
-                  if (overColumn !== column.key) setOverColumn(column.key)
-                }}
-                onDrop={(event) => {
-                  event.preventDefault()
-                  const taskId = event.dataTransfer.getData(
-                    "text/plain"
-                  ) as Id<"tasks">
-                  const insertIndex =
-                    overColumn === column.key && overIndex !== null
-                      ? overIndex
-                      : columnTasks.length
-                  if (taskId) void handleDrop(taskId, column.key, insertIndex)
-                }}
-              >
-                <div className="flex items-center justify-between px-1">
-                  <h2 className="flex items-center gap-2 text-sm font-medium">
-                    <column.icon className="size-4 text-muted-foreground" />
-                    {column.label}
-                  </h2>
-                  <Badge variant="secondary">{columnTasks.length}</Badge>
-                </div>
-                <div className="flex flex-1 flex-col gap-2">
-                  {columnTasks.map((task, index) => (
-                    <Fragment key={task._id}>
-                      {isOver && overIndex === index ? <DropIndicator /> : null}
-                      <TaskCard
-                        isDragging={draggingId === task._id}
-                        onDragEnd={() => {
-                          setDraggingId(null)
-                          setOverColumn(null)
-                          setOverIndex(null)
-                        }}
-                        onDragStart={() => setDraggingId(task._id)}
-                        onHover={() => {
-                          setOverColumn(column.key)
-                          setOverIndex(index)
-                        }}
-                        onOpen={() => setOpenTaskId(task._id)}
-                        task={task}
-                      />
-                    </Fragment>
-                  ))}
-                  {isOver && overIndex === columnTasks.length ? (
-                    <DropIndicator />
-                  ) : null}
-                  {columnTasks.length === 0 ? (
-                    <p className="rounded-2xl border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
-                      Nothing here yet.
-                    </p>
-                  ) : null}
-                  <div
-                    aria-hidden
-                    className="min-h-8 flex-1"
-                    onDragOver={(event) => {
-                      if (!draggingId) return
-                      event.preventDefault()
-                      event.dataTransfer.dropEffect = "move"
-                      setOverColumn(column.key)
-                      setOverIndex(columnTasks.length)
-                    }}
-                  />
-                </div>
-              </section>
-            )
-          })}
-        </div>
-        <TaskDialog
-          onOpenChange={(next) => {
-            if (!next) setOpenTaskId(null)
-          }}
-          open={openTaskId !== null}
-          task={tasks.find((task) => task._id === openTaskId) ?? null}
-        />
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="truncate font-heading text-lg font-medium">
+          {project.name}
+        </h1>
+        <NewTaskDialog projectId={projectIdArg} />
+      </div>
+      <KanbanBoard
+        onDrop={handleDrop}
+        onOpenTask={setOpenTaskId}
+        tasks={tasks}
+      />
+      <TaskDialog
+        onOpenChange={(next) => {
+          if (!next) setOpenTaskId(null)
+        }}
+        open={openTaskId !== null}
+        task={tasks.find((task) => task._id === openTaskId) ?? null}
+      />
     </section>
   )
 }

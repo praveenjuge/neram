@@ -15,7 +15,7 @@ import { UserAvatar } from "@/components/user-avatar"
 export type TaskStatus = "todo" | "inProgress" | "done"
 
 // Single source of truth for how each status reads: the same icon + label is
-// reused on the board columns, the My Tasks list, and anywhere a task shows.
+// reused on the board columns, the Tasks list, and anywhere a task shows.
 const statusMeta: Record<TaskStatus, { label: string; icon: LucideIcon }> = {
   todo: { label: "Todo", icon: Circle },
   inProgress: { label: "In Progress", icon: CircleDot },
@@ -24,7 +24,7 @@ const statusMeta: Record<TaskStatus, { label: string; icon: LucideIcon }> = {
 
 /**
  * A task rendered as a single horizontal line, reused everywhere a task is
- * listed (board cards, My Tasks, etc.). Layout, left to right:
+ * listed (board cards, Tasks list, etc.). Layout, left to right:
  * status icon → title → due date → project (only when `project` is given,
  * i.e. outside a single-project view) → assignee avatar (only when assigned).
  */

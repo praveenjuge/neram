@@ -1,7 +1,7 @@
 import { TasksClient } from "@/app/(app)/tasks/tasks-client"
 
 export const metadata = {
-  title: "My Tasks",
+  title: "Tasks",
 }
 
 export const instant = false

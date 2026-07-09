@@ -7,6 +7,7 @@ import type { Id } from "@neram/convex/data-model"
 type ProjectSummary = FunctionReturnType<typeof api.projects.list>[number]
 type ProjectName = FunctionReturnType<typeof api.projects.names>[number]
 type TaskItem = FunctionReturnType<typeof api.tasks.list>[number]
+type TaskWithProject = FunctionReturnType<typeof api.tasks.listAll>[number]
 type Status = TaskItem["status"]
 
 type CountDeltas = Partial<
@@ -20,6 +21,40 @@ const statusCountKey: Record<
   todo: "todoCount",
   inProgress: "inProgressCount",
   done: "doneCount",
+}
+
+/** Args the Tasks page and callers may use for `tasks.listAll`. */
+const LIST_ALL_ARG_VARIANTS: Array<{ assignedToMe?: boolean }> = [
+  { assignedToMe: true },
+  { assignedToMe: false },
+  {},
+]
+
+/**
+ * Apply a transform to a task in every cached `tasks.listAll` variant. Return
+ * `null` from `update` to remove the task from that list.
+ */
+function patchListAllTasks(
+  store: OptimisticLocalStore,
+  taskId: Id<"tasks">,
+  update: (task: TaskWithProject) => TaskWithProject | null
+) {
+  for (const args of LIST_ALL_ARG_VARIANTS) {
+    const tasks = store.getQuery(api.tasks.listAll, args)
+    if (!tasks) continue
+    let changed = false
+    const next: TaskWithProject[] = []
+    for (const task of tasks) {
+      if (task._id !== taskId) {
+        next.push(task)
+        continue
+      }
+      changed = true
+      const updated = update(task)
+      if (updated) next.push(updated)
+    }
+    if (changed) store.setQuery(api.tasks.listAll, args, next)
+  }
 }
 
 function applyCounts(
@@ -97,8 +132,8 @@ export function moveTaskOptimistic(projectId: Id<"projects">) {
   ) => {
     const tasks = store.getQuery(api.tasks.list, { projectId })
     let from: Status | undefined
+    const position = args.position ?? Date.now()
     if (tasks) {
-      const position = args.position ?? Date.now()
       const next = tasks.map((task) => {
         if (task._id === args.taskId) {
           from = task.status
@@ -111,6 +146,17 @@ export function moveTaskOptimistic(projectId: Id<"projects">) {
       next.sort((a, b) => a.position - b.position)
       store.setQuery(api.tasks.list, { projectId }, next)
     }
+
+    // Keep the cross-project Tasks board in sync when it's cached.
+    patchListAllTasks(store, args.taskId, (task) => {
+      if (!from) from = task.status
+      return {
+        ...task,
+        status: args.status,
+        position,
+        updatedAt: Date.now(),
+      }
+    })
 
     if (from && from !== args.status) {
       const deltas: CountDeltas = {}
@@ -180,47 +226,52 @@ export function updateTaskOptimistic(projectId: Id<"projects">) {
       assigneeName?: string
     }
   ) => {
-    const tasks = store.getQuery(api.tasks.list, { projectId })
-    if (!tasks) return
     const now = Date.now()
-    store.setQuery(
-      api.tasks.list,
-      { projectId },
-      tasks.map((task) => {
-        if (task._id !== args.taskId) return task
-        // Mirror the server: an empty assigneeSubject clears the assignment,
-        // an omitted one leaves it unchanged, anything else sets it.
-        let assigneeSubject = task.assigneeSubject
-        let assigneeName = task.assigneeName
-        if (args.assigneeSubject !== undefined) {
-          if (args.assigneeSubject === "") {
-            assigneeSubject = undefined
-            assigneeName = undefined
-          } else {
-            assigneeSubject = args.assigneeSubject
-            assigneeName = args.assigneeName
-          }
+    function applyEdit<T extends TaskItem | TaskWithProject>(task: T): T {
+      // Mirror the server: an empty assigneeSubject clears the assignment,
+      // an omitted one leaves it unchanged, anything else sets it.
+      let assigneeSubject = task.assigneeSubject
+      let assigneeName = task.assigneeName
+      if (args.assigneeSubject !== undefined) {
+        if (args.assigneeSubject === "") {
+          assigneeSubject = undefined
+          assigneeName = undefined
+        } else {
+          assigneeSubject = args.assigneeSubject
+          assigneeName = args.assigneeName
         }
-        return {
-          ...task,
-          title: args.title ?? task.title,
-          // Empty strings clear the field, mirroring the server's cleaners.
-          description: args.description
-            ? args.description
-            : args.description === undefined
-              ? task.description
-              : undefined,
-          dueDate: args.dueDate
-            ? args.dueDate
-            : args.dueDate === undefined
-              ? task.dueDate
-              : undefined,
-          assigneeSubject,
-          assigneeName,
-          updatedAt: now,
-        }
-      })
-    )
+      }
+      return {
+        ...task,
+        title: args.title ?? task.title,
+        // Empty strings clear the field, mirroring the server's cleaners.
+        description: args.description
+          ? args.description
+          : args.description === undefined
+            ? task.description
+            : undefined,
+        dueDate: args.dueDate
+          ? args.dueDate
+          : args.dueDate === undefined
+            ? task.dueDate
+            : undefined,
+        assigneeSubject,
+        assigneeName,
+        updatedAt: now,
+      }
+    }
+
+    const tasks = store.getQuery(api.tasks.list, { projectId })
+    if (tasks) {
+      store.setQuery(
+        api.tasks.list,
+        { projectId },
+        tasks.map((task) =>
+          task._id === args.taskId ? applyEdit(task) : task
+        )
+      )
+    }
+    patchListAllTasks(store, args.taskId, (task) => applyEdit(task))
     // Mirror the server: editing a task bumps its project's updatedAt, so
     // resort the dashboard list to keep the project's updatedAt order in sync.
     bumpProjectUpdatedAt(store, projectId, now)
@@ -231,13 +282,15 @@ export function updateTaskOptimistic(projectId: Id<"projects">) {
 export function removeTaskOptimistic(projectId: Id<"projects">) {
   return (store: OptimisticLocalStore, args: { taskId: Id<"tasks"> }) => {
     const tasks = store.getQuery(api.tasks.list, { projectId })
-    if (!tasks) return
-    const removed = tasks.find((task) => task._id === args.taskId)
-    store.setQuery(
-      api.tasks.list,
-      { projectId },
-      tasks.filter((task) => task._id !== args.taskId)
-    )
+    const removed = tasks?.find((task) => task._id === args.taskId)
+    if (tasks) {
+      store.setQuery(
+        api.tasks.list,
+        { projectId },
+        tasks.filter((task) => task._id !== args.taskId)
+      )
+    }
+    patchListAllTasks(store, args.taskId, () => null)
     if (removed) {
       const deltas: CountDeltas = { taskCount: -1 }
       deltas[statusCountKey[removed.status]] = -1
@@ -314,6 +367,20 @@ export function changeProjectTaskOptimistic(sourceProjectId: Id<"projects">) {
         applyCounts(summary, deltas)
       )
       bumpProjectUpdatedAt(store, destinationProjectId, now)
+
+      // Keep the cross-project Tasks board in sync: update project fields or
+      // drop the card if the destination isn't in the names cache yet.
+      const names = store.getQuery(api.projects.names, {})
+      const dest = names?.find((project) => project._id === destinationProjectId)
+      patchListAllTasks(store, args.taskId, (task) => ({
+        ...task,
+        projectId: destinationProjectId,
+        projectName: dest?.name ?? task.projectName,
+        projectIcon: dest?.icon,
+        projectColor: dest?.color,
+        position: now,
+        updatedAt: now,
+      }))
     }
   }
 }

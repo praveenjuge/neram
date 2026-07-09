@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils"
 import { Card, CardContent } from "@/components/ui/card"
 import { TaskItem } from "@/components/task-item"
 
-import type { Task } from "./board-shared"
+import type { BoardTask } from "./board-shared"
 
 export function TaskCard({
   task,
@@ -11,13 +11,16 @@ export function TaskCard({
   onDragEnd,
   onHover,
   onOpen,
+  showProject = false,
 }: {
-  task: Task
+  task: BoardTask
   isDragging: boolean
   onDragStart: () => void
   onDragEnd: () => void
   onHover: () => void
   onOpen: () => void
+  /** Show the project chip (used on the cross-project Tasks board). */
+  showProject?: boolean
 }) {
   return (
     <Card
@@ -54,6 +57,15 @@ export function TaskCard({
         <TaskItem
           assigneeName={task.assigneeName}
           dueDate={task.dueDate}
+          project={
+            showProject && task.projectName
+              ? {
+                  name: task.projectName,
+                  icon: task.projectIcon,
+                  color: task.projectColor,
+                }
+              : undefined
+          }
           status={task.status}
           title={task.title}
         />

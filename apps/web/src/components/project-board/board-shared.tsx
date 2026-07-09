@@ -11,7 +11,19 @@ export const columns = [
 ] as const
 
 export type Status = (typeof columns)[number]["key"]
+
+/** A board card from a single-project `tasks.list` query. */
 export type Task = FunctionReturnType<typeof api.tasks.list>[number]
+
+/**
+ * A board card that may also carry project display fields (from
+ * `tasks.listAll` on the cross-project Tasks page).
+ */
+export type BoardTask = Task & {
+  projectName?: string
+  projectIcon?: string
+  projectColor?: string
+}
 
 /**
  * Computes the fractional `position` for a task dropped at `insertIndex` within
@@ -19,7 +31,7 @@ export type Task = FunctionReturnType<typeof api.tasks.list>[number]
  * still contain the moving task when reordering within the same column).
  */
 export function positionFor(
-  dest: Task[],
+  dest: Array<{ _id: Id<"tasks">; position: number }>,
   insertIndex: number,
   movingId: Id<"tasks">
 ) {

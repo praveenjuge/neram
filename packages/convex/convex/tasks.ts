@@ -106,7 +106,7 @@ export const list = query({
   },
 })
 
-// Each task in the cross-project "My Tasks" list carries its project's display
+// Each task in the cross-project Tasks list carries its project's display
 // fields so the page can show where the task lives without a second lookup.
 const taskWithProject = v.object({
   _id: v.id("tasks"),
@@ -126,16 +126,19 @@ const taskWithProject = v.object({
   updatedAt: v.number(),
 })
 
-// Every task assigned to the caller across the projects they can see (owned +
-// shared), flattened into a single list for the "My Tasks" page. We read each
-// project's board with the same per-project cap as `list`, keep only the
-// caller's assigned tasks, then sort by most recent update so the freshest work
-// surfaces first.
+// Tasks across every project the caller can see (owned + shared), flattened
+// into a single list. When `assignedToMe` is true (the default), only tasks
+// assigned to the caller are returned. We read each project's board with the
+// same per-project cap as `list`, then sort by most recent update so the
+// freshest work surfaces first.
 export const listAll = query({
-  args: {},
+  args: {
+    assignedToMe: v.optional(v.boolean()),
+  },
   returns: v.array(taskWithProject),
-  handler: async (ctx) => {
+  handler: async (ctx, args) => {
     const { subject } = await actor(ctx)
+    const onlyMine = args.assignedToMe ?? true
     const projects = await accessibleProjects(ctx, subject)
     const results: Array<
       ReturnType<typeof publicTask> & {
@@ -150,8 +153,7 @@ export const listAll = query({
         .withIndex("by_project_position", (q) => q.eq("projectId", project._id))
         .take(MAX_TASKS)
       for (const taskDoc of tasks) {
-        // My Tasks shows only what's assigned to the caller.
-        if (taskDoc.assigneeSubject !== subject) continue
+        if (onlyMine && taskDoc.assigneeSubject !== subject) continue
         results.push({
           ...publicTask(taskDoc),
           projectName: project.name,
