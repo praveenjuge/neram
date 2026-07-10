@@ -245,6 +245,60 @@ function NativeLinkedThread({
   return (
     <View style={{ gap: 8 }}>
       <InlineMeta>Linked thread</InlineMeta>
+      {result.nextCommentId ? (
+        <NativeOlderAncestry
+          currentSubject={currentSubject}
+          isOwner={isOwner}
+          members={members}
+          startCommentId={result.nextCommentId}
+          targetCommentId={targetCommentId}
+        />
+      ) : null}
+      {result.comments.map((comment, index) => (
+        <NativeCommentNode
+          comment={comment}
+          currentSubject={currentSubject}
+          depth={index}
+          isOwner={isOwner}
+          key={comment._id}
+          members={members}
+          targetCommentId={targetCommentId}
+        />
+      ))}
+    </View>
+  )
+}
+
+function NativeOlderAncestry({
+  targetCommentId,
+  startCommentId,
+  members,
+  currentSubject,
+  isOwner,
+}: {
+  targetCommentId: Id<"taskComments">
+  startCommentId: Id<"taskComments">
+  members: Member[]
+  currentSubject?: string
+  isOwner: boolean
+}) {
+  const result = useQuery(api.taskComments.getAncestry, {
+    commentId: targetCommentId,
+    startCommentId,
+    limit: 100,
+  })
+  if (!result) return <InlineMeta>Loading older ancestry…</InlineMeta>
+  return (
+    <View style={{ gap: 8 }}>
+      {result.nextCommentId ? (
+        <NativeOlderAncestry
+          currentSubject={currentSubject}
+          isOwner={isOwner}
+          members={members}
+          startCommentId={result.nextCommentId}
+          targetCommentId={targetCommentId}
+        />
+      ) : null}
       {result.comments.map((comment, index) => (
         <NativeCommentNode
           comment={comment}

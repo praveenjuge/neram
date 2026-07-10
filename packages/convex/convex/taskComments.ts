@@ -322,6 +322,30 @@ export const edit = mutation({
     })
     const now = await touchTask(ctx, task)
     await ctx.db.patch(current._id, { body, mentions, updatedAt: now })
+    const previouslyMentioned = new Set(
+      current.mentions.map((item) => item.subject)
+    )
+    const notified = new Set<string>()
+    for (const item of mentions) {
+      if (
+        item.subject === actor.subject ||
+        previouslyMentioned.has(item.subject) ||
+        notified.has(item.subject)
+      ) {
+        continue
+      }
+      notified.add(item.subject)
+      await recordTargetedActivity(ctx, {
+        subject: item.subject,
+        project,
+        actor,
+        type: "comment.mentioned",
+        taskId: task._id,
+        taskTitle: task.title,
+        commentId: current._id,
+        commentExcerpt: excerpt(body),
+      })
+    }
     return null
   },
 })
