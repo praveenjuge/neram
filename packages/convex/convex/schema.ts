@@ -17,8 +17,17 @@ export const activityType = v.union(
   v.literal("project.updated"),
   v.literal("member.joined"),
   v.literal("member.left"),
-  v.literal("member.removed")
+  v.literal("member.removed"),
+  v.literal("comment.mentioned"),
+  v.literal("comment.replied")
 )
+
+export const mention = v.object({
+  start: v.number(),
+  length: v.number(),
+  subject: v.string(),
+  label: v.string(),
+})
 
 export default defineSchema({
   projects: defineTable({
@@ -77,6 +86,41 @@ export default defineSchema({
     // Access/order key keyed only off the project, so a collaborator who does
     // not know the owner's subject can still read and order the board.
     .index("by_project_position", ["projectId", "position"]),
+  subtasks: defineTable({
+    taskId: v.id("tasks"),
+    title: v.string(),
+    completed: v.boolean(),
+    position: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_task_position", ["taskId", "position"]),
+  taskComments: defineTable({
+    taskId: v.id("tasks"),
+    parentCommentId: v.optional(v.id("taskComments")),
+    rootCommentId: v.optional(v.id("taskComments")),
+    authorSubject: v.string(),
+    authorName: v.string(),
+    body: v.string(),
+    mentions: v.array(mention),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_task_and_parent_and_created", [
+      "taskId",
+      "parentCommentId",
+      "createdAt",
+    ])
+    .index("by_task_and_created", ["taskId", "createdAt"]),
+  taskStats: defineTable({
+    taskId: v.id("tasks"),
+    projectId: v.id("projects"),
+    totalSubtasks: v.number(),
+    completedSubtasks: v.number(),
+    activeCommentCount: v.number(),
+  })
+    .index("by_task", ["taskId"])
+    .index("by_project_and_task", ["projectId", "taskId"]),
   // Non-owner collaborators on a project. The owner is never stored here; their
   // membership is implicit via projects.ownerSubject.
   projectMembers: defineTable({
@@ -109,6 +153,9 @@ export default defineSchema({
     projectName: v.string(),
     type: activityType,
     taskTitle: v.optional(v.string()),
+    taskId: v.optional(v.id("tasks")),
+    commentId: v.optional(v.id("taskComments")),
+    commentExcerpt: v.optional(v.string()),
     toStatus: v.optional(status),
     // For task.assigned rows: who the task was assigned to. The feed compares
     // assigneeSubject against the recipient (subject) to say "to you".

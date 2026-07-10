@@ -148,6 +148,9 @@ export async function recordActivity(
     actor: Actor
     type: ActivityType
     taskTitle?: string
+    taskId?: Id<"tasks">
+    commentId?: Id<"taskComments">
+    commentExcerpt?: string
     toStatus?: Doc<"tasks">["status"]
     assigneeSubject?: string
     assigneeName?: string
@@ -173,12 +176,44 @@ export async function recordActivity(
       projectName: args.project.name,
       type: args.type,
       taskTitle: args.taskTitle,
+      taskId: args.taskId,
+      commentId: args.commentId,
+      commentExcerpt: args.commentExcerpt,
       toStatus: args.toStatus,
       assigneeSubject: args.assigneeSubject,
       assigneeName: args.assigneeName,
       createdAt: now,
     })
   }
+}
+
+/** Write one targeted activity row without broadcasting ordinary comment work. */
+export async function recordTargetedActivity(
+  ctx: MutationCtx,
+  args: {
+    subject: string
+    project: Doc<"projects">
+    actor: Actor
+    type: "comment.mentioned" | "comment.replied"
+    taskId: Id<"tasks">
+    taskTitle: string
+    commentId: Id<"taskComments">
+    commentExcerpt: string
+  }
+) {
+  await ctx.db.insert("activity", {
+    subject: args.subject,
+    actorSubject: args.actor.subject,
+    actorName: args.actor.name,
+    projectId: args.project._id,
+    projectName: args.project.name,
+    type: args.type,
+    taskTitle: args.taskTitle,
+    taskId: args.taskId,
+    commentId: args.commentId,
+    commentExcerpt: args.commentExcerpt,
+    createdAt: Date.now(),
+  })
 }
 
 export type TaskStatus = Doc<"tasks">["status"]

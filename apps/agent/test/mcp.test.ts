@@ -16,13 +16,26 @@ function fakeApi(overrides: Partial<NeramApi> = {}): NeramApi {
       { _id: "pb", name: "Agent Ops", role: "owner" as const, taskCount: 0, todoCount: 0, inProgressCount: 0, doneCount: 0, updatedAt: 1 },
     ]),
     tasks: vi.fn(async () => []),
+    task: vi.fn(async () => null),
+    projectMembers: vi.fn(async () => []),
     assignedTasks: vi.fn(async () => []),
     activity: vi.fn(async () => []),
     createTask: vi.fn(async () => "tc"),
     updateTask: vi.fn(async () => undefined),
     moveTask: vi.fn(async () => undefined),
     changeTaskProject: vi.fn(async () => undefined),
-    removeTask: vi.fn(async () => undefined),
+    removeTask: vi.fn(async () => ({ subtaskCount: 0, commentCount: 0 })),
+    subtasks: vi.fn(async () => []),
+    createSubtask: vi.fn(async () => "st"),
+    renameSubtask: vi.fn(async () => undefined),
+    setSubtaskCompleted: vi.fn(async () => undefined),
+    reorderSubtask: vi.fn(async () => undefined),
+    removeSubtask: vi.fn(async () => undefined),
+    comments: vi.fn(async () => ({ page: [], isDone: true, continueCursor: "" })),
+    createComment: vi.fn(async () => "co"),
+    replyToComment: vi.fn(async () => "cr"),
+    editComment: vi.fn(async () => undefined),
+    removeComment: vi.fn(async () => undefined),
     createProject: vi.fn(async () => "pnew"),
     updateProject: vi.fn(async () => undefined),
     removeProject: vi.fn(async () => undefined),
@@ -64,6 +77,19 @@ describe("neram mcp server", () => {
         "create_project",
         "update_project",
         "delete_project",
+        "get_task",
+        "list_project_members",
+        "list_subtasks",
+        "create_subtask",
+        "rename_subtask",
+        "set_subtask_completed",
+        "reorder_subtask",
+        "delete_subtask",
+        "list_task_comments",
+        "create_comment",
+        "reply_to_comment",
+        "edit_comment",
+        "delete_comment",
       ]))
     } finally {
       await client.close()
@@ -98,6 +124,11 @@ describe("neram mcp server", () => {
       expect(byName.update_task?.idempotentHint).toBe(true)
       expect(byName.delete_task?.destructiveHint).toBe(true)
       expect(byName.delete_project?.destructiveHint).toBe(true)
+      expect(byName.get_task?.readOnlyHint).toBe(true)
+      expect(byName.list_task_comments?.readOnlyHint).toBe(true)
+      expect(byName.create_comment?.idempotentHint).not.toBe(true)
+      expect(byName.rename_subtask?.idempotentHint).toBe(true)
+      expect(byName.delete_comment?.destructiveHint).toBe(true)
     } finally {
       await client.close()
       await server.close()

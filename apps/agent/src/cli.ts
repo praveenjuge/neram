@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 import { Command } from "commander"
 
-import { createTools, toAgentError } from "./agent.js"
+import { createTools, parseInlineMentions, toAgentError } from "./agent.js"
 import { authClient, claims, loadPublicConfig, login, logout } from "./auth.js"
 import {
   formatActivity,
   formatCaptureTask,
+  formatComments,
+  formatCreated,
   formatDailyBrief,
   formatDoctor,
   formatError,
@@ -15,13 +17,16 @@ import {
   formatProjectCreated,
   formatProjectDeleted,
   formatProjectList,
+  formatProjectMembers,
   formatProjectSummary,
   formatProjectUpdated,
   formatTaskDeleted,
+  formatTaskDetail,
   formatTaskList,
   formatTaskMoved,
   formatTaskMovedToProject,
   formatTaskUpdated,
+  formatSubtasks,
   formatWhoami,
   loginPayload,
   logoutPayload,
@@ -225,6 +230,14 @@ task.command("list")
     const result = await (await tools()).list_tasks({ ...projectRef(opts), status: opts.status })
     emit(opts, formatTaskList(result), result)
   }))
+task.command("show")
+  .description("Show one task with child counts")
+  .requiredOption("--task-id <id>")
+  .option("--json")
+  .action((opts) => wrap(opts, async () => {
+    const result = await (await tools()).get_task({ taskId: opts.taskId })
+    emit(opts, formatTaskDetail(result), result)
+  }))
 task.command("move")
   .description("Move or reorder a task by status")
   .requiredOption("--status <todo|inProgress|done>")
@@ -233,12 +246,14 @@ task.command("move")
   .option("--project-id <id>")
   .option("-t, --title <title>")
   .option("--position <number>", "Fractional board position.", Number.parseFloat)
+  .option("--confirm-incomplete-subtasks")
   .option("--json")
   .action((opts) => wrap(opts, async () => {
     const result = await (await tools()).move_task({
       ...taskRef(opts),
       status: opts.status,
       position: opts.position,
+      confirmIncompleteSubtasks: opts.confirmIncompleteSubtasks,
     })
     emit(opts, formatTaskMoved(result), result)
   }))
@@ -248,9 +263,13 @@ task.command("done")
   .option("-p, --project <name>")
   .option("--project-id <id>")
   .option("-t, --title <title>")
+  .option("--confirm-incomplete-subtasks")
   .option("--json")
   .action((opts) => wrap(opts, async () => {
-    const result = await (await tools()).complete_task(taskRef(opts))
+    const result = await (await tools()).complete_task({
+      ...taskRef(opts),
+      confirmIncompleteSubtasks: opts.confirmIncompleteSubtasks,
+    })
     emit(opts, formatTaskMoved(result), result)
   }))
 task.command("update")
@@ -282,10 +301,136 @@ task.command("rm")
   .option("-p, --project <name>")
   .option("--project-id <id>")
   .option("-t, --title <title>")
+  .option("--confirm-cascade")
   .option("--json")
   .action((opts) => wrap(opts, async () => {
-    const result = await (await tools()).delete_task(taskRef(opts))
+    const result = await (await tools()).delete_task({
+      ...taskRef(opts),
+      confirmCascade: opts.confirmCascade,
+    })
     emit(opts, formatTaskDeleted(result), result)
+  }))
+
+const subtask = task.command("subtask").description("Manage one-level subtasks")
+subtask.command("list")
+  .requiredOption("--task-id <id>")
+  .option("--hide-completed")
+  .option("--json")
+  .action((opts) => wrap(opts, async () => {
+    const result = await (await tools()).list_subtasks({
+      taskId: opts.taskId,
+      hideCompleted: opts.hideCompleted,
+    })
+    emit(opts, formatSubtasks(result), result)
+  }))
+subtask.command("add")
+  .requiredOption("--task-id <id>")
+  .requiredOption("--title <title>")
+  .option("--json")
+  .action((opts) => wrap(opts, async () => {
+    const result = await (await tools()).create_subtask(opts)
+    emit(opts, formatCreated("Created subtask", result.subtaskId), result)
+  }))
+subtask.command("rename")
+  .requiredOption("--subtask-id <id>")
+  .requiredOption("--title <title>")
+  .option("--json")
+  .action((opts) => wrap(opts, async () => {
+    const result = await (await tools()).rename_subtask(opts)
+    emit(opts, formatCreated("Renamed subtask", result.subtaskId), result)
+  }))
+for (const [name, completed] of [["done", true], ["reopen", false]] as const) {
+  subtask.command(name)
+    .requiredOption("--subtask-id <id>")
+    .option("--json")
+    .action((opts) => wrap(opts, async () => {
+      const result = await (await tools()).set_subtask_completed({
+        subtaskId: opts.subtaskId,
+        completed,
+      })
+      emit(
+        opts,
+        formatCreated(completed ? "Completed subtask" : "Reopened subtask", result.subtaskId),
+        result
+      )
+    }))
+}
+subtask.command("move")
+  .requiredOption("--subtask-id <id>")
+  .option("--before-id <id>")
+  .option("--after-id <id>")
+  .option("--json")
+  .action((opts) => wrap(opts, async () => {
+    const result = await (await tools()).reorder_subtask({
+      subtaskId: opts.subtaskId,
+      beforeSubtaskId: opts.beforeId,
+      afterSubtaskId: opts.afterId,
+    })
+    emit(opts, formatCreated("Moved subtask", result.subtaskId), result)
+  }))
+subtask.command("rm")
+  .requiredOption("--subtask-id <id>")
+  .option("--json")
+  .action((opts) => wrap(opts, async () => {
+    const result = await (await tools()).delete_subtask(opts)
+    emit(opts, formatCreated("Deleted subtask", result.subtaskId), result)
+  }))
+
+const comment = task.command("comment").description("Manage threaded task comments")
+comment.command("list")
+  .requiredOption("--task-id <id>")
+  .option("--parent-comment-id <id>")
+  .option("--limit <n>", "Page size (1-20).", toInt)
+  .option("--cursor <cursor>")
+  .option("--json")
+  .action((opts) => wrap(opts, async () => {
+    const result = await (await tools()).list_task_comments({
+      taskId: opts.taskId,
+      parentCommentId: opts.parentCommentId,
+      pageSize: opts.limit,
+      cursor: opts.cursor,
+    })
+    emit(opts, formatComments(result), result)
+  }))
+comment.command("add")
+  .requiredOption("--task-id <id>")
+  .requiredOption("--body <text>")
+  .option("--json")
+  .action((opts) => wrap(opts, async () => {
+    const result = await (await tools()).create_comment({
+      taskId: opts.taskId,
+      segments: parseInlineMentions(opts.body),
+    })
+    emit(opts, formatCreated("Posted comment", result.commentId), result)
+  }))
+comment.command("reply")
+  .requiredOption("--comment-id <id>")
+  .requiredOption("--body <text>")
+  .option("--json")
+  .action((opts) => wrap(opts, async () => {
+    const result = await (await tools()).reply_to_comment({
+      commentId: opts.commentId,
+      segments: parseInlineMentions(opts.body),
+    })
+    emit(opts, formatCreated("Posted reply", result.commentId), result)
+  }))
+comment.command("edit")
+  .requiredOption("--comment-id <id>")
+  .requiredOption("--body <text>")
+  .option("--json")
+  .action((opts) => wrap(opts, async () => {
+    const result = await (await tools()).edit_comment({
+      commentId: opts.commentId,
+      segments: parseInlineMentions(opts.body),
+    })
+    emit(opts, formatCreated("Edited comment", result.commentId), result)
+  }))
+comment.command("rm")
+  .requiredOption("--comment-id <id>")
+  .option("--json")
+  .action((opts) => wrap(opts, async () => {
+    const result = await (await tools()).delete_comment(opts)
+    emit(opts, formatCreated("Deleted comment", result.commentId), result)
   }))
 task.command("move-to")
   .description("Move a task to another project")
@@ -312,6 +457,16 @@ project.command("list")
   .action((opts) => wrap(opts, async () => {
     const result = await (await tools()).list_projects({})
     emit(opts, formatProjectList(result), result)
+  }))
+project.command("members")
+  .description("List project member subjects for mentions")
+  .requiredOption("--project-id <id>")
+  .option("--json")
+  .action((opts) => wrap(opts, async () => {
+    const result = await (await tools()).list_project_members({
+      projectId: opts.projectId,
+    })
+    emit(opts, formatProjectMembers(result), result)
   }))
 project.command("add")
   .description("Create a new project")

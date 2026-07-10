@@ -1,7 +1,8 @@
 import { ConvexError, v } from "convex/values"
 
+import { internal } from "./_generated/api"
 import type { Doc } from "./_generated/dataModel"
-import { mutation, query } from "./_generated/server"
+import { internalMutation, mutation, query } from "./_generated/server"
 import {
   actor,
   projectCounts,
@@ -14,6 +15,12 @@ import {
 } from "./model"
 import { accessibleProjects } from "./projects"
 import { status } from "./schema"
+import {
+  taskCounts,
+  taskStats,
+  unfinishedSubtasks,
+  type TaskCounts,
+} from "./taskModel"
 
 // Upper bound for a single board load. A kanban board renders every card, so we
 // don't paginate, but we cap the read so the query stays bounded as data grows.
@@ -32,9 +39,12 @@ const task = v.object({
   position: v.number(),
   createdAt: v.number(),
   updatedAt: v.number(),
+  totalSubtasks: v.number(),
+  completedSubtasks: v.number(),
+  activeCommentCount: v.number(),
 })
 
-function publicTask(taskDoc: Doc<"tasks">) {
+function publicTask(taskDoc: Doc<"tasks">, counts: TaskCounts) {
   return {
     _id: taskDoc._id,
     _creationTime: taskDoc._creationTime,
@@ -48,7 +58,15 @@ function publicTask(taskDoc: Doc<"tasks">) {
     position: taskDoc.position,
     createdAt: taskDoc.createdAt,
     updatedAt: taskDoc.updatedAt,
+    ...counts,
   }
+}
+
+async function taskResult(
+  ctx: Parameters<typeof taskStats>[0],
+  taskDoc: Doc<"tasks">
+) {
+  return publicTask(taskDoc, taskCounts(await taskStats(ctx, taskDoc._id)))
 }
 
 function cleanTitle(title: string) {
@@ -102,7 +120,22 @@ export const list = query({
         q.eq("projectId", args.projectId)
       )
       .take(MAX_TASKS)
-    return tasks.map(publicTask)
+    return await Promise.all(tasks.map((taskDoc) => taskResult(ctx, taskDoc)))
+  },
+})
+
+export const get = query({
+  args: { taskId: v.id("tasks") },
+  returns: v.union(v.null(), task),
+  handler: async (ctx, args) => {
+    const taskDoc = await ctx.db.get(args.taskId)
+    if (!taskDoc) return null
+    try {
+      await requireProjectAccess(ctx, taskDoc.projectId)
+    } catch {
+      return null
+    }
+    return await taskResult(ctx, taskDoc)
   },
 })
 
@@ -124,6 +157,9 @@ const taskWithProject = v.object({
   position: v.number(),
   createdAt: v.number(),
   updatedAt: v.number(),
+  totalSubtasks: v.number(),
+  completedSubtasks: v.number(),
+  activeCommentCount: v.number(),
 })
 
 // Tasks across every project the caller can see (owned + shared), flattened
@@ -141,7 +177,7 @@ export const listAll = query({
     const onlyMine = args.assignedToMe ?? true
     const projects = await accessibleProjects(ctx, subject)
     const results: Array<
-      ReturnType<typeof publicTask> & {
+      Awaited<ReturnType<typeof taskResult>> & {
         projectName: string
         projectIcon?: string
         projectColor?: string
@@ -155,7 +191,7 @@ export const listAll = query({
       for (const taskDoc of tasks) {
         if (onlyMine && taskDoc.assigneeSubject !== subject) continue
         results.push({
-          ...publicTask(taskDoc),
+          ...(await taskResult(ctx, taskDoc)),
           projectName: project.name,
           projectIcon: project.icon,
           projectColor: project.color,
@@ -237,6 +273,8 @@ export const update = mutation({
     taskId: v.id("tasks"),
     title: v.optional(v.string()),
     description: v.optional(v.string()),
+    expectedTitle: v.optional(v.string()),
+    expectedDescription: v.optional(v.union(v.string(), v.null())),
     dueDate: v.optional(v.string()),
     // Pass a subject to (re)assign, or an empty string to clear the assignee.
     // Omit the field to leave the assignment untouched.
@@ -256,6 +294,28 @@ export const update = mutation({
     )
     const now = Date.now()
     const patch: Partial<Doc<"tasks">> = { updatedAt: now }
+    if (
+      args.expectedTitle !== undefined &&
+      current.title !== args.expectedTitle
+    ) {
+      throw new ConvexError({
+        code: "EDIT_CONFLICT",
+        message: "The task title changed while you were editing.",
+        field: "title",
+        latestValue: current.title,
+      })
+    }
+    if (
+      args.expectedDescription !== undefined &&
+      (current.description ?? null) !== args.expectedDescription
+    ) {
+      throw new ConvexError({
+        code: "EDIT_CONFLICT",
+        message: "The task description changed while you were editing.",
+        field: "description",
+        latestValue: current.description ?? null,
+      })
+    }
     if (args.title !== undefined) patch.title = cleanTitle(args.title)
     if (args.description !== undefined) {
       patch.description = cleanDescription(args.description)
@@ -305,7 +365,12 @@ export const update = mutation({
 export const move = mutation({
   // `position` is optional: drag-to-reorder passes an explicit value computed
   // from the drop location, while the "Move" menu omits it to append to the end.
-  args: { taskId: v.id("tasks"), status, position: v.optional(v.number()) },
+  args: {
+    taskId: v.id("tasks"),
+    status,
+    position: v.optional(v.number()),
+    confirmIncompleteSubtasks: v.optional(v.boolean()),
+  },
   returns: v.null(),
   handler: async (ctx, args) => {
     const current = await ctx.db.get(args.taskId)
@@ -316,6 +381,19 @@ export const move = mutation({
       ctx,
       current.projectId
     )
+    if (args.status === "done" && current.status !== "done") {
+      const counts = taskCounts(await taskStats(ctx, current._id))
+      const unfinishedCount = unfinishedSubtasks(counts)
+      if (unfinishedCount > 0 && !args.confirmIncompleteSubtasks) {
+        throw new ConvexError({
+          code: "INCOMPLETE_SUBTASKS",
+          message: `${unfinishedCount} subtask${unfinishedCount === 1 ? " is" : "s are"} unfinished.`,
+          unfinishedCount,
+          totalSubtasks: counts.totalSubtasks,
+          completedSubtasks: counts.completedSubtasks,
+        })
+      }
+    }
     const now = Date.now()
     const position = args.position ?? now
     await ctx.db.patch(args.taskId, {
@@ -323,7 +401,6 @@ export const move = mutation({
       position,
       updatedAt: now,
     })
-
     // Only touch the project doc + feed when the status actually changed: pure
     // reorders within a column leave the counts (and the dashboard sort)
     // untouched and shouldn't spam the activity feed.
@@ -405,6 +482,10 @@ export const changeProject = mutation({
       assigneeName,
       updatedAt: now,
     })
+    const stats = await taskStats(ctx, current._id)
+    if (stats) {
+      await ctx.db.patch(stats._id, { projectId: destination._id })
+    }
 
     // Shift the task's counters off the source project and onto the
     // destination, keeping both projects' denormalized counts consistent.
@@ -428,8 +509,14 @@ export const changeProject = mutation({
 })
 
 export const remove = mutation({
-  args: { taskId: v.id("tasks") },
-  returns: v.null(),
+  args: {
+    taskId: v.id("tasks"),
+    confirmCascade: v.optional(v.boolean()),
+  },
+  returns: v.object({
+    subtaskCount: v.number(),
+    commentCount: v.number(),
+  }),
   handler: async (ctx, args) => {
     const current = await ctx.db.get(args.taskId)
     if (!current) {
@@ -439,8 +526,23 @@ export const remove = mutation({
       ctx,
       current.projectId
     )
+    const counts = taskCounts(await taskStats(ctx, current._id))
+    if (
+      (counts.totalSubtasks > 0 || counts.activeCommentCount > 0) &&
+      !args.confirmCascade
+    ) {
+      throw new ConvexError({
+        code: "CASCADE_CONFIRMATION_REQUIRED",
+        message: "Confirm deletion of this task and its children.",
+        subtaskCount: counts.totalSubtasks,
+        commentCount: counts.activeCommentCount,
+      })
+    }
     const now = Date.now()
     await ctx.db.delete(args.taskId)
+    await ctx.scheduler.runAfter(0, internal.tasks.purgeTaskData, {
+      taskId: args.taskId,
+    })
     const field = statusCountField[current.status]
     const patch: Partial<ProjectCounts> & { updatedAt: number } = {
       updatedAt: now,
@@ -454,6 +556,39 @@ export const remove = mutation({
       type: "task.deleted",
       taskTitle: current.title,
     })
+    return {
+      subtaskCount: counts.totalSubtasks,
+      commentCount: counts.activeCommentCount,
+    }
+  },
+})
+
+const PURGE_BATCH = 100
+
+/** Drain every child row for a deleted task in bounded scheduled batches. */
+export const purgeTaskData = internalMutation({
+  args: { taskId: v.id("tasks") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const [subtasks, comments] = await Promise.all([
+      ctx.db
+        .query("subtasks")
+        .withIndex("by_task_position", (q) => q.eq("taskId", args.taskId))
+        .take(PURGE_BATCH),
+      ctx.db
+        .query("taskComments")
+        .withIndex("by_task_and_created", (q) => q.eq("taskId", args.taskId))
+        .take(PURGE_BATCH),
+    ])
+    for (const row of subtasks) await ctx.db.delete(row._id)
+    for (const row of comments) await ctx.db.delete(row._id)
+
+    if (subtasks.length === PURGE_BATCH || comments.length === PURGE_BATCH) {
+      await ctx.scheduler.runAfter(0, internal.tasks.purgeTaskData, args)
+      return null
+    }
+    const stats = await taskStats(ctx, args.taskId)
+    if (stats) await ctx.db.delete(stats._id)
     return null
   },
 })

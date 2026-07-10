@@ -1,11 +1,16 @@
 import { describe, expect, test, vi } from "vitest"
 
-import { AgentError, createTools, type NeramApi } from "../src/agent.js"
+import {
+  AgentError,
+  createTools,
+  parseInlineMentions,
+  type NeramApi,
+} from "../src/agent.js"
 
 function fakeApi(overrides: Partial<NeramApi> = {}): NeramApi {
   const tasks = [
-    { _id: "ta", projectId: "pa", title: "Ship CLI", status: "todo" as const, updatedAt: 1 },
-    { _id: "tb", projectId: "pa", title: "Ship docs", status: "inProgress" as const, updatedAt: 2 },
+    { _id: "ta", projectId: "pa", title: "Ship CLI", status: "todo" as const, totalSubtasks: 0, completedSubtasks: 0, activeCommentCount: 0, updatedAt: 1 },
+    { _id: "tb", projectId: "pa", title: "Ship docs", status: "inProgress" as const, totalSubtasks: 0, completedSubtasks: 0, activeCommentCount: 0, updatedAt: 2 },
   ]
   return {
     projects: vi.fn(async () => [
@@ -13,6 +18,8 @@ function fakeApi(overrides: Partial<NeramApi> = {}): NeramApi {
       { _id: "pb", name: "Agent Ops", role: "owner" as const, taskCount: 0, todoCount: 0, inProgressCount: 0, doneCount: 0, updatedAt: 1 },
     ]),
     tasks: vi.fn(async () => tasks),
+    task: vi.fn(async (taskId) => tasks.find((task) => task._id === taskId) ?? null),
+    projectMembers: vi.fn(async () => []),
     assignedTasks: vi.fn(async () => []),
     activity: vi.fn(async () => [
       { type: "task.created", projectName: "Agent", taskTitle: "Ship CLI", actorName: "Ada", createdAt: 5 },
@@ -21,7 +28,18 @@ function fakeApi(overrides: Partial<NeramApi> = {}): NeramApi {
     updateTask: vi.fn(async () => undefined),
     moveTask: vi.fn(async () => undefined),
     changeTaskProject: vi.fn(async () => undefined),
-    removeTask: vi.fn(async () => undefined),
+    removeTask: vi.fn(async () => ({ subtaskCount: 0, commentCount: 0 })),
+    subtasks: vi.fn(async () => []),
+    createSubtask: vi.fn(async () => "st"),
+    renameSubtask: vi.fn(async () => undefined),
+    setSubtaskCompleted: vi.fn(async () => undefined),
+    reorderSubtask: vi.fn(async () => undefined),
+    removeSubtask: vi.fn(async () => undefined),
+    comments: vi.fn(async () => ({ page: [], isDone: true, continueCursor: "" })),
+    createComment: vi.fn(async () => "co"),
+    replyToComment: vi.fn(async () => "cr"),
+    editComment: vi.fn(async () => undefined),
+    removeComment: vi.fn(async () => undefined),
     createProject: vi.fn(async () => "pnew"),
     updateProject: vi.fn(async () => undefined),
     removeProject: vi.fn(async () => undefined),
@@ -51,7 +69,12 @@ describe("agent tools", () => {
       taskId: "ta",
       status: "done",
     })
-    expect(api.moveTask).toHaveBeenCalledWith({ taskId: "ta", status: "done", position: undefined })
+    expect(api.moveTask).toHaveBeenCalledWith({
+      taskId: "ta",
+      status: "done",
+      position: undefined,
+      confirmIncompleteSubtasks: undefined,
+    })
   })
 
   test("workspace_status returns the canonical status payload", async () => {
@@ -118,8 +141,13 @@ describe("task mutation tools", () => {
   test("delete_task removes a resolved task", async () => {
     const api = fakeApi()
     const output = await createTools(api).delete_task({ taskId: "ta" })
-    expect(output).toEqual({ taskId: "ta", deleted: true })
-    expect(api.removeTask).toHaveBeenCalledWith("ta")
+    expect(output).toEqual({
+      taskId: "ta",
+      deleted: true,
+      subtaskCount: 0,
+      commentCount: 0,
+    })
+    expect(api.removeTask).toHaveBeenCalledWith({ taskId: "ta", confirmCascade: undefined })
   })
 
   test("move_task_to_project resolves both ends", async () => {
@@ -163,5 +191,58 @@ describe("project mutation tools", () => {
     // No projectId: the schema requires an explicit id since deletion purges tasks.
     await expect(createTools(api).delete_project({ project: "Agent" } as never)).rejects.toBeDefined()
     expect(api.removeProject).not.toHaveBeenCalled()
+  })
+})
+
+describe("subtask and comment tools", () => {
+  test("parses deterministic inline mention syntax", () => {
+    expect(parseInlineMentions("Hi @[Praveen](subject-1)!"))
+      .toEqual([
+        { type: "text", text: "Hi " },
+        { type: "mention", label: "Praveen", subject: "subject-1" },
+        { type: "text", text: "!" },
+      ])
+  })
+
+  test("creates structured comments with normalized spans", async () => {
+    const api = fakeApi()
+    await expect(createTools(api).create_comment({
+      taskId: "ta",
+      segments: [
+        { type: "text", text: "Hi " },
+        { type: "mention", subject: "bob", label: "Bob" },
+      ],
+    })).resolves.toEqual({ commentId: "co", taskId: "ta" })
+    expect(api.createComment).toHaveBeenCalledWith({
+      taskId: "ta",
+      body: "Hi @Bob",
+      mentions: [{ start: 3, length: 4, subject: "bob", label: "Bob" }],
+    })
+  })
+
+  test("rejects ambiguous reorder direction", async () => {
+    const api = fakeApi()
+    await expect(createTools(api).reorder_subtask({
+      subtaskId: "st",
+      beforeSubtaskId: "a",
+      afterSubtaskId: "b",
+    })).rejects.toMatchObject({ code: "VALIDATION" })
+    expect(api.reorderSubtask).not.toHaveBeenCalled()
+  })
+
+  test("forwards destructive and incomplete confirmations", async () => {
+    const api = fakeApi()
+    await createTools(api).complete_task({
+      taskId: "ta",
+      confirmIncompleteSubtasks: true,
+    })
+    expect(api.moveTask).toHaveBeenCalledWith(expect.objectContaining({
+      confirmIncompleteSubtasks: true,
+    }))
+    await createTools(api).delete_task({ taskId: "ta", confirmCascade: true })
+    expect(api.removeTask).toHaveBeenCalledWith({
+      taskId: "ta",
+      confirmCascade: true,
+    })
   })
 })

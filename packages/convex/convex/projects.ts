@@ -398,7 +398,12 @@ export const purgeProjectData = internalMutation({
         q.eq("projectId", args.projectId)
       )
       .take(PURGE_BATCH)
-    for (const task of tasks) await ctx.db.delete(task._id)
+    for (const task of tasks) {
+      await ctx.db.delete(task._id)
+      await ctx.scheduler.runAfter(0, internal.tasks.purgeTaskData, {
+        taskId: task._id,
+      })
+    }
 
     if (tasks.length === PURGE_BATCH) {
       await ctx.scheduler.runAfter(0, internal.projects.purgeProjectData, args)
