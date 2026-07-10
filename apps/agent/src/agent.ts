@@ -3,150 +3,29 @@ import { anyApi } from "convex/server"
 import { ConvexError } from "convex/values"
 import * as z from "zod/v3"
 
+import {
+  commentBodySchema,
+  commentSegmentSchema,
+  projectRefSchema,
+  schemas,
+  statusSchema,
+  taskRefSchema,
+} from "./schemas.js"
+import {
+  createPlanningApi,
+  createPlanningTools,
+  type PlanningApi,
+} from "./planning.js"
+
+export {
+  outputSchemas,
+  projectRefSchema,
+  schemas,
+  statusSchema,
+  taskRefSchema,
+} from "./schemas.js"
+
 const api = anyApi
-
-export const statusSchema = z.enum(["todo", "inProgress", "done"])
-export const projectRefSchema = z.object({
-  projectId: z.string().optional(),
-  project: z.string().min(1).optional(),
-})
-// A task can be addressed by its id, or by an (unambiguous) project + title.
-export const taskRefSchema = projectRefSchema.extend({
-  taskId: z.string().optional(),
-  taskTitle: z.string().optional(),
-})
-const titleSchema = z.string().min(1).max(120)
-const descriptionSchema = z.string().max(2000)
-const dueDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
-const projectNameSchema = z.string().min(1).max(80)
-const commentBodySchema = z.string().min(1).max(5000)
-const commentSegmentSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("text"), text: z.string() }),
-  z.object({
-    type: z.literal("mention"),
-    subject: z.string().min(1),
-    label: z.string().min(1).max(100),
-  }),
-])
-export const schemas = {
-  daily_brief: z.object({ projectLimit: z.number().int().min(1).max(20).default(8) }),
-  capture_task: projectRefSchema.extend({
-    title: titleSchema,
-    description: descriptionSchema.optional(),
-    dueDate: dueDateSchema.optional(),
-    assigneeSubject: z.string().optional(),
-  }),
-  move_task: taskRefSchema.extend({
-    status: statusSchema,
-    position: z.number().optional(),
-    confirmIncompleteSubtasks: z.boolean().optional(),
-  }),
-  complete_task: taskRefSchema.extend({
-    confirmIncompleteSubtasks: z.boolean().optional(),
-  }),
-  summarize_project: projectRefSchema,
-  workspace_status: z.object({}),
-  list_projects: z.object({}),
-  list_tasks: projectRefSchema.extend({ status: statusSchema.optional() }),
-  update_task: taskRefSchema.extend({
-    title: titleSchema.optional(),
-    description: descriptionSchema.optional(),
-    dueDate: dueDateSchema.optional(),
-    clearAssignee: z.boolean().optional(),
-  }),
-  delete_task: taskRefSchema.extend({ confirmCascade: z.boolean().optional() }),
-  move_task_to_project: taskRefSchema.extend({
-    toProjectId: z.string().optional(),
-    toProject: z.string().min(1).optional(),
-  }),
-  create_project: z.object({
-    name: projectNameSchema,
-    icon: z.string().optional(),
-    color: z.string().optional(),
-  }),
-  update_project: projectRefSchema.extend({
-    name: projectNameSchema.optional(),
-    icon: z.string().optional(),
-    color: z.string().optional(),
-  }),
-  // Deleting a project purges every task in it, so require an explicit id
-  // rather than resolving a (possibly ambiguous) name.
-  delete_project: z.object({ projectId: z.string().min(1) }),
-  recent_activity: z.object({ limit: z.number().int().min(1).max(50).default(12) }),
-  get_task: z.object({ taskId: z.string().min(1) }),
-  list_project_members: z.object({ projectId: z.string().min(1) }),
-  list_subtasks: z.object({
-    taskId: z.string().min(1),
-    hideCompleted: z.boolean().optional(),
-  }),
-  create_subtask: z.object({ taskId: z.string().min(1), title: z.string().min(1).max(200) }),
-  rename_subtask: z.object({ subtaskId: z.string().min(1), title: z.string().min(1).max(200) }),
-  set_subtask_completed: z.object({ subtaskId: z.string().min(1), completed: z.boolean() }),
-  reorder_subtask: z.object({
-    subtaskId: z.string().min(1),
-    beforeSubtaskId: z.string().min(1).optional(),
-    afterSubtaskId: z.string().min(1).optional(),
-  }),
-  delete_subtask: z.object({ subtaskId: z.string().min(1) }),
-  list_task_comments: z.object({
-    taskId: z.string().min(1),
-    parentCommentId: z.string().min(1).optional(),
-    cursor: z.string().nullable().optional(),
-    pageSize: z.number().int().min(1).max(20).default(20),
-  }),
-  create_comment: z.object({
-    taskId: z.string().min(1),
-    segments: z.array(commentSegmentSchema).min(1),
-  }),
-  reply_to_comment: z.object({
-    commentId: z.string().min(1),
-    segments: z.array(commentSegmentSchema).min(1),
-  }),
-  edit_comment: z.object({
-    commentId: z.string().min(1),
-    segments: z.array(commentSegmentSchema).min(1),
-  }),
-  delete_comment: z.object({ commentId: z.string().min(1) }),
-}
-
-// Stable output shapes for the small, non-evolving tool results. The large
-// digest tools (daily_brief, summarize_project) and the list tools keep their
-// shapes open while they evolve, so they get no output schema.
-export const outputSchemas = {
-  capture_task: z.object({
-    taskId: z.string(),
-    projectId: z.string(),
-    projectName: z.string(),
-    title: z.string(),
-    status: statusSchema,
-  }),
-  move_task: z.object({ taskId: z.string(), status: statusSchema }),
-  complete_task: z.object({ taskId: z.string(), status: statusSchema }),
-  update_task: z.object({ taskId: z.string() }),
-  delete_task: z.object({
-    taskId: z.string(),
-    deleted: z.boolean(),
-    subtaskCount: z.number(),
-    commentCount: z.number(),
-  }),
-  move_task_to_project: z.object({
-    taskId: z.string(),
-    projectId: z.string(),
-    projectName: z.string(),
-  }),
-  create_project: z.object({ projectId: z.string(), name: z.string() }),
-  update_project: z.object({ projectId: z.string() }),
-  delete_project: z.object({ projectId: z.string(), deleted: z.boolean() }),
-  create_subtask: z.object({ subtaskId: z.string(), taskId: z.string() }),
-  rename_subtask: z.object({ subtaskId: z.string() }),
-  set_subtask_completed: z.object({ subtaskId: z.string(), completed: z.boolean() }),
-  reorder_subtask: z.object({ subtaskId: z.string() }),
-  delete_subtask: z.object({ subtaskId: z.string(), deleted: z.boolean() }),
-  create_comment: z.object({ commentId: z.string(), taskId: z.string() }),
-  reply_to_comment: z.object({ commentId: z.string(), parentCommentId: z.string() }),
-  edit_comment: z.object({ commentId: z.string() }),
-  delete_comment: z.object({ commentId: z.string(), deleted: z.boolean() }),
-}
 
 type Status = z.infer<typeof statusSchema>
 type Project = {
@@ -176,8 +55,7 @@ type Task = {
 type ProjectMember = {
   subject: string
   displayName: string
-  role: "owner" | "editor"
-  isYou: boolean
+  role: "org:admin" | "org:member"
 }
 type Subtask = {
   _id: string
@@ -221,6 +99,12 @@ type Activity = {
 
 export type WorkspaceStatus = {
   identity: { name?: string; email?: string }
+  organization: {
+    organizationId: string
+    slug: string
+    name: string
+    role: "org:admin" | "org:member"
+  }
   workspace: {
     projects: number
     ownedProjects: number
@@ -367,14 +251,14 @@ export type CompactProject = ReturnType<typeof compactProject>
 export type CompactTask = ReturnType<typeof compactTask>
 export type CompactActivity = ReturnType<typeof compactActivity>
 
-export type NeramApi = {
+export type NeramApi = PlanningApi & {
   projects(): Promise<Project[]>
   tasks(projectId: string): Promise<Task[]>
   task(taskId: string): Promise<Task | null>
   projectMembers(projectId: string): Promise<ProjectMember[]>
   assignedTasks(): Promise<Array<Task & { projectName: string }>>
   activity(limit: number): Promise<Activity[]>
-  createTask(args: z.infer<typeof schemas.capture_task> & { projectId: string }): Promise<string>
+  createTask(args: z.input<typeof schemas.capture_task> & { projectId: string }): Promise<string>
   updateTask(args: {
     taskId: string
     title?: string
@@ -440,12 +324,27 @@ export function createConvexApi(convexUrl: string, token: TokenProvider): NeramA
     await auth()
     return client.mutation(fn as typeof api.tasks.create, args) as Promise<T>
   }
+  async function action<T>(fn: unknown, args: Record<string, unknown>): Promise<T> {
+    await auth()
+    return client.action(fn as typeof api.organizationActions.create, args) as Promise<T>
+  }
   return {
+    ...createPlanningApi(api, { query, mutation, action }),
     projects: () => query<Project[]>(api.projects.list, {}),
     tasks: (projectId) => query<Task[]>(api.tasks.list, { projectId }),
     task: (taskId) => query<Task | null>(api.tasks.get, { taskId }),
-    projectMembers: (projectId) =>
-      query<ProjectMember[]>(api.members.list, { projectId }),
+    projectMembers: async () =>
+      (await query<
+        Array<{
+          userId: string
+          displayName: string
+          role: "org:admin" | "org:member"
+        }>
+      >(api.organizations.members, {})).map((member) => ({
+        subject: member.userId,
+        displayName: member.displayName,
+        role: member.role,
+      })),
     assignedTasks: () => query<Array<Task & { projectName: string }>>(api.tasks.listAll, {}),
     activity: async (limit) => {
       const page = await query<{ page: Activity[] }>(api.activity.list, {
@@ -549,6 +448,7 @@ export function createTools(neram: NeramApi) {
   }
 
   return {
+    ...createPlanningTools(neram),
     async daily_brief(raw: z.input<typeof schemas.daily_brief>) {
       const { projectLimit } = schemas.daily_brief.parse(raw)
       const [allProjects, assigned, recent] = await Promise.all([
@@ -579,8 +479,16 @@ export function createTools(neram: NeramApi) {
         description: input.description,
         dueDate: input.dueDate,
         assigneeSubject: input.assigneeSubject,
+        sprint: input.sprint,
       })
-      return { taskId, projectId: project._id, projectName: project.name, title: input.title, status: "todo" }
+      return {
+        taskId,
+        projectId: project._id,
+        projectName: project.name,
+        title: input.title,
+        status: "todo" as const,
+        sprint: input.sprint,
+      }
     },
     async move_task(raw: z.input<typeof schemas.move_task>) {
       const input = schemas.move_task.parse(raw)
@@ -782,6 +690,11 @@ export function createTools(neram: NeramApi) {
 
 export function toAgentError(error: unknown) {
   if (error instanceof AgentError) return error
+  if (error instanceof z.ZodError) {
+    return new AgentError("VALIDATION", error.issues[0]?.message ?? "Invalid input.", {
+      issues: error.issues,
+    })
+  }
   if (
     error instanceof ConvexError ||
     (typeof error === "object" &&

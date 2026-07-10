@@ -63,6 +63,7 @@ const EXPIRY_WARNING_WINDOW_MS = 10 * 60 * 1000
 /** Human workspace snapshot for `whoami`: identity, totals, target, MCP hints. */
 export function formatWhoami(input: {
   identity: WorkspaceStatus["identity"]
+  organization: WorkspaceStatus["organization"]
   convexUrl: string
   workspace: WorkspaceStatus["workspace"]
   expiresAt: number
@@ -72,10 +73,13 @@ export function formatWhoami(input: {
   const lines = [
     `Logged in as ${bold(identityLabel(input.identity.name, input.identity.email))}.`,
     "",
+    `Workspace:  ${input.organization.name} (${input.organization.slug})`,
+    `Role:       ${input.organization.role}`,
+    "",
     `Projects:   ${w.projects} (${w.ownedProjects} owned, ${w.sharedProjects} shared)`,
     `Open tasks: ${w.openTasks}`,
     "",
-    dim(`Workspace: ${input.convexUrl}`),
+    dim(`Convex: ${input.convexUrl}`),
     "",
     "MCP:",
     `  stdio    ${MCP_INFO.stdio}`,
@@ -268,7 +272,12 @@ export function formatTaskDetail(task: CompactTaskLike) {
 }
 
 export function formatProjectMembers(result: {
-  members: Array<{ subject: string; displayName: string; role: string; isYou: boolean }>
+  members: Array<{
+    subject: string
+    displayName: string
+    role: string
+    isYou?: boolean
+  }>
 }) {
   return section(
     `Members (${result.members.length})`,
@@ -497,9 +506,17 @@ export function loginPayload(user: Claims, convexUrl: string) {
 export function whoamiPayload(
   user: Claims,
   convexUrl: string,
-  workspace: WorkspaceStatus["workspace"]
+  workspace: WorkspaceStatus["workspace"],
+  organization: WorkspaceStatus["organization"]
 ) {
-  return { ok: true as const, user, convexUrl, workspace, mcp: MCP_INFO }
+  return {
+    ok: true as const,
+    user,
+    convexUrl,
+    organization,
+    workspace,
+    mcp: MCP_INFO,
+  }
 }
 
 /** Additive JSON payload for `logout`. */

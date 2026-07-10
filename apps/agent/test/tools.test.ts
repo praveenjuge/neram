@@ -13,7 +13,56 @@ function fakeApi(overrides: Partial<NeramApi> = {}): NeramApi {
     { _id: "ta", projectId: "pa", title: "Ship CLI", status: "todo" as const, totalSubtasks: 0, completedSubtasks: 0, activeCommentCount: 0, updatedAt: 1 },
     { _id: "tb", projectId: "pa", title: "Ship docs", status: "inProgress" as const, totalSubtasks: 0, completedSubtasks: 0, activeCommentCount: 0, updatedAt: 2 },
   ]
+  const organization = {
+    organizationId: "org_1",
+    slug: "acme",
+    name: "Acme",
+    state: "active" as const,
+  }
+  const membership = {
+    membershipId: "mem_1",
+    userId: "user_1",
+    role: "org:admin" as const,
+    displayName: "Ada",
+  }
   return {
+    currentWorkspace: vi.fn(async () => ({
+      organization,
+      membership,
+      settings: {
+        cadenceWeeks: 2,
+        startWeekday: 1,
+        timezone: "UTC",
+        nextSprintNumber: 3,
+      },
+    })),
+    workspaceMembers: vi.fn(async () => [membership]),
+    createWorkspace: vi.fn(async () => organization),
+    inviteWorkspaceMember: vi.fn(async () => ({
+      invitationId: "inv_1",
+      status: "pending",
+    })),
+    updateWorkspaceMemberRole: vi.fn(async () => undefined),
+    removeWorkspaceMember: vi.fn(async () => undefined),
+    deleteWorkspace: vi.fn(async () => "job_delete"),
+    currentSprint: vi.fn(async () => null),
+    upcomingSprint: vi.fn(async () => null),
+    backlogTasks: vi.fn(async () => []),
+    sprintHistory: vi.fn(async () => ({
+      page: [],
+      isDone: true,
+      continueCursor: "",
+    })),
+    sprintAudit: vi.fn(async () => ({
+      page: [],
+      isDone: true,
+      continueCursor: "",
+    })),
+    planSprintTasks: vi.fn(async () => undefined),
+    removeSprintTasks: vi.fn(async () => undefined),
+    updateSprintGoal: vi.fn(async () => undefined),
+    updateSprintCadence: vi.fn(async () => undefined),
+    rolloverSprint: vi.fn(async () => "job_rollover"),
     projects: vi.fn(async () => [
       { _id: "pa", name: "Agent", role: "owner" as const, taskCount: 2, todoCount: 1, inProgressCount: 1, doneCount: 0, updatedAt: 1 },
       { _id: "pb", name: "Agent Ops", role: "owner" as const, taskCount: 0, todoCount: 0, inProgressCount: 0, doneCount: 0, updatedAt: 1 },
@@ -46,6 +95,12 @@ function fakeApi(overrides: Partial<NeramApi> = {}): NeramApi {
     removeProject: vi.fn(async () => undefined),
     status: vi.fn(async () => ({
       identity: { name: "Ada", email: "ada@example.com" },
+      organization: {
+        organizationId: organization.organizationId,
+        slug: organization.slug,
+        name: organization.name,
+        role: membership.role,
+      },
       workspace: { projects: 2, ownedProjects: 2, sharedProjects: 0, openTasks: 2 },
     })),
     ...overrides,
@@ -60,7 +115,14 @@ describe("agent tools", () => {
   test("creates tasks through the canonical client", async () => {
     const api = fakeApi()
     const output = await createTools(api).capture_task({ projectId: "pa", title: "Review smoke" })
-    expect(output).toEqual({ taskId: "tc", projectId: "pa", projectName: "Agent", title: "Review smoke", status: "todo" })
+    expect(output).toEqual({
+      taskId: "tc",
+      projectId: "pa",
+      projectName: "Agent",
+      title: "Review smoke",
+      status: "todo",
+      sprint: "backlog",
+    })
     expect(api.createTask).toHaveBeenCalledWith(expect.objectContaining({ projectId: "pa", title: "Review smoke" }))
   })
 
@@ -82,6 +144,12 @@ describe("agent tools", () => {
     const api = fakeApi()
     await expect(createTools(api).workspace_status({})).resolves.toEqual({
       identity: { name: "Ada", email: "ada@example.com" },
+      organization: {
+        organizationId: "org_1",
+        slug: "acme",
+        name: "Acme",
+        role: "org:admin",
+      },
       workspace: { projects: 2, ownedProjects: 2, sharedProjects: 0, openTasks: 2 },
     })
     expect(api.status).toHaveBeenCalledOnce()
@@ -248,6 +316,116 @@ describe("subtask and comment tools", () => {
   })
 })
 
+describe("Organization and Sprint tools", () => {
+  test("creates a workspace and requires OAuth reconnection", async () => {
+    const api = fakeApi()
+    await expect(
+      createTools(api).create_workspace({ name: "Acme" })
+    ).resolves.toEqual({
+      organizationId: "org_1",
+      slug: "acme",
+      name: "Acme",
+      state: "active",
+      requiresReauthorization: true,
+    })
+    expect(api.createWorkspace).toHaveBeenCalledWith({
+      name: "Acme",
+      slug: undefined,
+    })
+  })
+
+  test("requires exact destructive Organization confirmation", async () => {
+    const api = fakeApi()
+    await expect(
+      createTools(api).remove_workspace_member({
+        organizationId: "org_1",
+        organizationSlug: "acme",
+        userId: "user_2",
+        confirm: false as never,
+      })
+    ).rejects.toMatchObject({ issues: expect.any(Array) })
+    expect(api.removeWorkspaceMember).not.toHaveBeenCalled()
+
+    await createTools(api).remove_workspace_member({
+      organizationId: "org_1",
+      organizationSlug: "acme",
+      userId: "user_2",
+      confirm: true,
+    })
+    expect(api.removeWorkspaceMember).toHaveBeenCalledWith({
+      organizationId: "org_1",
+      organizationSlug: "acme",
+      userId: "user_2",
+      confirm: true,
+    })
+  })
+
+  test("lists compact Current Sprint work", async () => {
+    const api = fakeApi({
+      currentSprint: vi.fn(async () => ({
+        sprint: {
+          _id: "sprint_1",
+          number: 7,
+          state: "current" as const,
+          startsAt: 1_000,
+          endsAt: 2_000,
+        },
+        tasks: [
+          {
+            _id: "task_1",
+            projectId: "project_1",
+            projectName: "Product",
+            title: "Ship Sprints",
+            status: "inProgress" as const,
+            totalSubtasks: 2,
+            completedSubtasks: 1,
+            activeCommentCount: 3,
+            updatedAt: 1_500,
+          },
+        ],
+      })),
+    })
+    const result = await createTools(api).list_sprint_tasks({
+      sprint: "current",
+    })
+    expect(result).toMatchObject({
+      sprint: "current",
+      details: { sprintId: "sprint_1", number: 7 },
+      tasks: [
+        {
+          taskId: "task_1",
+          projectName: "Product",
+          totalSubtasks: 2,
+          activeCommentCount: 3,
+        },
+      ],
+    })
+  })
+
+  test("forwards idempotent planning and cadence changes", async () => {
+    const api = fakeApi()
+    await createTools(api).plan_sprint_tasks({
+      taskIds: ["task_1", "task_2"],
+      sprint: "upcoming",
+    })
+    expect(api.planSprintTasks).toHaveBeenCalledWith({
+      taskIds: ["task_1", "task_2"],
+      sprint: "upcoming",
+    })
+
+    await createTools(api).update_sprint_cadence({
+      cadenceWeeks: 4,
+      startWeekday: 1,
+      timezone: "Asia/Kolkata",
+    })
+    expect(api.updateSprintCadence).toHaveBeenCalledWith({
+      cadenceWeeks: 4,
+      startWeekday: 1,
+      timezone: "Asia/Kolkata",
+    })
+  })
+})
+
 test("decodes Convex errors across duplicated package boundaries", () => {
   const error = Object.assign(new Error("serialized Convex error"), {
     name: "ConvexError",
@@ -262,4 +440,11 @@ test("decodes Convex errors across duplicated package boundaries", () => {
     message: "One remains.",
     details: { unfinishedCount: 1 },
   })
+})
+
+test("normalizes validation failures into stable agent errors", async () => {
+  const error = await createTools(fakeApi())
+    .plan_sprint_tasks({ taskIds: [], sprint: "current" })
+    .catch((caught: unknown) => caught)
+  expect(toAgentError(error)).toMatchObject({ code: "VALIDATION" })
 })

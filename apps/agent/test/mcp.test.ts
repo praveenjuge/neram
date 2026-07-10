@@ -10,7 +10,56 @@ import { AgentError, type NeramApi } from "../src/agent.js"
 import { createNeramMcpServer } from "../src/mcp.js"
 
 function fakeApi(overrides: Partial<NeramApi> = {}): NeramApi {
+  const organization = {
+    organizationId: "org_1",
+    slug: "acme",
+    name: "Acme",
+    state: "active" as const,
+  }
+  const membership = {
+    membershipId: "mem_1",
+    userId: "user_1",
+    role: "org:admin" as const,
+    displayName: "Ada",
+  }
   return {
+    currentWorkspace: vi.fn(async () => ({
+      organization,
+      membership,
+      settings: {
+        cadenceWeeks: 2,
+        startWeekday: 1,
+        timezone: "UTC",
+        nextSprintNumber: 3,
+      },
+    })),
+    workspaceMembers: vi.fn(async () => [membership]),
+    createWorkspace: vi.fn(async () => organization),
+    inviteWorkspaceMember: vi.fn(async () => ({
+      invitationId: "inv_1",
+      status: "pending",
+    })),
+    updateWorkspaceMemberRole: vi.fn(async () => undefined),
+    removeWorkspaceMember: vi.fn(async () => undefined),
+    deleteWorkspace: vi.fn(async () => "job_delete"),
+    currentSprint: vi.fn(async () => null),
+    upcomingSprint: vi.fn(async () => null),
+    backlogTasks: vi.fn(async () => []),
+    sprintHistory: vi.fn(async () => ({
+      page: [],
+      isDone: true,
+      continueCursor: "",
+    })),
+    sprintAudit: vi.fn(async () => ({
+      page: [],
+      isDone: true,
+      continueCursor: "",
+    })),
+    planSprintTasks: vi.fn(async () => undefined),
+    removeSprintTasks: vi.fn(async () => undefined),
+    updateSprintGoal: vi.fn(async () => undefined),
+    updateSprintCadence: vi.fn(async () => undefined),
+    rolloverSprint: vi.fn(async () => "job_rollover"),
     projects: vi.fn(async () => [
       { _id: "pa", name: "Agent Core", role: "owner" as const, taskCount: 1, todoCount: 1, inProgressCount: 0, doneCount: 0, updatedAt: 1 },
       { _id: "pb", name: "Agent Ops", role: "owner" as const, taskCount: 0, todoCount: 0, inProgressCount: 0, doneCount: 0, updatedAt: 1 },
@@ -41,6 +90,12 @@ function fakeApi(overrides: Partial<NeramApi> = {}): NeramApi {
     removeProject: vi.fn(async () => undefined),
     status: vi.fn(async () => ({
       identity: { name: "Ada", email: "ada@example.com" },
+      organization: {
+        organizationId: organization.organizationId,
+        slug: organization.slug,
+        name: organization.name,
+        role: membership.role,
+      },
       workspace: { projects: 3, ownedProjects: 2, sharedProjects: 1, openTasks: 5 },
     })),
     ...overrides,
@@ -90,6 +145,21 @@ describe("neram mcp server", () => {
         "reply_to_comment",
         "edit_comment",
         "delete_comment",
+        "get_workspace",
+        "create_workspace",
+        "list_workspace_members",
+        "invite_workspace_member",
+        "update_workspace_member_role",
+        "remove_workspace_member",
+        "delete_workspace",
+        "get_sprint",
+        "list_sprint_tasks",
+        "sprint_history",
+        "plan_sprint_tasks",
+        "remove_sprint_tasks",
+        "update_sprint_goal",
+        "update_sprint_cadence",
+        "rollover_sprint",
       ]))
     } finally {
       await client.close()
@@ -104,6 +174,12 @@ describe("neram mcp server", () => {
       const result = await client.callTool({ name: "workspace_status", arguments: {} })
       expect(result.structuredContent).toEqual({
         identity: { name: "Ada", email: "ada@example.com" },
+        organization: {
+          organizationId: "org_1",
+          slug: "acme",
+          name: "Acme",
+          role: "org:admin",
+        },
         workspace: { projects: 3, ownedProjects: 2, sharedProjects: 1, openTasks: 5 },
       })
       expect(api.status).toHaveBeenCalledOnce()
@@ -129,6 +205,13 @@ describe("neram mcp server", () => {
       expect(byName.create_comment?.idempotentHint).not.toBe(true)
       expect(byName.rename_subtask?.idempotentHint).toBe(true)
       expect(byName.delete_comment?.destructiveHint).toBe(true)
+      expect(byName.get_workspace?.readOnlyHint).toBe(true)
+      expect(byName.list_sprint_tasks?.readOnlyHint).toBe(true)
+      expect(byName.plan_sprint_tasks?.idempotentHint).toBe(true)
+      expect(byName.update_sprint_cadence?.idempotentHint).toBe(true)
+      expect(byName.remove_workspace_member?.destructiveHint).toBe(true)
+      expect(byName.delete_workspace?.destructiveHint).toBe(true)
+      expect(byName.rollover_sprint?.destructiveHint).toBe(true)
     } finally {
       await client.close()
       await server.close()

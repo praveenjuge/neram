@@ -145,7 +145,10 @@ async function exchange(tokenEndpoint: string, body: URLSearchParams, config: Pu
   } satisfies Session
 }
 
-export async function login(overrides: Partial<PublicConfig> = {}) {
+export async function login(
+  overrides: Partial<PublicConfig> = {},
+  options: { forceOrganizationSelection?: boolean } = {}
+) {
   const config = await loadPublicConfig(overrides)
   const meta = await discovery(config.clerkFrontendApiUrl)
   const verifier = b64url(randomBytes(32))
@@ -185,11 +188,14 @@ export async function login(overrides: Partial<PublicConfig> = {}) {
         response_type: "code",
         client_id: config.oauthClientId,
         redirect_uri: redirectUri,
-        scope: "openid profile email offline_access",
+        scope: "openid profile email offline_access user:org:read",
         state,
         code_challenge: challenge,
         code_challenge_method: "S256",
       }).toString()
+      if (options.forceOrganizationSelection) {
+        authUrl.searchParams.set("prompt", "consent")
+      }
       void open(authUrl.toString()).catch(() => undefined)
       console.error(`Open this URL to sign in:\n${authUrl.toString()}`)
     })
@@ -201,9 +207,20 @@ export async function login(overrides: Partial<PublicConfig> = {}) {
     redirect_uri: redirectUri,
     code_verifier: verifier,
   }), config)
+  const user = claims(session.idToken)
+  if (
+    typeof user.org_id !== "string" ||
+    typeof user.org_slug !== "string" ||
+    (user.org_role !== "org:admin" && user.org_role !== "org:member")
+  ) {
+    throw new AgentError(
+      "ORGANIZATION_REQUIRED",
+      "Choose a Neram workspace during authorization."
+    )
+  }
   await writeConfig(config)
   await writeSession(session)
-  return { user: claims(session.idToken), config }
+  return { user, config }
 }
 
 async function refresh(session: Session) {

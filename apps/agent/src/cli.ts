@@ -35,6 +35,7 @@ import {
   type DoctorReport,
 } from "./format.js"
 import { runStdioMcp } from "./mcp.js"
+import { registerPlanningCommands } from "./cli-planning.js"
 import { packageVersion } from "./version.js"
 
 type OutputOptions = { json?: boolean }
@@ -113,12 +114,18 @@ program.command("whoami")
       opts,
       formatWhoami({
         identity: status.identity,
+        organization: status.organization,
         convexUrl: session.config.convexUrl,
         workspace: status.workspace,
         expiresAt: session.expiresAt,
         hasRefreshToken: Boolean(session.refreshToken),
       }),
-      whoamiPayload(user, session.config.convexUrl, status.workspace)
+      whoamiPayload(
+        user,
+        session.config.convexUrl,
+        status.workspace,
+        status.organization
+      )
     )
   }))
 
@@ -210,6 +217,7 @@ task.command("add")
   .requiredOption("-t, --title <title>")
   .option("-d, --description <description>")
   .option("--due <yyyy-mm-dd>")
+  .option("--sprint <backlog|current|upcoming>", "Initial Sprint placement", "backlog")
   .option("--json")
   .action((opts) => wrap(opts, async () => {
     const result = await (await tools()).capture_task({
@@ -217,6 +225,7 @@ task.command("add")
       title: opts.title,
       description: opts.description,
       dueDate: opts.due,
+      sprint: opts.sprint,
     })
     emit(opts, formatCaptureTask(result), result)
   }))
@@ -512,5 +521,7 @@ project.command("summary")
     const result = await (await tools()).summarize_project({ ...projectRef(opts) })
     emit(opts, formatProjectSummary(result), result)
   }))
+
+registerPlanningCommands(program, { tools, emit, wrap })
 
 program.parse()

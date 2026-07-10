@@ -26,6 +26,12 @@ import {
 
 const convexUrl = "https://example.convex.cloud"
 const workspace = { projects: 3, ownedProjects: 2, sharedProjects: 1, openTasks: 5 }
+const organization = {
+  organizationId: "org_1",
+  slug: "acme",
+  name: "Acme",
+  role: "org:admin" as const,
+}
 
 describe("human formatting", () => {
   test("login greets the user and lists next commands", () => {
@@ -44,6 +50,7 @@ describe("human formatting", () => {
   test("whoami shows identity, counts, and MCP hints", () => {
     const text = formatWhoami({
       identity: { name: "Ada", email: "ada@example.com" },
+      organization,
       convexUrl,
       workspace,
       expiresAt: Date.now() + 60 * 60 * 1000,
@@ -59,6 +66,7 @@ describe("human formatting", () => {
   test("whoami warns when a non-refreshable session is near expiry", () => {
     const text = formatWhoami({
       identity: { name: "Ada" },
+      organization,
       convexUrl,
       workspace,
       expiresAt: Date.now() + 60 * 1000,
@@ -92,10 +100,11 @@ describe("additive JSON payloads", () => {
 
   test("whoami preserves ok/user/convexUrl and adds workspace + mcp", () => {
     const user = { sub: "user_1" }
-    expect(whoamiPayload(user, convexUrl, workspace)).toEqual({
+    expect(whoamiPayload(user, convexUrl, workspace, organization)).toEqual({
       ok: true,
       user,
       convexUrl,
+      organization,
       workspace,
       mcp: MCP_INFO,
     })
