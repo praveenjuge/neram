@@ -35,14 +35,29 @@ neram daily [--project-limit <n>]        # daily execution digest
 neram activity [--limit <n>]             # recent activity feed
 
 neram task list -p <project> [--status <todo|inProgress|done>]
+neram task show --task-id <id>
 neram task add -p <project> -t <title> [-d <desc>] [--due <yyyy-mm-dd>]
 neram task move -t <title> -p <project> --status <status>
-neram task done -t <title> -p <project>
+neram task done -t <title> -p <project> [--confirm-incomplete-subtasks]
 neram task update --task-id <id> [--title <t>] [--description <d>] [--due <date>] [--clear-assignee]
-neram task rm --task-id <id>
+neram task rm --task-id <id> [--confirm-cascade]
 neram task move-to --task-id <id> --to-project <name>
 
+neram task subtask list --task-id <id>
+neram task subtask add --task-id <id> --title <title>
+neram task subtask rename --subtask-id <id> --title <title>
+neram task subtask done|reopen --subtask-id <id>
+neram task subtask move --subtask-id <id> (--before-id <id> | --after-id <id>)
+neram task subtask rm --subtask-id <id>
+
+neram task comment list --task-id <id> [--parent-comment-id <id>] [--limit <n>] [--cursor <cursor>]
+neram task comment add --task-id <id> --body 'Hi @[Praveen](subject)'
+neram task comment reply --comment-id <id> --body <text>
+neram task comment edit --comment-id <id> --body <text>
+neram task comment rm --comment-id <id>
+
 neram project list
+neram project members --project-id <id>
 neram project add --name <name> [--icon <icon>] [--color <color>]
 neram project update -p <project> [--name <name>] [--icon <icon>] [--color <color>]
 neram project rm --project-id <id>       # id required; purges the project's tasks
@@ -56,11 +71,14 @@ unambiguous name (`--project` / `--title`). An ambiguous name returns an
 ## MCP tools
 
 Read-only: `daily_brief`, `workspace_status`, `list_projects`, `list_tasks`,
+`get_task`, `list_project_members`, `list_subtasks`, `list_task_comments`,
 `summarize_project`, `recent_activity`.
 
 Mutations: `capture_task`, `update_task`, `move_task`, `complete_task`,
 `move_task_to_project`, `delete_task`, `create_project`, `update_project`,
-`delete_project`.
+`delete_project`, `create_subtask`, `rename_subtask`, `set_subtask_completed`,
+`reorder_subtask`, `delete_subtask`, `create_comment`, `reply_to_comment`,
+`edit_comment`, `delete_comment`.
 
 Tools carry annotations (read-only / idempotent / destructive) and stable output
 schemas for the small mutation shapes. Tool failures come back as `isError`

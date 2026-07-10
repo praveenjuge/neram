@@ -5,6 +5,7 @@ import { useMutation } from "convex/react"
 import type { FunctionReturnType } from "convex/server"
 import { useMemo, useState } from "react"
 import { toast } from "sonner"
+import { useRouter } from "next/navigation"
 
 import { api } from "@neram/convex/api"
 import type { Id } from "@neram/convex/data-model"
@@ -13,11 +14,10 @@ import {
   type Status,
 } from "@/components/project-board/board-shared"
 import { KanbanBoard } from "@/components/project-board/kanban-board"
-import { TaskDialog } from "@/components/project-board/task-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Spinner } from "@/components/ui/spinner"
 import { parseDueDate } from "@/lib/dates"
-import { messageFromError } from "@/lib/errors"
+import { dataFromError, messageFromError } from "@/lib/errors"
 import { moveTaskOptimistic } from "@/lib/optimistic"
 import { cn } from "@/lib/utils"
 
@@ -90,6 +90,7 @@ function FilterChip({
 }
 
 export function TasksClient() {
+  const router = useRouter()
   // "Assigned to me" is the default view; turning it off loads every task
   // across accessible projects. "Unassigned" is client-side and mutually
   // exclusive with assigned-to-me so the chips stay coherent.
@@ -119,7 +120,6 @@ export function TasksClient() {
       }
     }
   )
-  const [openTaskId, setOpenTaskId] = useState<Id<"tasks"> | null>(null)
 
   const filteredTasks = useMemo(() => {
     if (!tasks) return undefined
@@ -198,6 +198,21 @@ export function TasksClient() {
     try {
       await moveTask({ taskId, status, position })
     } catch (error) {
+      const data = dataFromError(error)
+      if (
+        data?.code === "INCOMPLETE_SUBTASKS" &&
+        window.confirm(
+          `${String(data.unfinishedCount)} subtasks are unfinished. Move this task to Done anyway?`
+        )
+      ) {
+        await moveTask({
+          taskId,
+          status,
+          position,
+          confirmIncompleteSubtasks: true,
+        })
+        return
+      }
       toast.error(messageFromError(error, "Could not move the task."))
     }
   }
@@ -209,9 +224,6 @@ export function TasksClient() {
       </div>
     )
   }
-
-  const openTask: Task | null =
-    tasks?.find((task) => task._id === openTaskId) ?? null
 
   return (
     <section className="mx-auto grid w-full max-w-7xl gap-5 p-5">
@@ -246,16 +258,16 @@ export function TasksClient() {
       </div>
       <KanbanBoard
         onDrop={handleDrop}
-        onOpenTask={setOpenTaskId}
+        onOpenTask={(taskId) => {
+          const task = tasks?.find((item) => item._id === taskId)
+          if (task) {
+            router.push(`/projects/${task.projectId}?task=${task._id}`, {
+              scroll: false,
+            })
+          }
+        }}
         showProject
         tasks={filteredTasks}
-      />
-      <TaskDialog
-        onOpenChange={(next) => {
-          if (!next) setOpenTaskId(null)
-        }}
-        open={openTaskId !== null}
-        task={openTask}
       />
     </section>
   )

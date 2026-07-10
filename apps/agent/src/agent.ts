@@ -782,8 +782,14 @@ export function createTools(neram: NeramApi) {
 
 export function toAgentError(error: unknown) {
   if (error instanceof AgentError) return error
-  if (error instanceof ConvexError) {
-    const data = error.data
+  if (
+    error instanceof ConvexError ||
+    (typeof error === "object" &&
+      error !== null &&
+      "data" in error &&
+      typeof error.data === "object")
+  ) {
+    const data = (error as { data?: unknown }).data
     if (typeof data === "object" && data && "code" in data && "message" in data) {
       const { code, message, ...details } = data as Record<string, unknown>
       return new AgentError(

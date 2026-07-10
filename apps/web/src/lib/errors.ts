@@ -5,9 +5,22 @@ import { ConvexError } from "convex/values"
  * Convex mutations throw ConvexError with a `{ code, message }` payload.
  */
 export function messageFromError(error: unknown, fallback: string) {
-  if (error instanceof ConvexError) {
-    const data = error.data as { message?: string }
+  if (
+    error instanceof ConvexError ||
+    (typeof error === "object" && error !== null && "data" in error)
+  ) {
+    const data = (error as { data?: { message?: string } }).data
     if (data?.message) return data.message
   }
   return fallback
+}
+
+export function dataFromError(error: unknown): Record<string, unknown> | null {
+  if (typeof error !== "object" || error === null || !("data" in error)) {
+    return null
+  }
+  const data = (error as { data?: unknown }).data
+  return typeof data === "object" && data
+    ? (data as Record<string, unknown>)
+    : null
 }

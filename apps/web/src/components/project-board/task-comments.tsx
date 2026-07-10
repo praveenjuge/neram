@@ -1,0 +1,439 @@
+"use client"
+
+import { useQuery } from "convex-helpers/react/cache"
+import { useMutation, usePaginatedQuery } from "convex/react"
+import type { FunctionReturnType } from "convex/server"
+import { ChevronDown, MessageSquareReply, Pencil, Send, Trash2 } from "lucide-react"
+import { useEffect, useState } from "react"
+import { toast } from "sonner"
+
+import { api } from "@neram/convex/api"
+import type { Id } from "@neram/convex/data-model"
+import { cn } from "@/lib/utils"
+import { messageFromError } from "@/lib/errors"
+import { Button } from "@/components/ui/button"
+import { Textarea } from "@/components/ui/textarea"
+
+type Comment = FunctionReturnType<typeof api.taskComments.list>["page"][number]
+type Member = FunctionReturnType<typeof api.members.list>[number]
+type Mention = Comment["mentions"][number]
+
+export function TaskComments({
+  taskId,
+  projectId,
+  targetCommentId,
+}: {
+  taskId: Id<"tasks">
+  projectId: Id<"projects">
+  targetCommentId: Id<"taskComments"> | null
+}) {
+  const members = useQuery(api.members.list, { projectId })
+  const create = useMutation(api.taskComments.create)
+  const current = members?.find((member) => member.isYou)
+
+  return (
+    <section className="grid gap-4" data-testid="task-comments">
+      <div>
+        <h2 className="font-heading text-sm font-medium">Comments</h2>
+        <p className="text-xs text-muted-foreground">
+          Reply in context and mention project members directly.
+        </p>
+      </div>
+      <CommentComposer
+        members={members ?? []}
+        onSubmit={async (payload) => {
+          await create({ taskId, ...payload })
+        }}
+        placeholder="Write a comment…"
+      />
+      {targetCommentId ? (
+        <LinkedThread
+          currentSubject={current?.subject}
+          isOwner={current?.role === "owner"}
+          members={members ?? []}
+          targetCommentId={targetCommentId}
+          taskId={taskId}
+        />
+      ) : null}
+      <CommentBranch
+        currentSubject={current?.subject}
+        depth={0}
+        isOwner={current?.role === "owner"}
+        members={members ?? []}
+        taskId={taskId}
+        targetCommentId={targetCommentId}
+      />
+    </section>
+  )
+}
+
+function CommentBranch({
+  taskId,
+  parentCommentId,
+  depth,
+  members,
+  currentSubject,
+  isOwner,
+  targetCommentId,
+}: {
+  taskId: Id<"tasks">
+  parentCommentId?: Id<"taskComments">
+  depth: number
+  members: Member[]
+  currentSubject?: string
+  isOwner: boolean
+  targetCommentId: Id<"taskComments"> | null
+}) {
+  const { results, status, loadMore } = usePaginatedQuery(
+    api.taskComments.list,
+    { taskId, parentCommentId },
+    { initialNumItems: parentCommentId ? 10 : 20 }
+  )
+  if (status === "LoadingFirstPage") {
+    return <p className="text-sm text-muted-foreground">Loading comments…</p>
+  }
+  if (results.length === 0 && !parentCommentId) {
+    return (
+      <p className="rounded-xl border border-dashed px-3 py-5 text-center text-sm text-muted-foreground">
+        No comments yet.
+      </p>
+    )
+  }
+  return (
+    <div className={cn("grid gap-2", depth > 0 && "border-l pl-3")}>
+      {results.map((comment) => (
+        <CommentNode
+          comment={comment}
+          currentSubject={currentSubject}
+          depth={depth}
+          isOwner={isOwner}
+          key={comment._id}
+          members={members}
+          targetCommentId={targetCommentId}
+        />
+      ))}
+      {status === "CanLoadMore" || status === "LoadingMore" ? (
+        <Button
+          className="w-fit"
+          disabled={status === "LoadingMore"}
+          onClick={() => loadMore(parentCommentId ? 10 : 20)}
+          size="sm"
+          variant="ghost"
+        >
+          <ChevronDown /> {status === "LoadingMore" ? "Loading…" : "Load more"}
+        </Button>
+      ) : null}
+    </div>
+  )
+}
+
+function CommentNode({
+  comment,
+  depth,
+  members,
+  currentSubject,
+  isOwner,
+  targetCommentId,
+}: {
+  comment: Comment
+  depth: number
+  members: Member[]
+  currentSubject?: string
+  isOwner: boolean
+  targetCommentId: Id<"taskComments"> | null
+}) {
+  const [showReplies, setShowReplies] = useState(false)
+  const [replying, setReplying] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const reply = useMutation(api.taskComments.reply)
+  const edit = useMutation(api.taskComments.edit)
+  const remove = useMutation(api.taskComments.remove)
+  const canEdit = !comment.deletedAt && comment.authorSubject === currentSubject
+  const canDelete = !comment.deletedAt && (canEdit || isOwner)
+  const highlighted = comment._id === targetCommentId
+
+  return (
+    <article
+      className={cn(
+        "scroll-mt-8 rounded-xl border bg-card p-3 transition-colors",
+        highlighted && "border-primary bg-primary/5 ring-2 ring-primary/25"
+      )}
+      id={`comment-${comment._id}`}
+      style={{ marginLeft: `${Math.min(depth, 3) * 12}px` }}
+    >
+      <header className="flex items-center justify-between gap-2">
+        <p className="text-xs text-muted-foreground">
+          <span className="font-medium text-foreground">{comment.authorName}</span>
+          {comment.updatedAt > comment.createdAt && !comment.deletedAt ? " · edited" : ""}
+        </p>
+        {!comment.deletedAt ? (
+          <div className="flex gap-1">
+            {canEdit ? (
+              <Button aria-label="Edit comment" onClick={() => setEditing(true)} size="icon-sm" variant="ghost">
+                <Pencil />
+              </Button>
+            ) : null}
+            {canDelete ? (
+              <Button
+                aria-label="Delete comment"
+                onClick={() => void remove({ commentId: comment._id })}
+                size="icon-sm"
+                variant="ghost"
+              >
+                <Trash2 />
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+      </header>
+      {editing ? (
+        <CommentComposer
+          initialBody={comment.body}
+          initialMentions={comment.mentions}
+          members={members}
+          onCancel={() => setEditing(false)}
+          onSubmit={async (payload) => {
+            await edit({ commentId: comment._id, ...payload })
+            setEditing(false)
+          }}
+        />
+      ) : (
+        <p className={cn("mt-2 whitespace-pre-wrap text-sm", comment.deletedAt && "italic text-muted-foreground")}>
+          {comment.deletedAt ? "Comment deleted" : comment.body}
+        </p>
+      )}
+      <div className="mt-2 flex gap-2">
+        <Button onClick={() => setReplying((value) => !value)} size="sm" variant="ghost">
+          <MessageSquareReply /> Reply
+        </Button>
+        <Button onClick={() => setShowReplies((value) => !value)} size="sm" variant="ghost">
+          <ChevronDown /> {showReplies ? "Hide replies" : "Show replies"}
+        </Button>
+      </div>
+      {replying ? (
+        <div className="mt-2">
+          <CommentComposer
+            autoFocus
+            members={members}
+            onCancel={() => setReplying(false)}
+            onSubmit={async (payload) => {
+              await reply({ commentId: comment._id, ...payload })
+              setReplying(false)
+              setShowReplies(true)
+            }}
+            placeholder={`Reply to ${comment.authorName}…`}
+          />
+        </div>
+      ) : null}
+      {showReplies ? (
+        <div className="mt-2">
+          <CommentBranch
+            currentSubject={currentSubject}
+            depth={depth + 1}
+            isOwner={isOwner}
+            members={members}
+            parentCommentId={comment._id}
+            targetCommentId={targetCommentId}
+            taskId={comment.taskId}
+          />
+        </div>
+      ) : null}
+    </article>
+  )
+}
+
+function LinkedThread({
+  taskId,
+  targetCommentId,
+  members,
+  currentSubject,
+  isOwner,
+}: {
+  taskId: Id<"tasks">
+  targetCommentId: Id<"taskComments">
+  members: Member[]
+  currentSubject?: string
+  isOwner: boolean
+}) {
+  const result = useQuery(api.taskComments.getAncestry, {
+    commentId: targetCommentId,
+    limit: 100,
+  })
+  useEffect(() => {
+    if (!result) return
+    const timer = window.setTimeout(() => {
+      document.getElementById(`comment-${targetCommentId}`)?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      })
+    }, 80)
+    return () => window.clearTimeout(timer)
+  }, [result, targetCommentId])
+  if (!result) return <p className="text-sm text-muted-foreground">Loading linked thread…</p>
+  if (result.taskId !== taskId) {
+    return <p className="text-sm text-muted-foreground">Linked comment unavailable.</p>
+  }
+  return (
+    <aside className="grid gap-2 rounded-2xl bg-muted/40 p-3">
+      <p className="text-xs font-medium text-muted-foreground">Linked thread</p>
+      {result.nextCommentId ? (
+        <OlderAncestry
+          currentSubject={currentSubject}
+          isOwner={isOwner}
+          members={members}
+          startCommentId={result.nextCommentId}
+          targetCommentId={targetCommentId}
+        />
+      ) : null}
+      {result.comments.map((comment, index) => (
+        <CommentNode
+          comment={comment}
+          currentSubject={currentSubject}
+          depth={index}
+          isOwner={isOwner}
+          key={comment._id}
+          members={members}
+          targetCommentId={targetCommentId}
+        />
+      ))}
+    </aside>
+  )
+}
+
+function OlderAncestry({
+  targetCommentId,
+  startCommentId,
+  members,
+  currentSubject,
+  isOwner,
+}: {
+  targetCommentId: Id<"taskComments">
+  startCommentId: Id<"taskComments">
+  members: Member[]
+  currentSubject?: string
+  isOwner: boolean
+}) {
+  const result = useQuery(api.taskComments.getAncestry, {
+    commentId: targetCommentId,
+    startCommentId,
+    limit: 100,
+  })
+  if (!result) return <p className="text-xs text-muted-foreground">Loading older ancestry…</p>
+  return (
+    <>
+      {result.nextCommentId ? (
+        <OlderAncestry
+          currentSubject={currentSubject}
+          isOwner={isOwner}
+          members={members}
+          startCommentId={result.nextCommentId}
+          targetCommentId={targetCommentId}
+        />
+      ) : null}
+      {result.comments.map((comment, index) => (
+        <CommentNode
+          comment={comment}
+          currentSubject={currentSubject}
+          depth={index}
+          isOwner={isOwner}
+          key={comment._id}
+          members={members}
+          targetCommentId={targetCommentId}
+        />
+      ))}
+    </>
+  )
+}
+
+function CommentComposer({
+  members,
+  onSubmit,
+  placeholder = "Write a reply…",
+  initialBody = "",
+  initialMentions = [],
+  onCancel,
+  autoFocus = false,
+}: {
+  members: Member[]
+  onSubmit: (payload: { body: string; mentions: Mention[] }) => Promise<void>
+  placeholder?: string
+  initialBody?: string
+  initialMentions?: Mention[]
+  onCancel?: () => void
+  autoFocus?: boolean
+}) {
+  const [body, setBody] = useState(initialBody)
+  const [tokens, setTokens] = useState(() =>
+    initialMentions.map(({ subject, label }) => ({ subject, label }))
+  )
+  const [busy, setBusy] = useState(false)
+
+  function addMention(member: Member) {
+    const prefix = body && !body.endsWith(" ") ? " " : ""
+    setBody((value) => `${value}${prefix}@${member.displayName} `)
+    setTokens((value) => [
+      ...value,
+      { subject: member.subject, label: member.displayName },
+    ])
+  }
+
+  async function submit() {
+    if (!body.trim() || busy) return
+    let offset = 0
+    const mentions: Mention[] = []
+    for (const token of tokens) {
+      const text = `@${token.label}`
+      const start = body.indexOf(text, offset)
+      if (start < 0) continue
+      mentions.push({ ...token, start, length: text.length })
+      offset = start + text.length
+    }
+    setBusy(true)
+    try {
+      await onSubmit({ body, mentions })
+      setBody("")
+      setTokens([])
+    } catch (error) {
+      toast.error(messageFromError(error, "Could not save the comment."))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="grid gap-2">
+      <Textarea
+        autoFocus={autoFocus}
+        maxLength={5000}
+        onChange={(event) => setBody(event.target.value)}
+        onKeyDown={(event) => {
+          if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+            event.preventDefault()
+            void submit()
+          }
+        }}
+        placeholder={placeholder}
+        value={body}
+      />
+      {members.length ? (
+        <div className="flex flex-wrap gap-1">
+          {members.map((member) => (
+            <Button key={member.subject} onClick={() => addMention(member)} size="xs" type="button" variant="secondary">
+              @{member.displayName}
+            </Button>
+          ))}
+        </div>
+      ) : null}
+      <div className="flex justify-end gap-2">
+        {onCancel ? (
+          <Button onClick={onCancel} size="sm" type="button" variant="ghost">
+            Cancel
+          </Button>
+        ) : null}
+        <Button disabled={busy || !body.trim()} onClick={() => void submit()} size="sm" type="button">
+          <Send /> {busy ? "Saving…" : "Post"}
+        </Button>
+      </div>
+    </div>
+  )
+}

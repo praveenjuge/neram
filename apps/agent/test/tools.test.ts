@@ -4,6 +4,7 @@ import {
   AgentError,
   createTools,
   parseInlineMentions,
+  toAgentError,
   type NeramApi,
 } from "../src/agent.js"
 
@@ -244,5 +245,21 @@ describe("subtask and comment tools", () => {
       taskId: "ta",
       confirmCascade: true,
     })
+  })
+})
+
+test("decodes Convex errors across duplicated package boundaries", () => {
+  const error = Object.assign(new Error("serialized Convex error"), {
+    name: "ConvexError",
+    data: {
+      code: "INCOMPLETE_SUBTASKS",
+      message: "One remains.",
+      unfinishedCount: 1,
+    },
+  })
+  expect(toAgentError(error)).toMatchObject({
+    code: "INCOMPLETE_SUBTASKS",
+    message: "One remains.",
+    details: { unfinishedCount: 1 },
   })
 })

@@ -202,6 +202,9 @@ export function createTaskOptimistic(projectId: Id<"projects">) {
         position: now,
         createdAt: now,
         updatedAt: now,
+        totalSubtasks: 0,
+        completedSubtasks: 0,
+        activeCommentCount: 0,
       }
       store.setQuery(api.tasks.list, { projectId }, [...tasks, temp])
     }

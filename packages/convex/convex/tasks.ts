@@ -69,6 +69,17 @@ async function taskResult(
   return publicTask(taskDoc, taskCounts(await taskStats(ctx, taskDoc._id)))
 }
 
+async function projectTaskCounts(
+  ctx: Parameters<typeof taskStats>[0],
+  projectId: Doc<"projects">["_id"]
+) {
+  const rows = await ctx.db
+    .query("taskStats")
+    .withIndex("by_project_and_task", (q) => q.eq("projectId", projectId))
+    .take(MAX_TASKS)
+  return new Map(rows.map((row) => [row.taskId, taskCounts(row)]))
+}
+
 function cleanTitle(title: string) {
   const trimmed = title.trim()
   if (trimmed.length < 1 || trimmed.length > 120) {
@@ -120,7 +131,10 @@ export const list = query({
         q.eq("projectId", args.projectId)
       )
       .take(MAX_TASKS)
-    return await Promise.all(tasks.map((taskDoc) => taskResult(ctx, taskDoc)))
+    const counts = await projectTaskCounts(ctx, args.projectId)
+    return tasks.map((taskDoc) =>
+      publicTask(taskDoc, counts.get(taskDoc._id) ?? taskCounts(null))
+    )
   },
 })
 
@@ -184,14 +198,20 @@ export const listAll = query({
       }
     > = []
     for (const { project } of projects) {
-      const tasks = await ctx.db
-        .query("tasks")
-        .withIndex("by_project_position", (q) => q.eq("projectId", project._id))
-        .take(MAX_TASKS)
+      const [tasks, counts] = await Promise.all([
+        ctx.db
+          .query("tasks")
+          .withIndex("by_project_position", (q) => q.eq("projectId", project._id))
+          .take(MAX_TASKS),
+        projectTaskCounts(ctx, project._id),
+      ])
       for (const taskDoc of tasks) {
         if (onlyMine && taskDoc.assigneeSubject !== subject) continue
         results.push({
-          ...(await taskResult(ctx, taskDoc)),
+          ...publicTask(
+            taskDoc,
+            counts.get(taskDoc._id) ?? taskCounts(null)
+          ),
           projectName: project.name,
           projectIcon: project.icon,
           projectColor: project.color,
@@ -527,8 +547,14 @@ export const remove = mutation({
       current.projectId
     )
     const counts = taskCounts(await taskStats(ctx, current._id))
+    const hasCommentRows = Boolean(
+      await ctx.db
+        .query("taskComments")
+        .withIndex("by_task_and_created", (q) => q.eq("taskId", current._id))
+        .first()
+    )
     if (
-      (counts.totalSubtasks > 0 || counts.activeCommentCount > 0) &&
+      (counts.totalSubtasks > 0 || hasCommentRows) &&
       !args.confirmCascade
     ) {
       throw new ConvexError({

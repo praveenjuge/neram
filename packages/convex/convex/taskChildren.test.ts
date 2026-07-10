@@ -1,8 +1,9 @@
 /// <reference types="vite/client" />
 import { convexTest } from "convex-test"
-import { expect, test } from "vitest"
+import { expect, test, vi } from "vitest"
 
 import { api } from "./_generated/api"
+import type { Id } from "./_generated/dataModel"
 import schema from "./schema"
 
 const modules = import.meta.glob("./**/*.ts")
@@ -192,4 +193,124 @@ test("moving tasks carries children and cascade deletion requires acknowledgemen
   await expect(
     alice.mutation(api.tasks.remove, { taskId, confirmCascade: true })
   ).resolves.toEqual({ subtaskCount: 1, commentCount: 1 })
+})
+
+test("task inline edits return conflicts instead of overwriting newer values", async () => {
+  const { alice } = setup()
+  const projectId = await alice.mutation(api.projects.create, { name: "Roadmap" })
+  const taskId = await alice.mutation(api.tasks.create, { projectId, title: "Original" })
+  await alice.mutation(api.tasks.update, { taskId, title: "Newest" })
+  await expect(
+    alice.mutation(api.tasks.update, {
+      taskId,
+      title: "Stale edit",
+      expectedTitle: "Original",
+    })
+  ).rejects.toThrow()
+  expect((await alice.query(api.tasks.get, { taskId }))?.title).toBe("Newest")
+})
+
+test("comment pagination is capped per level and invalid mentions fail", async () => {
+  const { alice } = setup()
+  const projectId = await alice.mutation(api.projects.create, { name: "Roadmap" })
+  const taskId = await alice.mutation(api.tasks.create, { projectId, title: "Ship" })
+  let root: Id<"taskComments"> | undefined
+  for (let i = 0; i < 21; i++) {
+    const commentId = await alice.mutation(api.taskComments.create, {
+      taskId,
+      body: `Root ${i}`,
+      mentions: [],
+    })
+    root ??= commentId
+  }
+  const first = await alice.query(api.taskComments.list, {
+    taskId,
+    paginationOpts: { numItems: 100, cursor: null },
+  })
+  expect(first.page).toHaveLength(20)
+  expect(first.isDone).toBe(false)
+  const second = await alice.query(api.taskComments.list, {
+    taskId,
+    paginationOpts: { numItems: 20, cursor: first.continueCursor },
+  })
+  expect(second.page).toHaveLength(1)
+
+  for (let i = 0; i < 11; i++) {
+    await alice.mutation(api.taskComments.reply, {
+      commentId: root!,
+      body: `Reply ${i}`,
+      mentions: [],
+    })
+  }
+  const replies = await alice.query(api.taskComments.list, {
+    taskId,
+    parentCommentId: root!,
+    paginationOpts: { numItems: 20, cursor: null },
+  })
+  expect(replies.page).toHaveLength(10)
+  expect(replies.isDone).toBe(false)
+
+  await expect(
+    alice.mutation(api.taskComments.create, {
+      taskId,
+      body: "Hi @Stranger",
+      mentions: [
+        { start: 3, length: 9, subject: "stranger", label: "Stranger" },
+      ],
+    })
+  ).rejects.toThrow()
+})
+
+test("outsiders cannot read or mutate task children", async () => {
+  const { t, alice } = setup()
+  const charlie = t.withIdentity({
+    name: "Charlie",
+    subject: "charlie",
+    tokenIdentifier: "charlie",
+  })
+  const projectId = await alice.mutation(api.projects.create, { name: "Roadmap" })
+  const taskId = await alice.mutation(api.tasks.create, { projectId, title: "Ship" })
+  await expect(charlie.query(api.subtasks.list, { taskId })).rejects.toThrow()
+  await expect(
+    charlie.mutation(api.taskComments.create, {
+      taskId,
+      body: "No access",
+      mentions: [],
+    })
+  ).rejects.toThrow()
+})
+
+test("tombstone-only tasks still require cascade acknowledgement", async () => {
+  const { alice } = setup()
+  const projectId = await alice.mutation(api.projects.create, { name: "Roadmap" })
+  const taskId = await alice.mutation(api.tasks.create, { projectId, title: "Ship" })
+  const commentId = await alice.mutation(api.taskComments.create, {
+    taskId,
+    body: "Delete me",
+    mentions: [],
+  })
+  await alice.mutation(api.taskComments.remove, { commentId })
+  expect((await alice.query(api.tasks.get, { taskId }))?.activeCommentCount).toBe(0)
+  await expect(alice.mutation(api.tasks.remove, { taskId })).rejects.toThrow()
+})
+
+test("project deletion drains task children and stats in scheduled batches", async () => {
+  vi.useFakeTimers()
+  try {
+    const { t, alice } = setup()
+    const projectId = await alice.mutation(api.projects.create, { name: "Roadmap" })
+    const taskId = await alice.mutation(api.tasks.create, { projectId, title: "Ship" })
+    await alice.mutation(api.subtasks.create, { taskId, title: "Child" })
+    await alice.mutation(api.taskComments.create, { taskId, body: "Comment", mentions: [] })
+    await alice.mutation(api.projects.remove, { projectId })
+    await t.finishAllScheduledFunctions(vi.runAllTimers)
+    const remaining = await t.run(async (ctx) => ({
+      subtasks: await ctx.db.query("subtasks").collect(),
+      comments: await ctx.db.query("taskComments").collect(),
+      stats: await ctx.db.query("taskStats").collect(),
+    }))
+    expect(remaining).toEqual({ subtasks: [], comments: [], stats: [] })
+  } finally {
+    vi.useRealTimers()
+  }
 })
