@@ -1,4 +1,4 @@
-import { ActivityClient } from "@/app/(app)/activity/activity-client"
+import { ActivityClient } from "@/app/w/[organizationSlug]/(app)/activity/activity-client"
 
 export const metadata = {
   title: "Activity",

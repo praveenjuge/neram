@@ -14,6 +14,7 @@ import {
 } from "./sprintModel"
 import { startRollover } from "./sprintRollover"
 import { nextSprintBounds, validateCadence } from "./sprintTime"
+import { taskCounts, taskStats } from "./taskModel"
 
 const placement = v.union(
   v.literal("backlog"),
@@ -72,9 +73,16 @@ const task = v.object({
   position: v.number(),
   createdAt: v.number(),
   updatedAt: v.number(),
+  totalSubtasks: v.number(),
+  completedSubtasks: v.number(),
+  activeCommentCount: v.number(),
 })
 
-function sprintTask(taskDoc: Doc<"tasks">, project: Doc<"projects">) {
+async function sprintTask(
+  ctx: Parameters<typeof requireOrganization>[0],
+  taskDoc: Doc<"tasks">,
+  project: Doc<"projects">
+) {
   return {
     _id: taskDoc._id,
     _creationTime: taskDoc._creationTime,
@@ -94,6 +102,7 @@ function sprintTask(taskDoc: Doc<"tasks">, project: Doc<"projects">) {
     position: taskDoc.position,
     createdAt: taskDoc.createdAt,
     updatedAt: taskDoc.updatedAt,
+    ...taskCounts(await taskStats(ctx, taskDoc._id)),
   }
 }
 
@@ -124,8 +133,9 @@ async function tasksWithProjects(
       project = (await ctx.db.get(row.projectId)) ?? undefined
       if (project) projects.set(row.projectId, project)
     }
-    if (project && project.archivedAt === undefined)
-      result.push(sprintTask(row, project))
+    if (project && project.archivedAt === undefined) {
+      result.push(await sprintTask(ctx, row, project))
+    }
   }
   return result
 }

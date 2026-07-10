@@ -184,6 +184,7 @@ export function createTaskOptimistic(projectId: Id<"projects">) {
       dueDate?: string
       assigneeSubject?: string
       assigneeName?: string
+      sprint?: "backlog" | "current" | "upcoming"
     }
   ) => {
     const tasks = store.getQuery(api.tasks.list, { projectId })
@@ -199,6 +200,9 @@ export function createTaskOptimistic(projectId: Id<"projects">) {
         status: "todo",
         assigneeSubject: args.assigneeSubject,
         assigneeName: args.assigneeName,
+        currentSprintId: undefined,
+        upcomingSprintId: undefined,
+        completedAt: undefined,
         position: now,
         createdAt: now,
         updatedAt: now,

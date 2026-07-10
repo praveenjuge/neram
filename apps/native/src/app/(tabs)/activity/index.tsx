@@ -22,25 +22,27 @@ export default function ActivityScreen() {
             detail="Task changes will appear here as Convex updates."
           />
         ) : (
-          feed.results.map((item) =>
-            item.taskId ? (
+          feed.results.map((item) => {
+            const taskId = "taskId" in item ? item.taskId : undefined
+            const commentId = "commentId" in item ? item.commentId : undefined
+            return taskId ? (
               <Row
                 key={item._id}
-                label={`${activityLine(item)} · ${item.projectName}`}
-                systemImage={item.commentId ? "text.bubble" : "checklist"}
+                label={`${activityLine(item)} · ${item.projectName ?? "Workspace"}`}
+                systemImage={commentId ? "text.bubble" : "checklist"}
                 onPress={() =>
                   router.push(
-                    `/task/${item.taskId}${item.commentId ? `?commentId=${item.commentId}` : ""}`
+                    `/task/${taskId}${commentId ? `?commentId=${commentId}` : ""}`
                   )
                 }
               />
             ) : (
               <VStack key={item._id} alignment="leading" spacing={2}>
-                <Text>{item.projectName}</Text>
+                <Text>{item.projectName ?? "Workspace"}</Text>
                 <Text>{activityLine(item)}</Text>
               </VStack>
             )
-          )
+          })
         )}
       </Section>
     </Screen>
@@ -69,5 +71,12 @@ function activityLine(item: {
     return `${item.actorName} mentioned you on ${item.taskTitle}${item.commentExcerpt ? `: ${item.commentExcerpt}` : ""}`
   if (item.type === "comment.replied")
     return `${item.actorName} replied to you on ${item.taskTitle}${item.commentExcerpt ? `: ${item.commentExcerpt}` : ""}`
+  if (item.type === "sprint.started") return `${item.actorName} started a Sprint`
+  if (item.type === "sprint.rolled_over")
+    return `${item.actorName} rolled over a Sprint`
+  if (item.type === "sprint.early_closed")
+    return `${item.actorName} closed a Sprint early`
+  if (item.type === "sprint.cadence_changed")
+    return `${item.actorName} updated the Sprint cadence`
   return `${item.actorName} updated ${item.taskTitle ?? "the project"}`
 }

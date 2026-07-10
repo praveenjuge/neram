@@ -2,7 +2,7 @@ import { Stack } from "expo-router"
 
 import { HeaderAvatar, HeaderRow, HeaderWorkspaceButton } from "@/lib/header"
 
-export default function TasksLayout() {
+export default function SprintsLayout() {
   return (
     <Stack
       screenOptions={{
@@ -15,7 +15,7 @@ export default function TasksLayout() {
         ),
       }}
     >
-      <Stack.Screen name="index" options={{ title: "Tasks" }} />
+      <Stack.Screen name="index" options={{ title: "Sprints" }} />
     </Stack>
   )
 }

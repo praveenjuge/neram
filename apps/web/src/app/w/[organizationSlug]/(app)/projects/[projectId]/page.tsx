@@ -1,4 +1,4 @@
-import { ProjectBoardClient } from "@/app/(app)/projects/[projectId]/project-board-client"
+import { ProjectBoardClient } from "@/app/w/[organizationSlug]/(app)/projects/[projectId]/project-board-client"
 
 export const metadata = {
   title: "Project",

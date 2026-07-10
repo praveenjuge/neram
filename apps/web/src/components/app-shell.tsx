@@ -1,6 +1,6 @@
 "use client"
 
-import { RedirectToSignIn } from "@clerk/nextjs"
+import { OrganizationSwitcher, RedirectToSignIn } from "@clerk/nextjs"
 import Link from "next/link"
 import { useParams, usePathname } from "next/navigation"
 import { useQuery } from "convex-helpers/react/cache"
@@ -11,11 +11,10 @@ import {
   Archive,
   LayoutDashboard,
   ListTodo,
-  LogOut,
+  IterationCcw,
   MoreHorizontal,
   Pencil,
   Plus,
-  Share2,
 } from "lucide-react"
 import { type ReactNode, useState } from "react"
 
@@ -25,9 +24,7 @@ import {
   AddTaskDialog,
   ArchiveProjectDialog,
   EditProjectDialog,
-  LeaveProjectDialog,
   NewProjectDialog,
-  ShareProjectDialog,
 } from "@/components/project-dialogs"
 import { DialogTrigger } from "@/components/ui/dialog"
 import {
@@ -60,14 +57,15 @@ import {
 import { useProjectPrefetch } from "@/lib/prefetch"
 import { getProjectColorText } from "@/lib/project-colors"
 import { ProjectIcon } from "@/lib/project-icons"
+import { workspaceHref } from "@/lib/workspace"
 
 type SidebarProject = FunctionReturnType<typeof api.projects.names>[number]
 
-type DialogKind = "add" | "edit" | "share" | "leave" | "archive"
+type DialogKind = "add" | "edit" | "archive"
 
 export function Protected({
   children,
-  redirectUrl = "/dashboard",
+  redirectUrl = "/",
 }: {
   children: ReactNode
   redirectUrl?: string
@@ -115,22 +113,12 @@ function ProjectActions({ project }: { project: SidebarProject }) {
           </DropdownMenuItem>
           {project.role === "owner" ? (
             <>
-              <DropdownMenuItem onSelect={() => setDialog("share")}>
-                <Share2 /> Share
-              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={() => setDialog("archive")}>
                 <Archive /> Archive
               </DropdownMenuItem>
             </>
-          ) : (
-            <DropdownMenuItem
-              onSelect={() => setDialog("leave")}
-              variant="destructive"
-            >
-              <LogOut /> Leave
-            </DropdownMenuItem>
-          )}
+          ) : null}
         </DropdownMenuContent>
       </DropdownMenu>
 
@@ -150,28 +138,13 @@ function ProjectActions({ project }: { project: SidebarProject }) {
         role={project.role}
       />
       {project.role === "owner" ? (
-        <>
-          <ShareProjectDialog
-            id={project._id}
-            name={project.name}
-            onOpenChange={onOpenChange}
-            open={dialog === "share"}
-          />
-          <ArchiveProjectDialog
-            id={project._id}
-            name={project.name}
-            onOpenChange={onOpenChange}
-            open={dialog === "archive"}
-          />
-        </>
-      ) : (
-        <LeaveProjectDialog
+        <ArchiveProjectDialog
           id={project._id}
           name={project.name}
           onOpenChange={onOpenChange}
-          open={dialog === "leave"}
+          open={dialog === "archive"}
         />
-      )}
+      ) : null}
     </>
   )
 }
@@ -179,16 +152,18 @@ function ProjectActions({ project }: { project: SidebarProject }) {
 function ProjectMenuItem({
   project,
   isActive,
+  organizationSlug,
 }: {
   project: SidebarProject
   isActive: boolean
+  organizationSlug: string
 }) {
   const prefetch = useProjectPrefetch()
   return (
     <SidebarMenuItem>
       <SidebarMenuButton asChild isActive={isActive} tooltip={project.name}>
         <Link
-          href={`/projects/${project._id}`}
+          href={workspaceHref(organizationSlug, `/projects/${project._id}`)}
           onFocus={() => prefetch(project._id)}
           onMouseEnter={() => prefetch(project._id)}
         >
@@ -217,6 +192,9 @@ function AppSidebar() {
   const activeProjectId =
     typeof params.projectId === "string" ? params.projectId : undefined
   const pathname = usePathname()
+  const organizationSlug =
+    typeof params.organizationSlug === "string" ? params.organizationSlug : ""
+  const dashboardHref = workspaceHref(organizationSlug)
 
   return (
     <Sidebar collapsible="icon">
@@ -225,7 +203,7 @@ function AppSidebar() {
           <SidebarMenuItem>
             <div className="flex w-full items-center gap-2 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:gap-1">
               <SidebarMenuButton asChild tooltip="Neram">
-                <Link href="/dashboard">
+                <Link href={dashboardHref}>
                   {/* eslint-disable-next-line @next/next/no-img-element -- static brand mark from /public */}
                   <img
                     alt=""
@@ -238,6 +216,11 @@ function AppSidebar() {
                 </Link>
               </SidebarMenuButton>
               <div className="ml-auto flex shrink-0 items-center justify-center group-data-[collapsible=icon]:ml-0">
+                <OrganizationSwitcher
+                  afterCreateOrganizationUrl="/w/:slug/dashboard"
+                  afterSelectOrganizationUrl="/w/:slug/dashboard"
+                  hidePersonal
+                />
                 <AppUserButton />
               </div>
             </div>
@@ -251,10 +234,10 @@ function AppSidebar() {
               <SidebarMenuItem>
                 <SidebarMenuButton
                   asChild
-                  isActive={pathname === "/dashboard"}
+                  isActive={pathname === dashboardHref}
                   tooltip="Dashboard"
                 >
-                  <Link href="/dashboard">
+                  <Link href={dashboardHref}>
                     <LayoutDashboard />
                     <span>Dashboard</span>
                   </Link>
@@ -263,10 +246,22 @@ function AppSidebar() {
               <SidebarMenuItem>
                 <SidebarMenuButton
                   asChild
-                  isActive={pathname === "/tasks"}
+                  isActive={pathname === workspaceHref(organizationSlug, "/sprints")}
+                  tooltip="Sprints"
+                >
+                  <Link href={workspaceHref(organizationSlug, "/sprints")}>
+                    <IterationCcw />
+                    <span>Sprints</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={pathname === workspaceHref(organizationSlug, "/tasks")}
                   tooltip="Tasks"
                 >
-                  <Link href="/tasks">
+                  <Link href={workspaceHref(organizationSlug, "/tasks")}>
                     <ListTodo />
                     <span>Tasks</span>
                   </Link>
@@ -275,10 +270,10 @@ function AppSidebar() {
               <SidebarMenuItem>
                 <SidebarMenuButton
                   asChild
-                  isActive={pathname === "/activity"}
+                  isActive={pathname === workspaceHref(organizationSlug, "/activity")}
                   tooltip="Activity"
                 >
-                  <Link href="/activity">
+                  <Link href={workspaceHref(organizationSlug, "/activity")}>
                     <Activity />
                     <span>Activity</span>
                   </Link>
@@ -287,10 +282,10 @@ function AppSidebar() {
               <SidebarMenuItem>
                 <SidebarMenuButton
                   asChild
-                  isActive={pathname === "/archived"}
+                  isActive={pathname === workspaceHref(organizationSlug, "/archived")}
                   tooltip="Archived"
                 >
-                  <Link href="/archived">
+                  <Link href={workspaceHref(organizationSlug, "/archived")}>
                     <Archive />
                     <span>Archived</span>
                   </Link>
@@ -334,6 +329,7 @@ function AppSidebar() {
                   <ProjectMenuItem
                     isActive={project._id === activeProjectId}
                     key={project._id}
+                    organizationSlug={organizationSlug}
                     project={project}
                   />
                 ))

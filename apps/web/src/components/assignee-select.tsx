@@ -1,7 +1,7 @@
+import { useUser } from "@clerk/nextjs"
 import { useQuery } from "convex-helpers/react/cache"
 
 import { api } from "@neram/convex/api"
-import type { Id } from "@neram/convex/data-model"
 import { Label } from "@/components/ui/label"
 import {
   Select,
@@ -23,13 +23,11 @@ export const UNASSIGNED = "unassigned"
  * so the caller can persist both for the optimistic UI.
  */
 export function AssigneeSelect({
-  projectId,
   value,
   onChange,
   id,
   enabled = true,
 }: {
-  projectId: Id<"projects">
   value: string
   onChange: (subject: string, name: string | null) => void
   id: string
@@ -37,10 +35,8 @@ export function AssigneeSelect({
 }) {
   // Only subscribe while the form is open so closed dialogs don't hold a
   // members subscription open.
-  const members = useQuery(
-    api.members.list,
-    enabled ? { projectId } : "skip"
-  )
+  const members = useQuery(api.organizations.members, enabled ? {} : "skip")
+  const { user } = useUser()
 
   return (
     <div className="grid gap-2">
@@ -51,7 +47,7 @@ export function AssigneeSelect({
             onChange(UNASSIGNED, null)
             return
           }
-          const member = members?.find((m) => m.subject === next)
+          const member = members?.find((candidate) => candidate.userId === next)
           onChange(next, member?.displayName ?? null)
         }}
         value={value}
@@ -73,12 +69,12 @@ export function AssigneeSelect({
           {members?.map((member) => (
             <SelectItem
               data-testid="assignee-option"
-              key={member.subject}
-              value={member.subject}
+              key={member.userId}
+              value={member.userId}
             >
               <UserAvatar className="size-5" name={member.displayName} />
               {member.displayName}
-              {member.isYou ? " (you)" : ""}
+              {member.userId === user?.id ? " (you)" : ""}
             </SelectItem>
           ))}
         </SelectContent>

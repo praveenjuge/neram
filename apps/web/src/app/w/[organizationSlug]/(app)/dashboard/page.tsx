@@ -1,4 +1,4 @@
-import { DashboardClient } from "@/app/(app)/dashboard/dashboard-client"
+import { DashboardClient } from "@/app/w/[organizationSlug]/(app)/dashboard/dashboard-client"
 
 export const metadata = {
   title: "Dashboard",

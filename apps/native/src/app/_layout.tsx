@@ -47,6 +47,7 @@ export default function RootLayout() {
           />
           <Stack.Screen name="task/[taskId]" options={{ title: "Task" }} />
           <Stack.Screen name="profile" options={{ title: "Profile" }} />
+          <Stack.Screen name="workspace" options={{ title: "Workspace" }} />
         </Stack>
       </ConvexProviderWithClerk>
     </ClerkProvider>

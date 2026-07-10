@@ -1,4 +1,4 @@
-import { TasksClient } from "@/app/(app)/tasks/tasks-client"
+import { TasksClient } from "@/app/w/[organizationSlug]/(app)/tasks/tasks-client"
 
 export const metadata = {
   title: "Tasks",

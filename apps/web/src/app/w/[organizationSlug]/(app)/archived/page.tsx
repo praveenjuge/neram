@@ -1,4 +1,4 @@
-import { ArchivedClient } from "@/app/(app)/archived/archived-client"
+import { ArchivedClient } from "@/app/w/[organizationSlug]/(app)/archived/archived-client"
 
 export const metadata = {
   title: "Archived",

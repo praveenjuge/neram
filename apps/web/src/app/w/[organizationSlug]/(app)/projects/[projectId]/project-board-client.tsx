@@ -6,7 +6,7 @@ import { ArrowLeft } from "lucide-react"
 import { toast } from "sonner"
 
 import Link from "next/link"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { api } from "@neram/convex/api"
 import type { Id } from "@neram/convex/data-model"
 import { dataFromError, messageFromError } from "@/lib/errors"
@@ -14,6 +14,7 @@ import { moveTaskOptimistic } from "@/lib/optimistic"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
+import { workspaceHref } from "@/lib/workspace"
 
 import {
   positionFor,
@@ -24,7 +25,14 @@ import { NewTaskDialog } from "@/components/project-board/new-task-dialog"
 import { TaskDialog } from "@/components/project-board/task-dialog"
 
 export function ProjectBoardClient({ projectId }: { projectId: string }) {
+  const params = useParams()
   const projectIdArg = projectId as Id<"projects">
+  const organizationSlug =
+    typeof params.organizationSlug === "string" ? params.organizationSlug : ""
+  const projectHref = workspaceHref(
+    organizationSlug,
+    `/projects/${projectId}`
+  )
   const project = useQuery(api.projects.get, { projectId: projectIdArg })
   const tasks = useQuery(api.tasks.list, { projectId: projectIdArg })
   const moveTask = useMutation(api.tasks.move).withOptimisticUpdate(
@@ -42,7 +50,7 @@ export function ProjectBoardClient({ projectId }: { projectId: string }) {
     window.history.pushState(
       { ...window.history.state, neramTaskModal: true },
       "",
-      `/projects/${projectId}?${params.toString()}`
+      `${projectHref}?${params.toString()}`
     )
   }
 
@@ -51,7 +59,7 @@ export function ProjectBoardClient({ projectId }: { projectId: string }) {
       router.back()
       return
     }
-    router.replace(`/projects/${projectId}`, { scroll: false })
+    router.replace(projectHref, { scroll: false })
   }
 
   async function handleDrop(
@@ -106,7 +114,7 @@ export function ProjectBoardClient({ projectId }: { projectId: string }) {
     return (
       <section className="mx-auto grid w-full max-w-7xl gap-4 p-5">
         <Button asChild className="w-fit" size="sm" variant="ghost">
-          <Link href="/dashboard">
+          <Link href={workspaceHref(organizationSlug)}>
             <ArrowLeft /> Back to projects
           </Link>
         </Button>
@@ -145,7 +153,10 @@ export function ProjectBoardClient({ projectId }: { projectId: string }) {
           window.history.replaceState(
             window.history.state,
             "",
-            `/projects/${nextProjectId}?${next.toString()}`
+            `${workspaceHref(
+              organizationSlug,
+              `/projects/${nextProjectId}`
+            )}?${next.toString()}`
           )
         }}
         taskId={openTaskId}

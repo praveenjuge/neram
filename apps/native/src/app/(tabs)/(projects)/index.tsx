@@ -4,7 +4,12 @@ import { useMutation, useQuery } from "convex/react"
 import { router, Stack } from "expo-router"
 import { useState } from "react"
 
-import { HeaderAvatar, HeaderIconButton, HeaderRow } from "@/lib/header"
+import {
+  HeaderAvatar,
+  HeaderIconButton,
+  HeaderRow,
+  HeaderWorkspaceButton,
+} from "@/lib/header"
 import { NativeTextPrompt } from "@/lib/task-ui"
 import { Empty, Row, Screen, Section, Text } from "@/lib/ui"
 
@@ -25,6 +30,7 @@ export default function ProjectsScreen() {
                 label="New project"
                 onPress={() => setCreatingProject(true)}
               />
+              <HeaderWorkspaceButton />
               <HeaderAvatar />
             </HeaderRow>
           ),

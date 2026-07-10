@@ -2,16 +2,15 @@
 
 import { useQuery } from "convex-helpers/react/cache"
 import type { FunctionReturnType } from "convex/server"
-import { FolderPlus, ListChecks, LogOut, Pencil, Plus, Share2 } from "lucide-react"
+import { FolderPlus, ListChecks, Pencil, Plus } from "lucide-react"
 
 import Link from "next/link"
+import { useParams } from "next/navigation"
 import { api } from "@neram/convex/api"
 import {
   AddTaskDialog,
   EditProjectDialog,
-  LeaveProjectDialog,
   NewProjectDialog,
-  ShareProjectDialog,
 } from "@/components/project-dialogs"
 import { useProjectPrefetch } from "@/lib/prefetch"
 import { getProjectColorText } from "@/lib/project-colors"
@@ -21,6 +20,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { DialogTrigger } from "@/components/ui/dialog"
 import { Spinner } from "@/components/ui/spinner"
+import { workspaceHref } from "@/lib/workspace"
 import {
   Tooltip,
   TooltipContent,
@@ -33,6 +33,9 @@ export function DashboardClient() {
   // The list already arrives ordered by most recently updated first, so the
   // freshest projects surface at the top with no client-side grouping.
   const projects = useQuery(api.projects.list)
+  const params = useParams()
+  const organizationSlug =
+    typeof params.organizationSlug === "string" ? params.organizationSlug : ""
 
   return (
     <section className="mx-auto grid w-full max-w-6xl gap-6 p-5">
@@ -60,7 +63,11 @@ export function DashboardClient() {
           data-testid="dashboard-project-list"
         >
           {projects.map((project) => (
-            <ProjectRow key={project._id} project={project} />
+            <ProjectRow
+              key={project._id}
+              organizationSlug={organizationSlug}
+              project={project}
+            />
           ))}
         </div>
       )}
@@ -68,7 +75,13 @@ export function DashboardClient() {
   )
 }
 
-function ProjectRow({ project }: { project: DashboardProject }) {
+function ProjectRow({
+  project,
+  organizationSlug,
+}: {
+  project: DashboardProject
+  organizationSlug: string
+}) {
   const prefetch = useProjectPrefetch()
   const counts = [
     { label: "Todo", value: project.todoCount },
@@ -81,7 +94,7 @@ function ProjectRow({ project }: { project: DashboardProject }) {
       <Link
         className="flex min-w-0 flex-1 items-center gap-3"
         data-testid="project-card"
-        href={`/projects/${project._id}`}
+        href={workspaceHref(organizationSlug, `/projects/${project._id}`)}
         onFocus={() => prefetch(project._id)}
         onMouseEnter={() => prefetch(project._id)}
       >
@@ -143,51 +156,6 @@ function ProjectRow({ project }: { project: DashboardProject }) {
             </Tooltip>
           }
         />
-        {project.role === "owner" ? (
-          <ShareProjectDialog
-            id={project._id}
-            name={project.name}
-            trigger={
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <DialogTrigger asChild>
-                    <Button
-                      aria-label="Share project"
-                      data-testid="share-project-trigger"
-                      size="icon-sm"
-                      variant="ghost"
-                    >
-                      <Share2 />
-                    </Button>
-                  </DialogTrigger>
-                </TooltipTrigger>
-                <TooltipContent>Share project</TooltipContent>
-              </Tooltip>
-            }
-          />
-        ) : (
-          <LeaveProjectDialog
-            id={project._id}
-            name={project.name}
-            trigger={
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <DialogTrigger asChild>
-                    <Button
-                      aria-label="Leave project"
-                      data-testid="leave-project-trigger"
-                      size="icon-sm"
-                      variant="ghost"
-                    >
-                      <LogOut />
-                    </Button>
-                  </DialogTrigger>
-                </TooltipTrigger>
-                <TooltipContent>Leave project</TooltipContent>
-              </Tooltip>
-            }
-          />
-        )}
       </div>
     </div>
   )

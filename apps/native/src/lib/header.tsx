@@ -70,3 +70,13 @@ export function HeaderAvatar() {
     </Pressable>
   )
 }
+
+export function HeaderWorkspaceButton() {
+  return (
+    <HeaderIconButton
+      label="Manage workspace"
+      name="building.2"
+      onPress={() => router.push("/workspace")}
+    />
+  )
+}

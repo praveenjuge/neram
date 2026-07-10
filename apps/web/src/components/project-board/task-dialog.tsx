@@ -371,7 +371,6 @@ function TaskMetadata({
               assigneeName: name ?? undefined,
             })
           }
-          projectId={task.projectId}
           value={task.assigneeSubject ?? UNASSIGNED}
         />
         <div className="grid gap-2 rounded-xl border bg-background/60 p-3 text-xs text-muted-foreground">
