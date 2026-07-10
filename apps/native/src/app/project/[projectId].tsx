@@ -3,9 +3,9 @@ import type { Id } from "@neram/convex/data-model"
 import { useMutation, useQuery } from "convex/react"
 import { router, Stack, useLocalSearchParams } from "expo-router"
 import { useMemo, useState } from "react"
-import { Alert } from "react-native"
 
 import { HeaderIconButton } from "@/lib/header"
+import { NativeTextPrompt } from "@/lib/task-ui"
 import {
   Empty,
   Row,
@@ -21,6 +21,7 @@ export default function ProjectScreen() {
   const { projectId } = useLocalSearchParams<{ projectId: string }>()
   const id = projectId as Id<"projects">
   const [status, setStatus] = useState<Status>("todo")
+  const [creatingTask, setCreatingTask] = useState(false)
   const project = useQuery(api.projects.get, { projectId: id })
   const tasks = useQuery(api.tasks.list, { projectId: id })
   const members = useQuery(api.members.list, { projectId: id })
@@ -31,27 +32,6 @@ export default function ProjectScreen() {
     [tasks, status]
   )
 
-  const promptNewTask = () => {
-    Alert.prompt(
-      "New task",
-      "Give your task a title.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Create",
-          onPress: (value?: string) => {
-            const trimmed = (value ?? "").trim()
-            if (!trimmed) return
-            void createTask({ projectId: id, title: trimmed }).then((taskId) =>
-              router.push(`/task/${taskId}?projectId=${id}`)
-            )
-          },
-        },
-      ],
-      "plain-text"
-    )
-  }
-
   return (
     <>
       <Stack.Screen
@@ -60,7 +40,7 @@ export default function ProjectScreen() {
             <HeaderIconButton
               name="plus"
               label="New task"
-              onPress={promptNewTask}
+              onPress={() => setCreatingTask(true)}
             />
           ),
         }}
@@ -107,6 +87,21 @@ export default function ProjectScreen() {
           )}
         </Section>
       </Screen>
+      <NativeTextPrompt
+        detail="Give your task a title."
+        onClose={() => setCreatingTask(false)}
+        onSubmit={(value) => {
+          const title = value.trim()
+          if (!title) return
+          setCreatingTask(false)
+          void createTask({ projectId: id, title }).then((taskId) =>
+            router.push(`/task/${taskId}?projectId=${id}`)
+          )
+        }}
+        submitLabel="Create"
+        title="New task"
+        visible={creatingTask}
+      />
     </>
   )
 }

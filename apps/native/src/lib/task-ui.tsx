@@ -1,6 +1,8 @@
-import type { PropsWithChildren, ReactNode } from "react"
+import { useState, type PropsWithChildren, type ReactNode } from "react"
 import {
+  Modal,
   Pressable,
+  SafeAreaView,
   StyleSheet,
   Text,
   TextInput,
@@ -97,6 +99,72 @@ export function NativeField(props: TextInputProps) {
 export function InlineMeta({ children }: { children: ReactNode }) {
   const colors = useTaskColors()
   return <Text style={[taskStyles.detail, { color: colors.muted }]}>{children}</Text>
+}
+
+export function NativeTextPrompt({
+  visible,
+  title,
+  detail,
+  initialValue = "",
+  placeholder,
+  multiline = false,
+  allowEmpty = false,
+  submitLabel = "Save",
+  onClose,
+  onSubmit,
+}: {
+  visible: boolean
+  title: string
+  detail?: string
+  initialValue?: string
+  placeholder?: string
+  multiline?: boolean
+  allowEmpty?: boolean
+  submitLabel?: string
+  onClose: () => void
+  onSubmit: (value: string) => void
+}) {
+  const colors = useTaskColors()
+  const [value, setValue] = useState(initialValue)
+  return (
+    <Modal
+      animationType="slide"
+      onRequestClose={onClose}
+      onShow={() => setValue(initialValue)}
+      presentationStyle="pageSheet"
+      visible={visible}
+    >
+      <SafeAreaView
+        style={[taskStyles.screen, { backgroundColor: colors.background }]}
+      >
+        <View style={taskStyles.content}>
+          <View style={taskStyles.between}>
+            <View style={taskStyles.sectionHeading}>
+              <Text style={[taskStyles.sectionTitle, { color: colors.text }]}>
+                {title}
+              </Text>
+              {detail ? <InlineMeta>{detail}</InlineMeta> : null}
+            </View>
+            <NativeButton label="Cancel" onPress={onClose} />
+          </View>
+          <NativeField
+            autoFocus
+            maxLength={multiline ? 2000 : 200}
+            multiline={multiline}
+            onChangeText={setValue}
+            placeholder={placeholder}
+            value={value}
+          />
+          <NativeButton
+            active
+            disabled={!allowEmpty && !value.trim()}
+            label={submitLabel}
+            onPress={() => onSubmit(value)}
+          />
+        </View>
+      </SafeAreaView>
+    </Modal>
+  )
 }
 
 export const taskStyles = StyleSheet.create({

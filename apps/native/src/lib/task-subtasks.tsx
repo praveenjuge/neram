@@ -1,12 +1,14 @@
 import { api } from "@neram/convex/api"
 import type { Id } from "@neram/convex/data-model"
 import { useMutation, useQuery } from "convex/react"
+import { useState } from "react"
 import { Alert, Pressable, Text, View } from "react-native"
 
 import {
   InlineMeta,
   NativeButton,
   NativeSection,
+  NativeTextPrompt,
   taskStyles,
   useTaskColors,
 } from "@/lib/task-ui"
@@ -15,26 +17,27 @@ export function NativeTaskSubtasks({ taskId }: { taskId: Id<"tasks"> }) {
   const colors = useTaskColors()
   const rows = useQuery(api.subtasks.list, { taskId })
   const create = useMutation(api.subtasks.create)
-
-  function add() {
-    Alert.prompt("New subtask", "What needs to be done?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Add",
-        onPress: (value?: string) => {
-          const title = (value ?? "").trim()
-          if (title) void create({ taskId, title }).catch(showError)
-        },
-      },
-    ])
-  }
+  const [adding, setAdding] = useState(false)
 
   return (
     <NativeSection
       detail="Completed items stay in their manual order. Reordering is available on web and CLI."
       title="Subtasks"
     >
-      <NativeButton label="Add subtask" onPress={add} />
+      <NativeButton label="Add subtask" onPress={() => setAdding(true)} />
+      <NativeTextPrompt
+        detail="What needs to be done?"
+        onClose={() => setAdding(false)}
+        onSubmit={(value) => {
+          const title = value.trim()
+          if (!title) return
+          setAdding(false)
+          void create({ taskId, title }).catch(showError)
+        }}
+        submitLabel="Add"
+        title="New subtask"
+        visible={adding}
+      />
       {rows === undefined ? (
         <InlineMeta>Loading subtasks…</InlineMeta>
       ) : rows.length === 0 ? (
@@ -68,19 +71,7 @@ function SubtaskRow({
   const setCompleted = useMutation(api.subtasks.setCompleted)
   const rename = useMutation(api.subtasks.rename)
   const remove = useMutation(api.subtasks.remove)
-
-  function promptRename() {
-    Alert.prompt("Rename subtask", undefined, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Save",
-        onPress: (value?: string) => {
-          const title = (value ?? "").trim()
-          if (title) void rename({ subtaskId: row._id, title }).catch(showError)
-        },
-      },
-    ], "plain-text", row.title)
-  }
+  const [renaming, setRenaming] = useState(false)
 
   function confirmDelete() {
     Alert.alert("Delete subtask?", row.title, [
@@ -116,9 +107,21 @@ function SubtaskRow({
         </Text>
       </Pressable>
       <View style={taskStyles.row}>
-        <NativeButton label="Rename" onPress={promptRename} />
+        <NativeButton label="Rename" onPress={() => setRenaming(true)} />
         <NativeButton destructive label="Delete" onPress={confirmDelete} />
       </View>
+      <NativeTextPrompt
+        initialValue={row.title}
+        onClose={() => setRenaming(false)}
+        onSubmit={(value) => {
+          const title = value.trim()
+          if (!title) return
+          setRenaming(false)
+          void rename({ subtaskId: row._id, title }).catch(showError)
+        }}
+        title="Rename subtask"
+        visible={renaming}
+      />
     </View>
   )
 }

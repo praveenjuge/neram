@@ -21,6 +21,7 @@ import {
   InlineMeta,
   NativeButton,
   NativeSection,
+  NativeTextPrompt,
   taskStyles,
   useTaskColors,
 } from "@/lib/task-ui"
@@ -73,29 +74,7 @@ type Task = NonNullable<FunctionReturnType<typeof api.tasks.get>>
 function TaskFields({ task }: { task: Task }) {
   const colors = useTaskColors()
   const update = useMutation(api.tasks.update)
-
-  function editTitle() {
-    Alert.prompt("Edit title", undefined, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Save",
-        onPress: (value?: string) => {
-          const title = (value ?? "").trim()
-          if (title) void saveWithConflict("title", title)
-        },
-      },
-    ], "plain-text", task.title)
-  }
-
-  function editDescription() {
-    Alert.prompt("Edit description", "Leave empty to clear it.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Save",
-        onPress: (value?: string) => void saveWithConflict("description", value ?? ""),
-      },
-    ], "plain-text", task.description ?? "")
-  }
+  const [editing, setEditing] = useState<"title" | "description" | null>(null)
 
   async function saveWithConflict(field: "title" | "description", value: string) {
     const args = field === "title"
@@ -134,14 +113,31 @@ function TaskFields({ task }: { task: Task }) {
 
   return (
     <NativeSection detail="Tap either field to edit it." title="Task">
-      <Pressable onPress={editTitle}>
+      <Pressable onPress={() => setEditing("title")}>
         <Text style={[taskStyles.title, { color: colors.text }]}>{task.title}</Text>
       </Pressable>
-      <Pressable onPress={editDescription}>
+      <Pressable onPress={() => setEditing("description")}>
         <Text style={[taskStyles.body, { color: task.description ? colors.text : colors.muted }]}>
           {task.description || "Add a description"}
         </Text>
       </Pressable>
+      <NativeTextPrompt
+        allowEmpty={editing === "description"}
+        detail={editing === "description" ? "Leave empty to clear it." : undefined}
+        initialValue={editing === "title" ? task.title : task.description ?? ""}
+        multiline={editing === "description"}
+        onClose={() => setEditing(null)}
+        onSubmit={(value) => {
+          if (!editing) return
+          const nextValue = editing === "title" ? value.trim() : value
+          if (editing === "title" && !nextValue) return
+          const field = editing
+          setEditing(null)
+          void saveWithConflict(field, nextValue)
+        }}
+        title={editing === "title" ? "Edit title" : "Edit description"}
+        visible={editing !== null}
+      />
     </NativeSection>
   )
 }
@@ -156,6 +152,7 @@ function TaskMetadata({ task }: { task: Task }) {
   const members = useQuery(api.members.list, { projectId: task.projectId })
   const [projectSheet, setProjectSheet] = useState(false)
   const [assigneeSheet, setAssigneeSheet] = useState(false)
+  const [dueDateSheet, setDueDateSheet] = useState(false)
 
   async function changeStatus(status: Status) {
     try {
@@ -184,19 +181,6 @@ function TaskMetadata({ task }: { task: Task }) {
     }
   }
 
-  function editDueDate() {
-    Alert.prompt("Due date", "Use YYYY-MM-DD, or leave empty to clear.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Save",
-        onPress: (value?: string) =>
-          void update({ taskId: task._id, dueDate: value ?? "" }).catch((error) =>
-            showError("Could not update due date", error)
-          ),
-      },
-    ], "plain-text", task.dueDate ?? "")
-  }
-
   function confirmDelete() {
     Alert.alert(
       "Delete task?",
@@ -223,7 +207,7 @@ function TaskMetadata({ task }: { task: Task }) {
         ))}
       </View>
       <NativeButton label={`Project · ${projects?.find((project) => project._id === task.projectId)?.name ?? "Loading"}`} onPress={() => setProjectSheet(true)} />
-      <NativeButton label={`Due · ${task.dueDate ?? "None"}`} onPress={editDueDate} />
+      <NativeButton label={`Due · ${task.dueDate ?? "None"}`} onPress={() => setDueDateSheet(true)} />
       <NativeButton label={`Assignee · ${task.assigneeName ?? "Unassigned"}`} onPress={() => setAssigneeSheet(true)} />
       <View style={[taskStyles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <InlineMeta>{task.completedSubtasks}/{task.totalSubtasks} subtasks complete · {task.activeCommentCount} comments</InlineMeta>
@@ -231,6 +215,20 @@ function TaskMetadata({ task }: { task: Task }) {
         <InlineMeta>Updated {new Date(task.updatedAt).toLocaleString()}</InlineMeta>
       </View>
       <NativeButton destructive label="Delete task" onPress={confirmDelete} />
+      <NativeTextPrompt
+        allowEmpty
+        detail="Use YYYY-MM-DD, or leave empty to clear."
+        initialValue={task.dueDate ?? ""}
+        onClose={() => setDueDateSheet(false)}
+        onSubmit={(dueDate) => {
+          setDueDateSheet(false)
+          void update({ taskId: task._id, dueDate }).catch((error) =>
+            showError("Could not update due date", error)
+          )
+        }}
+        title="Due date"
+        visible={dueDateSheet}
+      />
       <ChoiceSheet
         onClose={() => setProjectSheet(false)}
         title="Move to project"
