@@ -142,6 +142,9 @@ export const get = query({
   args: { taskId: v.id("tasks") },
   returns: v.union(v.null(), task),
   handler: async (ctx, args) => {
+    // Preserve the canonical UNAUTHENTICATED error while still returning null
+    // for missing/inaccessible task links in visual clients.
+    await actor(ctx)
     const taskDoc = await ctx.db.get(args.taskId)
     if (!taskDoc) return null
     try {
