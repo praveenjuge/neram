@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils"
+import { ListChecks, MessageSquare } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { TaskItem } from "@/components/task-item"
 
@@ -69,6 +70,22 @@ export function TaskCard({
           status={task.status}
           title={task.title}
         />
+        {task.totalSubtasks > 0 || task.activeCommentCount > 0 ? (
+          <div className="mt-2 flex items-center gap-3 pl-6 text-xs text-muted-foreground">
+            {task.totalSubtasks > 0 ? (
+              <span className="flex items-center gap-1">
+                <ListChecks className="size-3.5" />
+                {task.completedSubtasks}/{task.totalSubtasks}
+              </span>
+            ) : null}
+            {task.activeCommentCount > 0 ? (
+              <span className="flex items-center gap-1">
+                <MessageSquare className="size-3.5" />
+                {task.activeCommentCount}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   )

@@ -4,16 +4,19 @@ import { usePaginatedQuery } from "convex/react"
 import type { FunctionReturnType } from "convex/server"
 import {
   ArrowRight,
+  AtSign,
   History,
   LogOut,
   Pencil,
   Plus,
+  Reply,
   Trash2,
   UserCheck,
   UserMinus,
   UserPlus,
   type LucideIcon,
 } from "lucide-react"
+import Link from "next/link"
 
 import { api } from "@neram/convex/api"
 import { Button } from "@/components/ui/button"
@@ -37,6 +40,8 @@ const typeIcon: Record<ActivityItem["type"], LucideIcon> = {
   "member.joined": UserPlus,
   "member.left": LogOut,
   "member.removed": UserMinus,
+  "comment.mentioned": AtSign,
+  "comment.replied": Reply,
 }
 
 /** A short past-tense phrase describing what the actor did. */
@@ -67,6 +72,10 @@ function describe(item: ActivityItem): string {
       return "left"
     case "member.removed":
       return "was removed"
+    case "comment.mentioned":
+      return `mentioned you on ${item.taskTitle ?? "a task"}`
+    case "comment.replied":
+      return `replied to you on ${item.taskTitle ?? "a task"}`
     default:
       return "made a change"
   }
@@ -115,26 +124,36 @@ export function ActivityClient() {
             <ul className="grid gap-2">
               {results.map((item) => {
                 const Icon = typeIcon[item.type] ?? History
+                const card = (
+                  <Card className={item.taskId ? "transition-colors hover:bg-muted/40" : undefined} size="sm">
+                    <CardContent className="flex items-start gap-3">
+                      <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground">
+                        <Icon className="size-4" />
+                      </span>
+                      <div className="min-w-0 space-y-0.5">
+                        <p className="text-sm">
+                          <span className="font-medium">{item.actorName}</span>{" "}
+                          {describe(item)}
+                        </p>
+                        {item.commentExcerpt ? (
+                          <p className="line-clamp-1 text-sm text-muted-foreground">
+                            “{item.commentExcerpt}”
+                          </p>
+                        ) : null}
+                        <p className="truncate text-sm text-muted-foreground">
+                          {item.projectName} · {relativeTime(item.createdAt)}
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )
                 return (
                   <li key={item._id}>
-                    <Card size="sm">
-                      <CardContent className="flex items-start gap-3">
-                        <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground">
-                          <Icon className="size-4" />
-                        </span>
-                        <div className="min-w-0 space-y-0.5">
-                          <p className="text-sm">
-                            <span className="font-medium">
-                              {item.actorName}
-                            </span>{" "}
-                            {describe(item)}
-                          </p>
-                          <p className="truncate text-sm text-muted-foreground">
-                            {item.projectName} · {relativeTime(item.createdAt)}
-                          </p>
-                        </div>
-                      </CardContent>
-                    </Card>
+                    {item.taskId ? (
+                      <Link href={`/projects/${item.projectId}?task=${item.taskId}${item.commentId ? `&comment=${item.commentId}` : ""}`}>
+                        {card}
+                      </Link>
+                    ) : card}
                   </li>
                 )
               })}

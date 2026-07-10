@@ -167,6 +167,10 @@ function taskBullet(task: CompactTaskLike) {
   if (label) meta.push(label)
   if (task.dueDate) meta.push(`due ${task.dueDate}`)
   if (task.assigneeName) meta.push(task.assigneeName)
+  if (task.totalSubtasks) {
+    meta.push(`${task.completedSubtasks ?? 0}/${task.totalSubtasks} subtasks`)
+  }
+  if (task.activeCommentCount) meta.push(`${task.activeCommentCount} comments`)
   const project = task.projectName ? ` ${dim(`— ${task.projectName}`)}` : ""
   const tail = meta.length ? ` ${dim(`(${meta.join(", ")})`)}` : ""
   return bullet(`${task.title}${project}${tail}`)
@@ -204,6 +208,9 @@ type CompactTaskLike = {
   status: string
   dueDate?: string
   assigneeName?: string
+  totalSubtasks?: number
+  completedSubtasks?: number
+  activeCommentCount?: number
   updatedAt?: string
 }
 type CompactActivityLike = {
@@ -254,6 +261,72 @@ export function formatTaskList(result: { project: CompactProjectLike; tasks: Com
   ].join("\n")
 }
 
+export function formatTaskDetail(task: CompactTaskLike) {
+  const lines = [taskBullet(task), dim(`  Task ${task.taskId}`)]
+  if (task.description) lines.push(`  ${task.description}`)
+  return lines.join("\n")
+}
+
+export function formatProjectMembers(result: {
+  members: Array<{ subject: string; displayName: string; role: string; isYou: boolean }>
+}) {
+  return section(
+    `Members (${result.members.length})`,
+    result.members.map((member) =>
+      bullet(
+        `${member.displayName}${member.isYou ? " (you)" : ""} ${dim(`(${member.role}) ${member.subject}`)}`
+      )
+    )
+  )
+}
+
+type CompactSubtaskLike = {
+  subtaskId: string
+  title: string
+  completed: boolean
+  position: number
+}
+
+export function formatSubtasks(result: { subtasks: CompactSubtaskLike[] }) {
+  return section(
+    `Subtasks (${result.subtasks.length})`,
+    result.subtasks.map((item) =>
+      bullet(`${item.completed ? "[x]" : "[ ]"} ${item.title} ${dim(item.subtaskId)}`)
+    )
+  )
+}
+
+type CompactCommentLike = {
+  commentId: string
+  parentCommentId?: string
+  authorName: string
+  body: string
+  tombstone: boolean
+  edited: boolean
+}
+
+export function formatComments(result: {
+  parentCommentId?: string
+  comments: CompactCommentLike[]
+  cursor: string | null
+}) {
+  const level = result.parentCommentId ? "Direct replies" : "Root comments"
+  const lines = result.comments.map((item) => {
+    const flags = [item.tombstone ? "deleted" : "", item.edited ? "edited" : ""]
+      .filter(Boolean)
+      .join(", ")
+    return bullet(
+      `${item.authorName}: ${item.body}${flags ? ` ${dim(`(${flags})`)}` : ""}\n    ${dim(item.commentId)}`
+    )
+  })
+  if (result.cursor) lines.push(`  ${dim(`Next cursor: ${result.cursor}`)}`)
+  return section(`${level} (${result.comments.length})`, lines)
+}
+
+export function formatCreated(label: string, id: string) {
+  return `${label}.\n${dim(id)}`
+}
+
 /** The `summarize_project` result: project header, counts, and task list. */
 export function formatProjectSummary(result: {
   project: CompactProjectLike
@@ -290,8 +363,13 @@ export function formatTaskUpdated(result: { taskId: string }) {
 }
 
 /** Confirmation after `delete_task`. */
-export function formatTaskDeleted(result: { taskId: string }) {
-  return `Deleted task.\n${dim(`Task ${result.taskId}`)}`
+export function formatTaskDeleted(result: {
+  taskId: string
+  subtaskCount?: number
+  commentCount?: number
+}) {
+  const children = (result.subtaskCount ?? 0) + (result.commentCount ?? 0)
+  return `Deleted task${children ? ` and ${children} child item(s)` : ""}.\n${dim(`Task ${result.taskId}`)}`
 }
 
 /** Confirmation after `move_task_to_project`. */

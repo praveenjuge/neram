@@ -3,13 +3,13 @@
 import { useQuery } from "convex-helpers/react/cache"
 import { useMutation } from "convex/react"
 import { ArrowLeft } from "lucide-react"
-import { useState } from "react"
 import { toast } from "sonner"
 
 import Link from "next/link"
+import { useRouter, useSearchParams } from "next/navigation"
 import { api } from "@neram/convex/api"
 import type { Id } from "@neram/convex/data-model"
-import { messageFromError } from "@/lib/errors"
+import { dataFromError, messageFromError } from "@/lib/errors"
 import { moveTaskOptimistic } from "@/lib/optimistic"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -30,10 +30,29 @@ export function ProjectBoardClient({ projectId }: { projectId: string }) {
   const moveTask = useMutation(api.tasks.move).withOptimisticUpdate(
     moveTaskOptimistic(projectIdArg)
   )
-  // The opened task dialog is tracked here (not inside each card) so it stays
-  // open when a status change moves the card into a different column, which
-  // would otherwise unmount the card and its dialog.
-  const [openTaskId, setOpenTaskId] = useState<Id<"tasks"> | null>(null)
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const openTaskId = searchParams.get("task") as Id<"tasks"> | null
+  const commentId = searchParams.get("comment") as Id<"taskComments"> | null
+
+  function openTask(taskId: Id<"tasks">) {
+    const params = new URLSearchParams(searchParams.toString())
+    params.set("task", taskId)
+    params.delete("comment")
+    window.history.pushState(
+      { ...window.history.state, neramTaskModal: true },
+      "",
+      `/projects/${projectId}?${params.toString()}`
+    )
+  }
+
+  function closeTask() {
+    if (window.history.state?.neramTaskModal) {
+      router.back()
+      return
+    }
+    router.replace(`/projects/${projectId}`, { scroll: false })
+  }
 
   async function handleDrop(
     taskId: Id<"tasks">,
@@ -56,6 +75,21 @@ export function ProjectBoardClient({ projectId }: { projectId: string }) {
     try {
       await moveTask({ taskId, status, position })
     } catch (error) {
+      const data = dataFromError(error)
+      if (
+        data?.code === "INCOMPLETE_SUBTASKS" &&
+        window.confirm(
+          `${String(data.unfinishedCount)} subtasks are unfinished. Move this task to Done anyway?`
+        )
+      ) {
+        await moveTask({
+          taskId,
+          status,
+          position,
+          confirmIncompleteSubtasks: true,
+        })
+        return
+      }
       toast.error(messageFromError(error, "Could not move the task."))
     }
   }
@@ -98,15 +132,23 @@ export function ProjectBoardClient({ projectId }: { projectId: string }) {
       </div>
       <KanbanBoard
         onDrop={handleDrop}
-        onOpenTask={setOpenTaskId}
+        onOpenTask={openTask}
         tasks={tasks}
       />
       <TaskDialog
-        onOpenChange={(next) => {
-          if (!next) setOpenTaskId(null)
+        commentId={commentId}
+        onClose={closeTask}
+        onProjectChange={(nextProjectId) => {
+          if (!openTaskId) return
+          const next = new URLSearchParams(searchParams.toString())
+          next.set("task", openTaskId)
+          window.history.replaceState(
+            window.history.state,
+            "",
+            `/projects/${nextProjectId}?${next.toString()}`
+          )
         }}
-        open={openTaskId !== null}
-        task={tasks.find((task) => task._id === openTaskId) ?? null}
+        taskId={openTaskId}
       />
     </section>
   )

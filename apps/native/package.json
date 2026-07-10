@@ -6,6 +6,7 @@
     "@clerk/expo": "^3.6.4",
     "@expo/ui": "~57.0.1",
     "@neram/convex": "workspace:*",
+    "@react-native-async-storage/async-storage": "2.2.0",
     "convex": "^1.42.1",
     "expo": "~57.0.1",
     "expo-constants": "~57.0.2",
