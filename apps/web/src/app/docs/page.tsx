@@ -15,6 +15,14 @@ npx neram doctor --json  # config, auth, and MCP readiness
 npx neram whoami --json  # identity + workspace totals
 npx neram logout         # clear creds; best-effort revoke refresh token`
 
+const configReference = `# published config (used by default)
+https://neram.praveenjuge.com/.well-known/neram-agent.json
+
+# override only for local development
+export NERAM_CONVEX_URL=...
+export NERAM_CLERK_FRONTEND_API_URL=...
+export NERAM_CLERK_OAUTH_CLIENT_ID=...`
+
 const whoamiExample = `{
   "ok": true,
   "user": { "name": "Ada Lovelace", "email": "ada@example.com" },
@@ -32,14 +40,16 @@ const whoamiExample = `{
 }`
 
 const dailyCommands = `npx neram daily --json                    # compact execution digest
-npx neram daily --project-limit 5 --json  # scan fewer projects
+npx neram brief --project-limit 5 --json  # alias for daily
 npx neram activity --limit 20 --json      # recent activity feed`
 
 const taskCommands = `npx neram task list --project "Project name" --status inProgress
 npx neram task add --project "Project name" --title "Follow up" --due 2026-02-01
 npx neram task move --task-id TASK_ID --status inProgress
+npx neram task move --task-id TASK_ID --status inProgress --position 1.5  # kanban order
 npx neram task done --task-id TASK_ID
 npx neram task update --task-id TASK_ID --title "New title" --clear-assignee
+npx neram task update --project "Project name" --task-title "Old title" --title "New title"
 npx neram task move-to --task-id TASK_ID --to-project "Other project"
 npx neram task rm --task-id TASK_ID`
 
@@ -53,7 +63,10 @@ const mcpStdioCommands = `npx neram login   # sign in first
 npx neram mcp     # stdio server; refreshes the token per request
 
 # print a client config without writing files (also: cursor, vscode)
-npx neram mcp install claude-code`
+npx neram mcp install claude-code
+
+# Claude Code one-liner
+claude mcp add neram -- npx neram mcp`
 
 const mcpConfig = `{
   "mcpServers": {
@@ -79,13 +92,16 @@ recent_activity
 # mutations
 capture_task
 update_task
-move_task
+move_task              # optional position for kanban order
 complete_task
 move_task_to_project
 delete_task
 create_project
 update_project
-delete_project          # destructive — purges every task`
+delete_project          # destructive — purges every task
+
+# failures return isError results with:
+# { error: { code, message, details } }`
 
 const skillsReference = `skills/neram/SKILL.md   # teaches an agent to use Neram via CLI + MCP
                         # grouped as "Neram" in skills.sh.json (skills.sh)
@@ -104,6 +120,13 @@ npx skills add praveenjuge/neram
 npx skills add praveenjuge/neram -s neram
 
 npx neram login   # sign in so the agent acts as your Neram user`
+
+const errorCodes = `UNAUTHENTICATED   # run neram login
+MISSING_CONFIG    # config fetch failed; check network or env overrides
+AMBIGUOUS         # name matched multiple records; retry with an id from details.matches
+NOT_FOUND         # project or task does not exist
+FORBIDDEN         # caller lacks access
+VALIDATION        # bad input shape or value`
 
 async function CodeBlock({
   children,
@@ -176,17 +199,18 @@ export default function DocsPage() {
           </h1>
           <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
             Agent surfaces for the Neram workspace: the npm CLI, the MCP tools,
-            and the Neram agent skill. Agent and browser actions share the same
-            signed-in Clerk identity.
+            and the Neram agent skill. CLI, MCP, and browser actions share the
+            same signed-in Clerk identity and kanban task board.
           </p>
         </header>
 
         <Section icon={Terminal} title="CLI">
           <Prose>
-            Package <code>neram</code>. Commands print human text by default;
-            add <code>--json</code> for the exact, backward-compatible tool
-            payload. Address tasks and projects by exact id (
-            <code>--task-id</code>, <code>--project-id</code>) or by name.
+            Package <code>neram</code>. Commands print human text by
+            default; add <code>--json</code> for the exact, backward-compatible
+            tool payload. Address tasks and projects by exact id (
+            <code>--task-id</code>, <code>--project-id</code>) or by
+            unambiguous name.
           </Prose>
 
           <SubHeading>Sign in and check readiness</SubHeading>
@@ -194,6 +218,14 @@ export default function DocsPage() {
           <CodeBlock label="neram whoami --json" lang="json">
             {whoamiExample}
           </CodeBlock>
+
+          <SubHeading>Config</SubHeading>
+          <Prose>
+            The CLI loads public config from{" "}
+            <code>/.well-known/neram-agent.json</code> on the Neram host.
+            Override only for local development.
+          </Prose>
+          <CodeBlock lang="bash">{configReference}</CodeBlock>
 
           <SubHeading>Daily work</SubHeading>
           <CodeBlock lang="bash">{dailyCommands}</CodeBlock>
@@ -203,12 +235,22 @@ export default function DocsPage() {
 
           <SubHeading>Projects</SubHeading>
           <CodeBlock lang="bash">{projectCommands}</CodeBlock>
+
+          <SubHeading>Error codes</SubHeading>
+          <Prose>
+            CLI and MCP failures use stable, machine-readable codes. An{" "}
+            <code>AMBIGUOUS</code> response includes candidate ids in{" "}
+            <code>details.matches</code> so agents can retry with an exact id.
+          </Prose>
+          <CodeBlock lang="bash">{errorCodes}</CodeBlock>
         </Section>
 
         <Section icon={Plug} title="MCP">
           <Prose>
             Local stdio and hosted Streamable HTTP run the same tools, so agents
-            get identical behavior either way.
+            get identical behavior either way. Tool failures come back as{" "}
+            <code>isError</code> results (not protocol exceptions) with stable
+            error codes.
           </Prose>
 
           <SubHeading>Local stdio</SubHeading>
