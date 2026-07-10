@@ -71,7 +71,11 @@ export const remove = mutation({
     // ("X was removed"). They're already deleted, so they won't receive a row.
     await recordActivity(ctx, {
       project,
-      actor: { subject: membership.subject, name: membership.displayName },
+      actor: {
+        subject: membership.subject,
+        userId: membership.subject,
+        name: membership.displayName,
+      },
       type: "member.removed",
     })
     return null

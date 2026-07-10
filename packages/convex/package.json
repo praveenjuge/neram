@@ -24,7 +24,13 @@
     "typecheck": "tsc --noEmit -p convex/tsconfig.json"
   },
   "dependencies": {
-    "convex": "^1.41.0"
+    "@clerk/backend": "^3.11.3",
+    "@convex-dev/migrations": "^0.3.5",
+    "@date-fns/tz": "^1.5.0",
+    "convex": "^1.41.0",
+    "convex-helpers": "^0.1.120",
+    "date-fns": "^4.4.0",
+    "svix": "^1.96.1"
   },
   "devDependencies": {
     "@edge-runtime/vm": "^5.0.0",

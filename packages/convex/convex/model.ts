@@ -24,7 +24,19 @@ export async function owner(ctx: QueryCtx | MutationCtx) {
   return identity.tokenIdentifier
 }
 
-export type Actor = { subject: string; name: string }
+export type Actor = {
+  subject: string
+  userId: string
+  name: string
+  organizationId?: string
+  organizationSlug?: string
+  organizationRole?: "org:admin" | "org:member"
+}
+
+function stringClaim(identity: object, key: string) {
+  const value = (identity as Record<string, unknown>)[key]
+  return typeof value === "string" && value.length > 0 ? value : undefined
+}
 
 /**
  * The authenticated caller as an actor: their canonical subject plus a
@@ -40,8 +52,80 @@ export async function actor(ctx: QueryCtx | MutationCtx): Promise<Actor> {
   }
   return {
     subject: identity.tokenIdentifier,
+    userId: identity.subject,
     name: identity.name ?? identity.email ?? "Someone",
+    organizationId: stringClaim(identity, "org_id"),
+    organizationSlug: stringClaim(identity, "org_slug"),
+    organizationRole: stringClaim(identity, "org_role") as
+      "org:admin" | "org:member" | undefined,
   }
+}
+
+export type OrganizationAccess = {
+  actor: Actor & { organizationId: string }
+  organization: Doc<"organizations">
+  membership: Doc<"organizationMembers">
+}
+
+/**
+ * Resolve the active Clerk Organization and its webhook-synchronized member.
+ * The projection is intentionally required even when a signed token still has
+ * an Organization claim, so a removed member loses access immediately.
+ */
+export async function requireOrganization(
+  ctx: QueryCtx | MutationCtx
+): Promise<OrganizationAccess> {
+  const a = await actor(ctx)
+  if (!a.organizationId) {
+    throw new ConvexError({
+      code: "ORGANIZATION_REQUIRED",
+      message: "Choose a workspace and sign in again.",
+    })
+  }
+  const organization = await ctx.db
+    .query("organizations")
+    .withIndex("by_organization_id", (q) =>
+      q.eq("organizationId", a.organizationId as string)
+    )
+    .unique()
+  if (!organization || organization.state !== "active") {
+    throw new ConvexError({
+      code:
+        organization?.state === "deleting" ? "WORKSPACE_DELETING" : "NOT_FOUND",
+      message:
+        organization?.state === "deleting"
+          ? "This workspace is being deleted."
+          : "Workspace not found.",
+    })
+  }
+  const membership = await ctx.db
+    .query("organizationMembers")
+    .withIndex("by_organization_and_user", (q) =>
+      q.eq("organizationId", a.organizationId as string).eq("userId", a.userId)
+    )
+    .unique()
+  if (!membership) {
+    throw new ConvexError({
+      code: "FORBIDDEN",
+      message: "You are no longer a member of this workspace.",
+    })
+  }
+  return {
+    actor: { ...a, organizationId: a.organizationId },
+    organization,
+    membership,
+  }
+}
+
+export async function requireOrganizationAdmin(ctx: QueryCtx | MutationCtx) {
+  const access = await requireOrganization(ctx)
+  if (access.membership.role !== "org:admin") {
+    throw new ConvexError({
+      code: "FORBIDDEN",
+      message: "Workspace admin access required.",
+    })
+  }
+  return access
 }
 
 /**
@@ -55,8 +139,35 @@ export async function resolveAssignee(
   project: Doc<"projects">,
   assigneeSubject: string
 ): Promise<Actor> {
+  if (project.organizationId) {
+    const membership = await ctx.db
+      .query("organizationMembers")
+      .withIndex("by_organization_and_user", (q) =>
+        q
+          .eq("organizationId", project.organizationId as string)
+          .eq("userId", assigneeSubject)
+      )
+      .unique()
+    if (!membership) {
+      throw new ConvexError({
+        code: "INVALID_ASSIGNEE",
+        message: "Choose someone in this workspace.",
+      })
+    }
+    return {
+      subject: membership.userId,
+      userId: membership.userId,
+      name: membership.displayName,
+      organizationId: membership.organizationId,
+      organizationRole: membership.role,
+    }
+  }
   if (assigneeSubject === project.ownerSubject) {
-    return { subject: assigneeSubject, name: project.ownerName ?? "Owner" }
+    return {
+      subject: assigneeSubject,
+      userId: assigneeSubject,
+      name: project.ownerName ?? "Owner",
+    }
   }
   const membership = await ctx.db
     .query("projectMembers")
@@ -70,7 +181,11 @@ export async function resolveAssignee(
       message: "Choose someone on this project.",
     })
   }
-  return { subject: membership.subject, name: membership.displayName }
+  return {
+    subject: membership.subject,
+    userId: membership.subject,
+    name: membership.displayName,
+  }
 }
 
 export type ProjectRole = "owner" | "editor"
@@ -95,6 +210,21 @@ export async function requireProjectAccess(
   const project = await ctx.db.get(projectId)
   if (!project) {
     throw new ConvexError({ code: "NOT_FOUND", message: "Project not found." })
+  }
+  if (project.organizationId) {
+    const access = await requireOrganization(ctx)
+    if (access.organization.organizationId !== project.organizationId) {
+      throw new ConvexError({
+        code: "NOT_FOUND",
+        message: "Project not found.",
+      })
+    }
+    return {
+      project,
+      actor: access.actor,
+      role: access.membership.role === "org:admin" ? "owner" : "editor",
+      isOwner: access.membership.role === "org:admin",
+    }
   }
   if (project.ownerSubject === a.subject) {
     return { project, actor: a, role: "owner", isOwner: true }
@@ -123,6 +253,16 @@ export async function requireProjectOwner(
   const project = await ctx.db.get(projectId)
   if (!project) {
     throw new ConvexError({ code: "NOT_FOUND", message: "Project not found." })
+  }
+  if (project.organizationId) {
+    const access = await requireOrganizationAdmin(ctx)
+    if (access.organization.organizationId !== project.organizationId) {
+      throw new ConvexError({
+        code: "NOT_FOUND",
+        message: "Project not found.",
+      })
+    }
+    return { project, actor: access.actor }
   }
   if (project.ownerSubject !== a.subject) {
     throw new ConvexError({
@@ -156,6 +296,22 @@ export async function recordActivity(
     assigneeName?: string
   }
 ) {
+  if (args.project.organizationId) {
+    await ctx.db.insert("organizationActivity", {
+      organizationId: args.project.organizationId,
+      actorUserId: args.actor.userId,
+      actorName: args.actor.name,
+      projectId: args.project._id,
+      projectName: args.project.name,
+      type: args.type,
+      taskTitle: args.taskTitle,
+      toStatus: args.toStatus,
+      assigneeUserId: args.assigneeSubject,
+      assigneeName: args.assigneeName,
+      createdAt: Date.now(),
+    })
+    return
+  }
   const members = await ctx.db
     .query("projectMembers")
     .withIndex("by_project", (q) => q.eq("projectId", args.project._id))

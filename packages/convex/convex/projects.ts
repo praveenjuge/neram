@@ -10,6 +10,7 @@ import {
   recordActivity,
   requireProjectAccess,
   requireProjectOwner,
+  requireOrganization,
   type ProjectRole,
 } from "./model"
 
@@ -105,8 +106,23 @@ function cleanColor(color: string) {
  */
 export async function accessibleProjects(
   ctx: Parameters<typeof requireProjectAccess>[0],
-  subject: string
+  subject: string,
+  organizationId?: string
 ): Promise<Array<{ project: Doc<"projects">; role: ProjectRole }>> {
+  if (organizationId) {
+    const access = await requireOrganization(ctx)
+    if (access.organization.organizationId !== organizationId) return []
+    const projects = await ctx.db
+      .query("projects")
+      .withIndex("by_organization_archived_updated", (q) =>
+        q.eq("organizationId", organizationId).eq("archivedAt", undefined)
+      )
+      .order("desc")
+      .take(MAX_PROJECTS)
+    const role: ProjectRole =
+      access.membership.role === "org:admin" ? "owner" : "editor"
+    return projects.map((project) => ({ project, role }))
+  }
   // Read only *active* owned projects (archivedAt unset), newest-updated first.
   // Pinning archivedAt to undefined in the index means archived projects live
   // in a different slice entirely, so they can never consume this bounded read
@@ -155,9 +171,9 @@ export const list = query({
   args: {},
   returns: v.array(projectSummary),
   handler: async (ctx) => {
-    const { subject } = await actor(ctx)
+    const { subject, organizationId } = await actor(ctx)
     // accessibleProjects already returns most-recently-updated order.
-    const projects = await accessibleProjects(ctx, subject)
+    const projects = await accessibleProjects(ctx, subject, organizationId)
     return projects.map(({ project, role }) => summarize(project, role))
   },
 })
@@ -172,7 +188,23 @@ export const list = query({
 export const listArchived = query({
   args: { paginationOpts: paginationOptsValidator },
   handler: async (ctx, args) => {
-    const { subject } = await actor(ctx)
+    const { subject, organizationId } = await actor(ctx)
+    if (organizationId) {
+      const access = await requireOrganization(ctx)
+      const result = await ctx.db
+        .query("projects")
+        .withIndex("by_organization_archived_updated", (q) =>
+          q.eq("organizationId", organizationId).gt("archivedAt", 0)
+        )
+        .order("desc")
+        .paginate(args.paginationOpts)
+      const role: ProjectRole =
+        access.membership.role === "org:admin" ? "owner" : "editor"
+      return {
+        ...result,
+        page: result.page.map((project) => summarize(project, role)),
+      }
+    }
     // Read only *archived* owned projects off the shared index. The
     // `gt("archivedAt", 0)` lower bound excludes active projects (whose
     // archivedAt is undefined and sorts below any timestamp), so active
@@ -213,8 +245,8 @@ export const names = query({
     })
   ),
   handler: async (ctx) => {
-    const { subject } = await actor(ctx)
-    const projects = await accessibleProjects(ctx, subject)
+    const { subject, organizationId } = await actor(ctx)
+    const projects = await accessibleProjects(ctx, subject, organizationId)
     return projects.map(({ project, role }) => {
       const counts = projectCounts(project)
       return {
@@ -233,9 +265,16 @@ export const get = query({
   args: { projectId: v.id("projects") },
   returns: v.union(v.null(), projectSummary),
   handler: async (ctx, args) => {
-    const { subject } = await actor(ctx)
+    const { subject, organizationId } = await actor(ctx)
     const project = await ctx.db.get(args.projectId)
     if (!project) return null
+    if (project.organizationId) {
+      if (project.organizationId !== organizationId) return null
+      const access = await requireOrganization(ctx)
+      const role: ProjectRole =
+        access.membership.role === "org:admin" ? "owner" : "editor"
+      return summarize(project, role)
+    }
     if (project.ownerSubject === subject) {
       return summarize(project, "owner")
     }
@@ -258,11 +297,13 @@ export const create = mutation({
   },
   returns: v.id("projects"),
   handler: async (ctx, args) => {
-    const { subject, name } = await actor(ctx)
+    const who = await actor(ctx)
+    const access = who.organizationId ? await requireOrganization(ctx) : null
     const now = Date.now()
     return await ctx.db.insert("projects", {
-      ownerSubject: subject,
-      ownerName: name,
+      organizationId: access?.organization.organizationId,
+      ownerSubject: who.subject,
+      ownerName: who.name,
       name: cleanName(args.name),
       icon: args.icon === undefined ? undefined : cleanIcon(args.icon),
       color: args.color === undefined ? undefined : cleanColor(args.color),

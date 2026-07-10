@@ -11,7 +11,16 @@ import { actor } from "./model"
 export const list = query({
   args: { paginationOpts: paginationOptsValidator },
   handler: async (ctx, args) => {
-    const { subject } = await actor(ctx)
+    const { subject, organizationId } = await actor(ctx)
+    if (organizationId) {
+      return await ctx.db
+        .query("organizationActivity")
+        .withIndex("by_organization_and_created_at", (q) =>
+          q.eq("organizationId", organizationId)
+        )
+        .order("desc")
+        .paginate(args.paginationOpts)
+    }
     return await ctx.db
       .query("activity")
       .withIndex("by_subject_created", (q) => q.eq("subject", subject))

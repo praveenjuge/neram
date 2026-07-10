@@ -1,0 +1,237 @@
+"use node"
+
+import { createClerkClient } from "@clerk/backend"
+import { ConvexError, v } from "convex/values"
+
+import { internal } from "./_generated/api"
+import { action, env, internalAction } from "./_generated/server"
+import type { ActionCtx } from "./_generated/server"
+
+function clerk() {
+  if (!env.CLERK_SECRET_KEY) {
+    throw new ConvexError({
+      code: "CLERK_NOT_CONFIGURED",
+      message: "Clerk is not configured.",
+    })
+  }
+  return createClerkClient({ secretKey: env.CLERK_SECRET_KEY })
+}
+
+function cleanName(name: string) {
+  const value = name.trim()
+  if (value.length < 1 || value.length > 80) {
+    throw new ConvexError({
+      code: "INVALID_NAME",
+      message: "Use 1 to 80 characters.",
+    })
+  }
+  return value
+}
+
+function cleanSlug(slug?: string) {
+  if (slug === undefined) return undefined
+  const value = slug.trim().toLowerCase()
+  if (!/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(value)) {
+    throw new ConvexError({
+      code: "INVALID_SLUG",
+      message: "Use a valid workspace slug.",
+    })
+  }
+  return value
+}
+
+function membershipView(
+  membership: Awaited<
+    ReturnType<
+      ReturnType<typeof clerk>["organizations"]["getOrganizationMembershipList"]
+    >
+  >["data"][number]
+) {
+  const user = membership.publicUserData
+  const displayName =
+    [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
+    user?.identifier ||
+    "Member"
+  return {
+    organizationId: membership.organization.id,
+    membershipId: membership.id,
+    userId: user?.userId ?? "",
+    role:
+      membership.role === "org:admin"
+        ? ("org:admin" as const)
+        : ("org:member" as const),
+    displayName,
+    email: user?.identifier ?? undefined,
+    imageUrl: user?.imageUrl ?? undefined,
+  }
+}
+
+async function syncMemberships(ctx: ActionCtx, organizationId: string) {
+  const memberships = await clerk().organizations.getOrganizationMembershipList(
+    {
+      organizationId,
+      limit: 500,
+    }
+  )
+  for (const membership of memberships.data) {
+    const view = membershipView(membership)
+    if (!view.userId) continue
+    await ctx.runMutation(internal.organizations.upsertMember, view)
+  }
+  return memberships.data.map(membershipView)
+}
+
+export const syncCurrent = action({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    const token = await ctx.runQuery(
+      internal.organizations.activeTokenContext,
+      {}
+    )
+    const organization = await clerk().organizations.getOrganization({
+      organizationId: token.organizationId,
+    })
+    const memberships = await syncMemberships(ctx, organization.id)
+    if (!memberships.some((membership) => membership.userId === token.userId)) {
+      throw new ConvexError({
+        code: "FORBIDDEN",
+        message: "You are no longer a member of this workspace.",
+      })
+    }
+    await ctx.runMutation(internal.organizations.upsertOrganization, {
+      organizationId: organization.id,
+      slug: organization.slug,
+      name: organization.name,
+    })
+    return null
+  },
+})
+
+export const create = action({
+  args: { name: v.string(), slug: v.optional(v.string()) },
+  returns: v.object({
+    organizationId: v.string(),
+    slug: v.string(),
+    name: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (!identity)
+      throw new ConvexError({
+        code: "UNAUTHENTICATED",
+        message: "Sign in required.",
+      })
+    const organization = await clerk().organizations.createOrganization({
+      name: cleanName(args.name),
+      slug: cleanSlug(args.slug),
+      createdBy: identity.subject,
+    })
+    await ctx.runMutation(internal.organizations.upsertOrganization, {
+      organizationId: organization.id,
+      slug: organization.slug,
+      name: organization.name,
+    })
+    await syncMemberships(ctx, organization.id)
+    return {
+      organizationId: organization.id,
+      slug: organization.slug,
+      name: organization.name,
+    }
+  },
+})
+
+export const invite = action({
+  args: {
+    email: v.string(),
+    role: v.union(v.literal("org:admin"), v.literal("org:member")),
+  },
+  returns: v.object({ invitationId: v.string(), status: v.string() }),
+  handler: async (ctx, args) => {
+    const admin = await ctx.runQuery(internal.organizations.adminContext, {})
+    const email = args.email.trim().toLowerCase()
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+      throw new ConvexError({
+        code: "INVALID_EMAIL",
+        message: "Use a valid email address.",
+      })
+    }
+    const invitation = await clerk().organizations.createOrganizationInvitation(
+      {
+        organizationId: admin.organizationId,
+        emailAddress: email,
+        role: args.role,
+        inviterUserId: admin.userId,
+      }
+    )
+    return {
+      invitationId: invitation.id,
+      status: invitation.status ?? "pending",
+    }
+  },
+})
+
+export const updateRole = action({
+  args: {
+    userId: v.string(),
+    role: v.union(v.literal("org:admin"), v.literal("org:member")),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const admin = await ctx.runQuery(internal.organizations.adminContext, {})
+    await clerk().organizations.updateOrganizationMembership({
+      organizationId: admin.organizationId,
+      userId: args.userId,
+      role: args.role,
+    })
+    await syncMemberships(ctx, admin.organizationId)
+    return null
+  },
+})
+
+export const removeMember = action({
+  args: { userId: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const admin = await ctx.runQuery(internal.organizations.adminContext, {})
+    if (args.userId === admin.userId) {
+      throw new ConvexError({
+        code: "INVALID_MEMBER",
+        message: "Transfer admin access before removing yourself.",
+      })
+    }
+    await clerk().organizations.deleteOrganizationMembership({
+      organizationId: admin.organizationId,
+      userId: args.userId,
+    })
+    await ctx.runMutation(internal.organizations.removeMemberProjection, {
+      organizationId: admin.organizationId,
+      userId: args.userId,
+    })
+    return null
+  },
+})
+
+export const deleteClerkOrganization = internalAction({
+  args: { jobId: v.id("organizationJobs"), organizationId: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    try {
+      await clerk().organizations.deleteOrganization(args.organizationId)
+      await ctx.runMutation(
+        internal.organizationJobs.finishWorkspaceDeletion,
+        args
+      )
+    } catch (error) {
+      await ctx.runMutation(internal.organizationJobs.failWorkspaceDeletion, {
+        jobId: args.jobId,
+        error:
+          error instanceof Error
+            ? error.message.slice(0, 500)
+            : "Clerk deletion failed",
+      })
+      throw error
+    }
+    return null
+  },
+})

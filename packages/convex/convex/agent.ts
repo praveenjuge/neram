@@ -34,7 +34,12 @@ export const status = query({
       })
     }
     // tokenIdentifier is the canonical stable identity key used everywhere else.
-    const projects = await accessibleProjects(ctx, identity.tokenIdentifier)
+    const organizationId = (identity as Record<string, unknown>).org_id
+    const projects = await accessibleProjects(
+      ctx,
+      identity.tokenIdentifier,
+      typeof organizationId === "string" ? organizationId : undefined
+    )
     let ownedProjects = 0
     let sharedProjects = 0
     let openTasks = 0
