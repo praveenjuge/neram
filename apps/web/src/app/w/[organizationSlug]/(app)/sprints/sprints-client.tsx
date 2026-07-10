@@ -1,5 +1,6 @@
 "use client"
 
+import { useOrganization } from "@clerk/nextjs"
 import { OrganizationProfile } from "@clerk/nextjs"
 import { format } from "date-fns"
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react"
@@ -191,6 +192,7 @@ function CurrentSprint() {
 }
 
 function EarlyRollover() {
+  const { organization } = useOrganization()
   const rollover = useMutation(api.sprints.rollover)
   const [reason, setReason] = useState("")
   return (
@@ -216,9 +218,15 @@ function EarlyRollover() {
             <Button variant="outline">Cancel</Button>
           </DialogClose>
           <Button
-            disabled={!reason.trim()}
+            disabled={!organization?.slug || !reason.trim()}
             onClick={() =>
-              void rollover({ confirm: true, reason: reason.trim() })
+              organization?.slug &&
+              void rollover({
+                organizationId: organization.id,
+                slug: organization.slug,
+                confirm: true,
+                reason: reason.trim(),
+              })
                 .then(() => toast.success("Sprint rollover started."))
                 .catch((error) => toast.error(messageFromError(error, "Could not roll over the Sprint.")))
             }

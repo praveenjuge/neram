@@ -13,13 +13,19 @@ export const list = query({
   handler: async (ctx, args) => {
     const { subject, organizationId } = await actor(ctx)
     if (organizationId) {
-      return await ctx.db
+      const result = await ctx.db
         .query("organizationActivity")
         .withIndex("by_organization_and_created_at", (q) =>
           q.eq("organizationId", organizationId)
         )
         .order("desc")
         .paginate(args.paginationOpts)
+      return {
+        ...result,
+        page: result.page.filter(
+          (row) => !row.recipientUserId || row.recipientUserId === subject
+        ),
+      }
     }
     return await ctx.db
       .query("activity")

@@ -305,6 +305,9 @@ export async function recordActivity(
       projectName: args.project.name,
       type: args.type,
       taskTitle: args.taskTitle,
+      taskId: args.taskId,
+      commentId: args.commentId,
+      commentExcerpt: args.commentExcerpt,
       toStatus: args.toStatus,
       assigneeUserId: args.assigneeSubject,
       assigneeName: args.assigneeName,
@@ -357,6 +360,23 @@ export async function recordTargetedActivity(
     commentExcerpt: string
   }
 ) {
+  if (args.project.organizationId) {
+    await ctx.db.insert("organizationActivity", {
+      organizationId: args.project.organizationId,
+      actorUserId: args.actor.userId,
+      actorName: args.actor.name,
+      projectId: args.project._id,
+      projectName: args.project.name,
+      type: args.type,
+      taskTitle: args.taskTitle,
+      taskId: args.taskId,
+      commentId: args.commentId,
+      commentExcerpt: args.commentExcerpt,
+      recipientUserId: args.subject.split("|").at(-1) ?? args.subject,
+      createdAt: Date.now(),
+    })
+    return
+  }
   await ctx.db.insert("activity", {
     subject: args.subject,
     actorSubject: args.actor.subject,

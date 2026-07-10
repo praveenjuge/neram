@@ -2,10 +2,26 @@ import { v } from "convex/values"
 
 import { internal } from "./_generated/api"
 import type { Id } from "./_generated/dataModel"
-import { internalMutation } from "./_generated/server"
+import { internalMutation, internalQuery } from "./_generated/server"
 import type { MutationCtx } from "./_generated/server"
 
 const BATCH_SIZE = 100
+
+export const running = internalQuery({
+  args: {
+    organizationId: v.string(),
+    kind: v.union(v.literal("member_cleanup"), v.literal("workspace_deletion")),
+  },
+  handler: async (ctx, args) => {
+    const jobs = await ctx.db
+      .query("organizationJobs")
+      .withIndex("by_organization_and_status", (q) =>
+        q.eq("organizationId", args.organizationId).eq("status", "running")
+      )
+      .take(20)
+    return jobs.find((job) => job.kind === args.kind) ?? null
+  },
+})
 
 export const cleanupMember = internalMutation({
   args: { jobId: v.id("organizationJobs") },
@@ -117,9 +133,34 @@ export const purgeWorkspace = internalMutation({
         .withIndex("by_organization_and_updated_at", (q) =>
           q.eq("organizationId", job.organizationId)
         )
-        .take(BATCH_SIZE)
-      for (const row of rows) await ctx.db.delete(row._id)
-      if (rows.length === BATCH_SIZE) return await reschedule(ctx, job._id)
+        .take(20)
+      for (const row of rows) {
+        const [subtasks, comments, stats] = await Promise.all([
+          ctx.db
+            .query("subtasks")
+            .withIndex("by_task_position", (q) => q.eq("taskId", row._id))
+            .take(BATCH_SIZE),
+          ctx.db
+            .query("taskComments")
+            .withIndex("by_task_and_created", (q) => q.eq("taskId", row._id))
+            .take(BATCH_SIZE),
+          ctx.db
+            .query("taskStats")
+            .withIndex("by_task", (q) => q.eq("taskId", row._id))
+            .unique(),
+        ])
+        for (const subtask of subtasks) await ctx.db.delete(subtask._id)
+        for (const comment of comments) await ctx.db.delete(comment._id)
+        if (
+          subtasks.length === BATCH_SIZE ||
+          comments.length === BATCH_SIZE
+        ) {
+          return await reschedule(ctx, job._id)
+        }
+        if (stats) await ctx.db.delete(stats._id)
+        await ctx.db.delete(row._id)
+      }
+      if (rows.length === 20) return await reschedule(ctx, job._id)
       await advance(ctx, job._id, "projects")
       return null
     }

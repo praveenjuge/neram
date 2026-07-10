@@ -79,6 +79,7 @@ export default function SprintsScreen() {
   }
 
   const rollOverEarly = () => {
+    if (!context) return
     Alert.prompt("Roll over early", "Why is this Sprint closing early?", (value?: string) => {
       const reason = (value ?? "").trim()
       if (!reason) return
@@ -87,7 +88,13 @@ export default function SprintsScreen() {
         {
           text: "Roll over",
           style: "destructive",
-          onPress: () => void rollover({ confirm: true, reason }).catch(showError),
+          onPress: () =>
+            void rollover({
+              organizationId: context.organization.organizationId,
+              slug: context.organization.slug,
+              confirm: true,
+              reason,
+            }).catch(showError),
         },
       ])
     })

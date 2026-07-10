@@ -9,10 +9,21 @@ import { internal } from "./_generated/api"
 import type { Doc } from "./_generated/dataModel"
 import { env, internalAction } from "./_generated/server"
 import type { ActionCtx } from "./_generated/server"
+import { legacyActivityKey } from "./tenancyMigrationModel"
+import {
+  allActivity,
+  allComments,
+  allMembers,
+  allOrganizationActivity,
+  allProjects,
+  allSubtasks,
+  allTasks,
+  allTaskStats,
+  countInvites,
+  countWorkStates,
+} from "./tenancyMigrationReads"
 
 const RUN_KEY = "clerk-organizations-v1"
-
-type Page<T> = { page: T[]; isDone: boolean; continueCursor: string }
 
 function clerk() {
   if (!env.CLERK_SECRET_KEY) {
@@ -22,102 +33,6 @@ function clerk() {
     })
   }
   return createClerkClient({ secretKey: env.CLERK_SECRET_KEY })
-}
-
-async function allProjects(ctx: ActionCtx) {
-  const rows: Array<Doc<"projects">> = []
-  let cursor: string | null = null
-  do {
-    const page: Page<Doc<"projects">> = await ctx.runQuery(
-      internal.tenancyMigrationData.projectPage,
-      {
-        paginationOpts: { numItems: 100, cursor },
-      }
-    )
-    rows.push(...page.page)
-    cursor = page.isDone ? null : page.continueCursor
-  } while (cursor)
-  return rows
-}
-
-async function allTasks(ctx: ActionCtx) {
-  const rows: Array<Doc<"tasks">> = []
-  let cursor: string | null = null
-  do {
-    const page: Page<Doc<"tasks">> = await ctx.runQuery(
-      internal.tenancyMigrationData.taskPage,
-      {
-        paginationOpts: { numItems: 100, cursor },
-      }
-    )
-    rows.push(...page.page)
-    cursor = page.isDone ? null : page.continueCursor
-  } while (cursor)
-  return rows
-}
-
-async function allActivity(ctx: ActionCtx) {
-  const rows: Array<Doc<"activity">> = []
-  let cursor: string | null = null
-  do {
-    const page: Page<Doc<"activity">> = await ctx.runQuery(
-      internal.tenancyMigrationData.activityPage,
-      {
-        paginationOpts: { numItems: 100, cursor },
-      }
-    )
-    rows.push(...page.page)
-    cursor = page.isDone ? null : page.continueCursor
-  } while (cursor)
-  return rows
-}
-
-async function allMembers(ctx: ActionCtx) {
-  const rows: Array<Doc<"projectMembers">> = []
-  let cursor: string | null = null
-  do {
-    const page: Page<Doc<"projectMembers">> = await ctx.runQuery(
-      internal.tenancyMigrationData.memberPage,
-      {
-        paginationOpts: { numItems: 100, cursor },
-      }
-    )
-    rows.push(...page.page)
-    cursor = page.isDone ? null : page.continueCursor
-  } while (cursor)
-  return rows
-}
-
-async function countInvites(ctx: ActionCtx) {
-  let count = 0
-  let cursor: string | null = null
-  do {
-    const page: Page<Doc<"projectInvites">> = await ctx.runQuery(
-      internal.tenancyMigrationData.invitePage,
-      {
-        paginationOpts: { numItems: 100, cursor },
-      }
-    )
-    count += page.page.length
-    cursor = page.isDone ? null : page.continueCursor
-  } while (cursor)
-  return count
-}
-
-async function countWorkStates(ctx: ActionCtx) {
-  let count = 0
-  let cursor: string | null = null
-  do {
-    const page: Page<Doc<"projectWorkStates">> = await ctx.runQuery(
-      internal.tenancyMigrationData.workStatePage,
-      {
-        paginationOpts: { numItems: 100, cursor },
-      }
-    )
-    count += page.page.length
-    cursor = page.isDone ? null : page.continueCursor
-  } while (cursor)
-  return count
 }
 
 function userIdFromSubject(subject: string) {
@@ -158,6 +73,9 @@ async function buildInventory(ctx: ActionCtx) {
     projectMembers,
     inviteCount,
     workStateCount,
+    subtasks,
+    comments,
+    taskStats,
   ] = await Promise.all([
     allProjects(ctx),
     allTasks(ctx),
@@ -165,6 +83,9 @@ async function buildInventory(ctx: ActionCtx) {
     allMembers(ctx),
     countInvites(ctx),
     countWorkStates(ctx),
+    allSubtasks(ctx),
+    allComments(ctx),
+    allTaskStats(ctx),
   ])
   const membersByProject = new Map<string, Array<Doc<"projectMembers">>>()
   for (const member of projectMembers) {
@@ -306,6 +227,9 @@ async function buildInventory(ctx: ActionCtx) {
     projectMembers,
     inviteCount,
     workStateCount,
+    subtasks,
+    comments,
+    taskStats,
     maxAllowedMemberships: settings.maxAllowedMemberships,
     cohorts,
   }
@@ -337,6 +261,10 @@ export const inventory = internalAction({
         expectedActivityRows: report.activity.length,
         expectedLegacyMembers: report.projectMembers.length,
         expectedLegacyInvites: report.inviteCount,
+        expectedLegacyWorkStates: report.workStateCount,
+        expectedSubtasks: report.subtasks.length,
+        expectedComments: report.comments.length,
+        expectedTaskStats: report.taskStats.length,
         cohorts: report.cohorts.map(persistedCohort),
       })
     }
@@ -348,6 +276,9 @@ export const inventory = internalAction({
       legacyMembers: report.projectMembers.length,
       legacyInvites: report.inviteCount,
       legacyWorkStates: report.workStateCount,
+      subtasks: report.subtasks.length,
+      comments: report.comments.length,
+      taskStats: report.taskStats.length,
       cohorts: report.cohorts.map((cohort) => ({
         cohortKey: cohort.cohortKey,
         ownerUserId: cohort.ownerUserId,
@@ -407,6 +338,10 @@ export const provision = internalAction({
       expectedActivityRows: report.activity.length,
       expectedLegacyMembers: report.projectMembers.length,
       expectedLegacyInvites: report.inviteCount,
+      expectedLegacyWorkStates: report.workStateCount,
+      expectedSubtasks: report.subtasks.length,
+      expectedComments: report.comments.length,
+      expectedTaskStats: report.taskStats.length,
       cohorts: report.cohorts.map(persistedCohort),
     })
     const existingOrganizations =
@@ -488,12 +423,57 @@ export const provision = internalAction({
 
 export const verify = internalAction({
   args: {},
-  handler: async (ctx) => {
+  handler: async (
+    ctx
+  ): Promise<{
+    ok: boolean
+    failures: string[]
+    counts: {
+      projects: number
+      tasks: number
+      activityRows: number
+      cohorts: number
+      remainingInvites: number
+      subtasks: number
+      comments: number
+      taskStats: number
+      organizationActivityRows: number
+    }
+  }> => {
     const report = await buildInventory(ctx)
+    const run: Doc<"tenancyMigrationRuns"> | null = await ctx.runQuery(
+      internal.tenancyMigrationData.runState,
+      { key: RUN_KEY }
+    )
+    const organizationActivity: Array<Doc<"organizationActivity">> =
+      await allOrganizationActivity(ctx)
     const failures: string[] = []
     const projectById = new Map(
       report.projects.map((project) => [project._id, project])
     )
+    const taskById = new Map(report.tasks.map((task) => [task._id, task]))
+    const commentById = new Map(
+      report.comments.map((comment) => [comment._id, comment])
+    )
+    if (!run) {
+      failures.push("migration_run:missing")
+    } else {
+      const expected = [
+        ["projects", run.expectedProjects, report.projects.length],
+        ["tasks", run.expectedTasks, report.tasks.length],
+        ["activity", run.expectedActivityRows, report.activity.length],
+        ["members", run.expectedLegacyMembers, report.projectMembers.length],
+        ["workStates", run.expectedLegacyWorkStates, report.workStateCount],
+        ["subtasks", run.expectedSubtasks, report.subtasks.length],
+        ["comments", run.expectedComments, report.comments.length],
+        ["taskStats", run.expectedTaskStats, report.taskStats.length],
+      ] as const
+      for (const [table, before, after] of expected) {
+        if (before !== undefined && before !== after) {
+          failures.push(`${table}:${before}:${after}:count_mismatch`)
+        }
+      }
+    }
     for (const project of report.projects) {
       if (!project.organizationId)
         failures.push(`project:${project._id}:missing_organization`)
@@ -506,6 +486,37 @@ export const verify = internalAction({
       ) {
         failures.push(`task:${task._id}:tenant_mismatch`)
       }
+      if (task.status === "done" && !task.completedAt) {
+        failures.push(`task:${task._id}:missing_completed_at`)
+      }
+    }
+    for (const subtask of report.subtasks) {
+      if (!taskById.has(subtask.taskId)) {
+        failures.push(`subtask:${subtask._id}:orphaned`)
+      }
+    }
+    for (const comment of report.comments) {
+      if (!taskById.has(comment.taskId)) {
+        failures.push(`comment:${comment._id}:orphaned_task`)
+      }
+      const parent = comment.parentCommentId
+        ? commentById.get(comment.parentCommentId)
+        : undefined
+      const root = comment.rootCommentId
+        ? commentById.get(comment.rootCommentId)
+        : undefined
+      if (parent && parent.taskId !== comment.taskId) {
+        failures.push(`comment:${comment._id}:parent_tenant_mismatch`)
+      }
+      if (root && root.taskId !== comment.taskId) {
+        failures.push(`comment:${comment._id}:root_tenant_mismatch`)
+      }
+    }
+    for (const stats of report.taskStats) {
+      const task = taskById.get(stats.taskId)
+      if (!task || task.projectId !== stats.projectId) {
+        failures.push(`taskStats:${stats._id}:tenant_mismatch`)
+      }
     }
     for (const activity of report.activity) {
       const project = projectById.get(activity.projectId)
@@ -514,6 +525,28 @@ export const verify = internalAction({
         activity.organizationId !== project?.organizationId
       ) {
         failures.push(`activity:${activity._id}:tenant_mismatch`)
+      }
+    }
+    const migratedActivityKeys = new Set(
+      organizationActivity.flatMap((row) =>
+        row.legacyEventKey ? [row.legacyEventKey] : []
+      )
+    )
+    for (const activity of report.activity) {
+      if (!migratedActivityKeys.has(legacyActivityKey(activity))) {
+        failures.push(`activity:${activity._id}:projection_missing`)
+      }
+    }
+    for (const activity of organizationActivity) {
+      const project = activity.projectId
+        ? projectById.get(activity.projectId)
+        : undefined
+      const task = activity.taskId ? taskById.get(activity.taskId) : undefined
+      if (
+        (project && project.organizationId !== activity.organizationId) ||
+        (task && task.organizationId !== activity.organizationId)
+      ) {
+        failures.push(`organizationActivity:${activity._id}:tenant_mismatch`)
       }
     }
     const remainingInvites = await countInvites(ctx)
@@ -528,6 +561,32 @@ export const verify = internalAction({
         failures.push(`cohort:${cohort.cohortKey}:not_provisioned`)
         continue
       }
+      const projection = await ctx.runQuery(
+        internal.tenancyMigrationData.organizationProjection,
+        { organizationId: saved.organizationId }
+      )
+      if (
+        !projection.organization ||
+        projection.organization.slug !== saved.organizationSlug ||
+        projection.organization.state !== "active" ||
+        !projection.settings?.currentSprintId ||
+        !projection.settings.upcomingSprintId
+      ) {
+        failures.push(`cohort:${cohort.cohortKey}:projection_incomplete`)
+      }
+      const projected = new Map(
+        projection.members.map((member) => [member.userId, member.role])
+      )
+      if (projected.size !== cohort.members.length) {
+        failures.push(`cohort:${cohort.cohortKey}:projection_member_count`)
+      }
+      for (const member of cohort.members) {
+        if (projected.get(member.userId) !== member.role) {
+          failures.push(
+            `cohort:${cohort.cohortKey}:projection_member:${member.userId}`
+          )
+        }
+      }
       const memberships =
         await clerk().organizations.getOrganizationMembershipList({
           organizationId: saved.organizationId,
@@ -539,6 +598,9 @@ export const verify = internalAction({
           membership.role,
         ])
       )
+      if (actual.size !== cohort.members.length) {
+        failures.push(`cohort:${cohort.cohortKey}:clerk_member_count`)
+      }
       for (const member of cohort.members) {
         if (actual.get(member.userId) !== member.role) {
           failures.push(
@@ -562,6 +624,10 @@ export const verify = internalAction({
         activityRows: report.activity.length,
         cohorts: report.cohorts.length,
         remainingInvites,
+        subtasks: report.subtasks.length,
+        comments: report.comments.length,
+        taskStats: report.taskStats.length,
+        organizationActivityRows: organizationActivity.length,
       },
     }
   },

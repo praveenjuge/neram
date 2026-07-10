@@ -20,16 +20,18 @@ import type * as organizationActions from "../organizationActions.js";
 import type * as organizationJobs from "../organizationJobs.js";
 import type * as organizations from "../organizations.js";
 import type * as projects from "../projects.js";
-import type * as subtasks from "../subtasks.js";
-import type * as taskComments from "../taskComments.js";
-import type * as taskModel from "../taskModel.js";
 import type * as sprintModel from "../sprintModel.js";
 import type * as sprintRollover from "../sprintRollover.js";
 import type * as sprintTime from "../sprintTime.js";
 import type * as sprints from "../sprints.js";
+import type * as subtasks from "../subtasks.js";
+import type * as taskComments from "../taskComments.js";
+import type * as taskModel from "../taskModel.js";
 import type * as tasks from "../tasks.js";
 import type * as tenancyMigration from "../tenancyMigration.js";
 import type * as tenancyMigrationData from "../tenancyMigrationData.js";
+import type * as tenancyMigrationModel from "../tenancyMigrationModel.js";
+import type * as tenancyMigrationReads from "../tenancyMigrationReads.js";
 
 import type {
   ApiFromModules,
@@ -50,16 +52,18 @@ declare const fullApi: ApiFromModules<{
   organizationJobs: typeof organizationJobs;
   organizations: typeof organizations;
   projects: typeof projects;
-  subtasks: typeof subtasks;
-  taskComments: typeof taskComments;
-  taskModel: typeof taskModel;
   sprintModel: typeof sprintModel;
   sprintRollover: typeof sprintRollover;
   sprintTime: typeof sprintTime;
   sprints: typeof sprints;
+  subtasks: typeof subtasks;
+  taskComments: typeof taskComments;
+  taskModel: typeof taskModel;
   tasks: typeof tasks;
   tenancyMigration: typeof tenancyMigration;
   tenancyMigrationData: typeof tenancyMigrationData;
+  tenancyMigrationModel: typeof tenancyMigrationModel;
+  tenancyMigrationReads: typeof tenancyMigrationReads;
 }>;
 
 /**

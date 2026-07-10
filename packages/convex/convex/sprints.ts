@@ -4,7 +4,7 @@ import { ConvexError, v } from "convex/values"
 import { internal } from "./_generated/api"
 import type { Doc } from "./_generated/dataModel"
 import { mutation, query } from "./_generated/server"
-import { requireOrganization } from "./model"
+import { projectCounts, requireOrganization, statusCountField } from "./model"
 import {
   addTaskToSprint,
   cleanGoal,
@@ -302,6 +302,22 @@ export const plan = mutation({
           message: "Reopen a completed task before planning it.",
         })
       }
+      const targetSprintId =
+        args.sprint === "current"
+          ? settings.currentSprintId
+          : args.sprint === "upcoming"
+            ? settings.upcomingSprintId
+            : undefined
+      if (
+        (args.sprint === "backlog" &&
+          !taskDoc.currentSprintId &&
+          !taskDoc.upcomingSprintId) ||
+        (targetSprintId !== undefined &&
+          (taskDoc.currentSprintId === targetSprintId ||
+            taskDoc.upcomingSprintId === targetSprintId))
+      ) {
+        continue
+      }
       if (taskDoc.currentSprintId) {
         await removeTaskFromSprint(ctx, {
           task: taskDoc,
@@ -382,10 +398,22 @@ export const remove = mutation({
         reason: "removed",
       })
       if (args.sprint === "current" && taskDoc.status === "inProgress") {
+        const project = await ctx.db.get(taskDoc.projectId)
         await ctx.db.patch(taskDoc._id, {
           status: "todo",
           updatedAt: Date.now(),
         })
+        if (project) {
+          const counts = projectCounts(project)
+          await ctx.db.patch(project._id, {
+            [statusCountField.inProgress]: Math.max(
+              0,
+              counts.inProgressCount - 1
+            ),
+            [statusCountField.todo]: counts.todoCount + 1,
+            updatedAt: Date.now(),
+          })
+        }
       }
     }
     return null
@@ -438,6 +466,14 @@ export const updateCadence = mutation({
       })
     const now = Date.now()
     const bounds = nextSprintBounds(upcomingSprint.startsAt, args)
+    if (
+      settings.cadenceWeeks === args.cadenceWeeks &&
+      settings.startWeekday === args.startWeekday &&
+      settings.timezone === args.timezone &&
+      upcomingSprint.endsAt === bounds.endsAt
+    ) {
+      return null
+    }
     await ctx.db.patch(upcomingSprint._id, {
       endsAt: bounds.endsAt,
       updatedAt: now,
@@ -456,7 +492,12 @@ export const updateCadence = mutation({
 })
 
 export const rollover = mutation({
-  args: { confirm: v.boolean(), reason: v.string() },
+  args: {
+    organizationId: v.string(),
+    slug: v.string(),
+    confirm: v.boolean(),
+    reason: v.string(),
+  },
   returns: v.id("sprintRolloverJobs"),
   handler: async (ctx, args) => {
     const reason = args.reason.trim()
@@ -467,6 +508,15 @@ export const rollover = mutation({
       })
     }
     const access = await requireOrganization(ctx)
+    if (
+      args.organizationId !== access.organization.organizationId ||
+      args.slug !== access.organization.slug
+    ) {
+      throw new ConvexError({
+        code: "CONFIRMATION_REQUIRED",
+        message: "Confirm with the exact workspace ID and slug.",
+      })
+    }
     return await startRollover(ctx, {
       organizationId: access.organization.organizationId,
       early: true,

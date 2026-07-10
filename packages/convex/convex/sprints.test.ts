@@ -110,6 +110,22 @@ test("members plan work and status movement applies Current and early-start rule
     title: "Start early",
     sprint: "upcoming",
   })
+  await bob.mutation(api.sprints.plan, {
+    taskIds: [upcomingTask],
+    sprint: "upcoming",
+  })
+  await bob.mutation(api.sprints.plan, {
+    taskIds: [upcomingTask],
+    sprint: "upcoming",
+  })
+  const upcomingBeforeStart = await bob.query(api.sprints.upcoming, {})
+  const plannedEntries = await bob.query(api.sprints.audit, {
+    sprintId: upcomingBeforeStart!.sprint._id,
+    ...page,
+  })
+  expect(
+    plannedEntries.page.filter((entry) => entry.taskId === upcomingTask)
+  ).toHaveLength(1)
 
   expect(
     (await bob.query(api.sprints.backlog, {})).map((task) => task._id)
@@ -138,6 +154,10 @@ test("members plan work and status movement applies Current and early-start rule
     (task) => task._id === upcomingTask
   )
   expect(removed?.status).toBe("todo")
+  expect(await bob.query(api.projects.get, { projectId })).toMatchObject({
+    todoCount: 1,
+    inProgressCount: 1,
+  })
 })
 
 test("rollover credits cutoff completions, carries unfinished work, and preserves reopening history", async () => {
@@ -162,7 +182,18 @@ test("rollover credits cutoff completions, carries unfinished work, and preserve
   })
   await alice.mutation(api.tasks.move, { taskId: completed, status: "done" })
 
+  await expect(
+    alice.mutation(api.sprints.rollover, {
+      organizationId: "org_alpha",
+      slug: "wrong",
+      confirm: true,
+      reason: "Should fail",
+    })
+  ).rejects.toThrow()
+
   const jobId = await alice.mutation(api.sprints.rollover, {
+    organizationId: "org_alpha",
+    slug: "alpha",
     confirm: true,
     reason: "Customer deadline",
   })

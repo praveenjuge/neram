@@ -3,6 +3,10 @@ import { Migrations } from "@convex-dev/migrations"
 import { components, internal } from "./_generated/api"
 import { internalMutation } from "./_generated/server"
 import schema from "./schema"
+import {
+  legacyActivityKey,
+  legacyActivityRecipient,
+} from "./tenancyMigrationModel"
 
 export const migrations = new Migrations(components.migrations, {
   schema,
@@ -43,15 +47,8 @@ export const backfillActivity = migrations.define({
     const project = await ctx.db.get(activity.projectId)
     if (!project?.organizationId)
       throw new Error(`Project ${activity.projectId} is not migrated`)
-    const legacyEventKey = [
-      activity.projectId,
-      activity.actorSubject,
-      activity.type,
-      activity.taskTitle ?? "",
-      activity.toStatus ?? "",
-      activity.assigneeSubject ?? "",
-      activity.createdAt,
-    ].join("|")
+    const recipientUserId = legacyActivityRecipient(activity)
+    const legacyEventKey = legacyActivityKey(activity)
     const existing = await ctx.db
       .query("organizationActivity")
       .withIndex("by_legacy_event_key", (q) =>
@@ -64,10 +61,14 @@ export const backfillActivity = migrations.define({
         actorUserId:
           activity.actorSubject.split("|").at(-1) ?? activity.actorSubject,
         actorName: activity.actorName,
+        recipientUserId,
         type: activity.type,
         projectId: activity.projectId,
         projectName: activity.projectName,
         taskTitle: activity.taskTitle,
+        taskId: activity.taskId,
+        commentId: activity.commentId,
+        commentExcerpt: activity.commentExcerpt,
         toStatus: activity.toStatus,
         assigneeUserId: activity.assigneeSubject?.split("|").at(-1),
         assigneeName: activity.assigneeName,

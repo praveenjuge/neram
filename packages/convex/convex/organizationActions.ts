@@ -190,10 +190,25 @@ export const updateRole = action({
 })
 
 export const removeMember = action({
-  args: { userId: v.string() },
+  args: {
+    organizationId: v.string(),
+    organizationSlug: v.string(),
+    userId: v.string(),
+    confirm: v.boolean(),
+  },
   returns: v.null(),
   handler: async (ctx, args) => {
     const admin = await ctx.runQuery(internal.organizations.adminContext, {})
+    if (
+      !args.confirm ||
+      args.organizationId !== admin.organizationId ||
+      args.organizationSlug !== admin.organizationSlug
+    ) {
+      throw new ConvexError({
+        code: "CONFIRMATION_REQUIRED",
+        message: "Confirm with the exact workspace ID and slug.",
+      })
+    }
     if (args.userId === admin.userId) {
       throw new ConvexError({
         code: "INVALID_MEMBER",

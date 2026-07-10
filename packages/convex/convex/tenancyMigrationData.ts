@@ -39,6 +39,30 @@ export const workStatePage = internalQuery({
     await ctx.db.query("projectWorkStates").paginate(args.paginationOpts),
 })
 
+export const subtaskPage = internalQuery({
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) =>
+    await ctx.db.query("subtasks").paginate(args.paginationOpts),
+})
+
+export const commentPage = internalQuery({
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) =>
+    await ctx.db.query("taskComments").paginate(args.paginationOpts),
+})
+
+export const taskStatsPage = internalQuery({
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) =>
+    await ctx.db.query("taskStats").paginate(args.paginationOpts),
+})
+
+export const organizationActivityPage = internalQuery({
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) =>
+    await ctx.db.query("organizationActivity").paginate(args.paginationOpts),
+})
+
 export const cohortState = internalQuery({
   args: { cohortKey: v.string() },
   handler: async (ctx, args) =>
@@ -46,6 +70,42 @@ export const cohortState = internalQuery({
       .query("tenancyMigrationCohorts")
       .withIndex("by_cohort_key", (q) => q.eq("cohortKey", args.cohortKey))
       .unique(),
+})
+
+export const runState = internalQuery({
+  args: { key: v.string() },
+  handler: async (ctx, args) =>
+    await ctx.db
+      .query("tenancyMigrationRuns")
+      .withIndex("by_key", (q) => q.eq("key", args.key))
+      .unique(),
+})
+
+export const organizationProjection = internalQuery({
+  args: { organizationId: v.string() },
+  handler: async (ctx, args) => {
+    const [organization, settings, members] = await Promise.all([
+      ctx.db
+        .query("organizations")
+        .withIndex("by_organization_id", (q) =>
+          q.eq("organizationId", args.organizationId)
+        )
+        .unique(),
+      ctx.db
+        .query("organizationSettings")
+        .withIndex("by_organization", (q) =>
+          q.eq("organizationId", args.organizationId)
+        )
+        .unique(),
+      ctx.db
+        .query("organizationMembers")
+        .withIndex("by_organization", (q) =>
+          q.eq("organizationId", args.organizationId)
+        )
+        .take(501),
+    ])
+    return { organization, settings, members }
+  },
 })
 
 const cohort = v.object({
@@ -73,6 +133,10 @@ export const persistInventory = internalMutation({
     expectedActivityRows: v.number(),
     expectedLegacyMembers: v.number(),
     expectedLegacyInvites: v.number(),
+    expectedLegacyWorkStates: v.number(),
+    expectedSubtasks: v.number(),
+    expectedComments: v.number(),
+    expectedTaskStats: v.number(),
     cohorts: v.array(cohort),
   },
   returns: v.null(),
@@ -89,6 +153,10 @@ export const persistInventory = internalMutation({
       expectedActivityRows: args.expectedActivityRows,
       expectedLegacyMembers: args.expectedLegacyMembers,
       expectedLegacyInvites: args.expectedLegacyInvites,
+      expectedLegacyWorkStates: args.expectedLegacyWorkStates,
+      expectedSubtasks: args.expectedSubtasks,
+      expectedComments: args.expectedComments,
+      expectedTaskStats: args.expectedTaskStats,
       expectedCohorts: args.cohorts.length,
       updatedAt: now,
     }
