@@ -154,7 +154,7 @@ async function legacyFixture() {
     body: "History",
     mentions: [],
   })
-  return { t }
+  return { t, owner }
 }
 
 test("dry inventory is deterministic and never persists state", async () => {
@@ -181,7 +181,22 @@ test("dry inventory is deterministic and never persists state", async () => {
 })
 
 test("provision resumes after Clerk failure, verifies rows, and narrows cleanly", async () => {
-  const { t } = await legacyFixture()
+  const { t, owner } = await legacyFixture()
+  const deletedProjectId = await owner.mutation(api.projects.create, {
+    name: "Deleted legacy project",
+  })
+  await owner.mutation(api.projects.remove, { projectId: deletedProjectId })
+  await t.run(async (ctx) => {
+    await ctx.db.insert("activity", {
+      subject: "https://clerk.test|user_owner",
+      actorSubject: "https://retired-clerk.test|user_old_owner",
+      actorName: "Owner",
+      projectId: deletedProjectId,
+      projectName: "Deleted legacy project",
+      type: "task.deleted",
+      createdAt: Date.now(),
+    })
+  })
   clerkState.failMembershipOnce = true
   await expect(
     t.action(internal.tenancyMigration.provision, {})
@@ -212,6 +227,7 @@ test("provision resumes after Clerk failure, verifies rows, and narrows cleanly"
     subtasks: 1,
     comments: 1,
     remainingInvites: 0,
+    orphanProjectMappings: 1,
   })
 
   await t.run(async (ctx) => {

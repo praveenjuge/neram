@@ -204,6 +204,57 @@ async function buildInventory(ctx: ActionCtx) {
       ],
     }
   })
+  const projectIds = new Set(projects.map((project) => project._id))
+  const cohortKeysBySubject = new Map<string, Set<string>>()
+  const cohortKeysByActorLabel = new Map<string, Set<string>>()
+  for (const cohort of cohorts) {
+    for (const member of cohort.members) {
+      const keys = cohortKeysBySubject.get(member.subject) ?? new Set<string>()
+      keys.add(cohort.cohortKey)
+      cohortKeysBySubject.set(member.subject, keys)
+      const label = member.displayName.trim().toLowerCase()
+      const labelKeys = cohortKeysByActorLabel.get(label) ?? new Set<string>()
+      labelKeys.add(cohort.cohortKey)
+      cohortKeysByActorLabel.set(label, labelKeys)
+    }
+  }
+  const orphanProjectCohorts = new Map<string, string>()
+  const unmappableActivity: string[] = []
+  for (const row of activity) {
+    if (projectIds.has(row.projectId)) continue
+    const candidates = new Set(
+      cohortKeysBySubject.get(row.actorSubject) ?? []
+    )
+    for (const key of
+      cohortKeysByActorLabel.get(row.actorName.trim().toLowerCase()) ?? []) {
+      candidates.add(key)
+    }
+    if (candidates.size !== 1) {
+      unmappableActivity.push(row._id)
+      continue
+    }
+    const candidate = [...candidates][0]
+    const existing = orphanProjectCohorts.get(row.projectId)
+    if (existing && existing !== candidate) {
+      unmappableActivity.push(row._id)
+      continue
+    }
+    orphanProjectCohorts.set(row.projectId, candidate)
+  }
+  if (unmappableActivity.length > 0) {
+    throw new ConvexError({
+      code: "UNMAPPABLE_ACTIVITY_TENANCY",
+      message:
+        "Legacy activity for deleted projects cannot be assigned to exactly one Organization.",
+      activityIds: unmappableActivity,
+    })
+  }
+  const orphanProjectMappings = [...orphanProjectCohorts.entries()]
+    .map(([projectId, cohortKey]) => ({
+      projectId: projectId as Doc<"projects">["_id"],
+      cohortKey,
+    }))
+    .sort((a, b) => a.projectId.localeCompare(b.projectId))
   const settings = await clerk().instance.getOrganizationSettings()
   const largestCohort = Math.max(
     0,
@@ -230,6 +281,7 @@ async function buildInventory(ctx: ActionCtx) {
     subtasks,
     comments,
     taskStats,
+    orphanProjectMappings,
     maxAllowedMemberships: settings.maxAllowedMemberships,
     cohorts,
   }
@@ -265,6 +317,7 @@ export const inventory = internalAction({
         expectedSubtasks: report.subtasks.length,
         expectedComments: report.comments.length,
         expectedTaskStats: report.taskStats.length,
+        orphanProjectMappings: report.orphanProjectMappings,
         cohorts: report.cohorts.map(persistedCohort),
       })
     }
@@ -279,6 +332,7 @@ export const inventory = internalAction({
       subtasks: report.subtasks.length,
       comments: report.comments.length,
       taskStats: report.taskStats.length,
+      orphanProjectMappings: report.orphanProjectMappings.length,
       cohorts: report.cohorts.map((cohort) => ({
         cohortKey: cohort.cohortKey,
         ownerUserId: cohort.ownerUserId,
@@ -342,6 +396,7 @@ export const provision = internalAction({
       expectedSubtasks: report.subtasks.length,
       expectedComments: report.comments.length,
       expectedTaskStats: report.taskStats.length,
+      orphanProjectMappings: report.orphanProjectMappings,
       cohorts: report.cohorts.map(persistedCohort),
     })
     const existingOrganizations =
@@ -438,6 +493,7 @@ export const verify = internalAction({
       comments: number
       taskStats: number
       organizationActivityRows: number
+      orphanProjectMappings: number
     }
   }> => {
     const report = await buildInventory(ctx)
@@ -452,6 +508,12 @@ export const verify = internalAction({
       report.projects.map((project) => [project._id, project])
     )
     const taskById = new Map(report.tasks.map((task) => [task._id, task]))
+    const orphanMappingByProject = new Map(
+      report.orphanProjectMappings.map((mapping) => [
+        mapping.projectId,
+        mapping.cohortKey,
+      ])
+    )
     const commentById = new Map(
       report.comments.map((comment) => [comment._id, comment])
     )
@@ -467,6 +529,11 @@ export const verify = internalAction({
         ["subtasks", run.expectedSubtasks, report.subtasks.length],
         ["comments", run.expectedComments, report.comments.length],
         ["taskStats", run.expectedTaskStats, report.taskStats.length],
+        [
+          "orphanProjectMappings",
+          run.expectedOrphanProjectMappings,
+          report.orphanProjectMappings.length,
+        ],
       ] as const
       for (const [table, before, after] of expected) {
         if (before !== undefined && before !== after) {
@@ -520,9 +587,16 @@ export const verify = internalAction({
     }
     for (const activity of report.activity) {
       const project = projectById.get(activity.projectId)
+      const orphanCohort = orphanMappingByProject.get(activity.projectId)
+      const saved = orphanCohort
+        ? await ctx.runQuery(internal.tenancyMigrationData.cohortState, {
+            cohortKey: orphanCohort,
+          })
+        : undefined
       if (
         !activity.organizationId ||
-        activity.organizationId !== project?.organizationId
+        activity.organizationId !==
+          (project?.organizationId ?? saved?.organizationId)
       ) {
         failures.push(`activity:${activity._id}:tenant_mismatch`)
       }
@@ -628,6 +702,7 @@ export const verify = internalAction({
         comments: report.comments.length,
         taskStats: report.taskStats.length,
         organizationActivityRows: organizationActivity.length,
+        orphanProjectMappings: report.orphanProjectMappings.length,
       },
     }
   },

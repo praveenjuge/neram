@@ -432,6 +432,7 @@ export default defineSchema({
     expectedSubtasks: v.optional(v.number()),
     expectedComments: v.optional(v.number()),
     expectedTaskStats: v.optional(v.number()),
+    expectedOrphanProjectMappings: v.optional(v.number()),
     expectedCohorts: v.number(),
     createdAt: v.number(),
     updatedAt: v.number(),

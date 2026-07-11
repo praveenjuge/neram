@@ -45,7 +45,14 @@ export const backfillActivity = migrations.define({
   table: "activity",
   migrateOne: async (ctx, activity) => {
     const project = await ctx.db.get(activity.projectId)
-    if (!project?.organizationId)
+    const mapping = project
+      ? undefined
+      : await ctx.db
+          .query("tenancyProjectMappings")
+          .withIndex("by_project", (q) => q.eq("projectId", activity.projectId))
+          .unique()
+    const organizationId = project?.organizationId ?? mapping?.organizationId
+    if (!organizationId)
       throw new Error(`Project ${activity.projectId} is not migrated`)
     const recipientUserId = legacyActivityRecipient(activity)
     const legacyEventKey = legacyActivityKey(activity)
@@ -57,7 +64,7 @@ export const backfillActivity = migrations.define({
       .unique()
     if (!existing) {
       await ctx.db.insert("organizationActivity", {
-        organizationId: project.organizationId,
+        organizationId,
         actorUserId:
           activity.actorSubject.split("|").at(-1) ?? activity.actorSubject,
         actorName: activity.actorName,
@@ -76,7 +83,7 @@ export const backfillActivity = migrations.define({
         createdAt: activity.createdAt,
       })
     }
-    return { organizationId: project.organizationId }
+    return { organizationId }
   },
 })
 

@@ -108,6 +108,15 @@ export const organizationProjection = internalQuery({
   },
 })
 
+export const projectMapping = internalQuery({
+  args: { projectId: v.id("projects") },
+  handler: async (ctx, args) =>
+    await ctx.db
+      .query("tenancyProjectMappings")
+      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
+      .unique(),
+})
+
 const cohort = v.object({
   cohortKey: v.string(),
   ownerSubject: v.string(),
@@ -137,6 +146,12 @@ export const persistInventory = internalMutation({
     expectedSubtasks: v.number(),
     expectedComments: v.number(),
     expectedTaskStats: v.number(),
+    orphanProjectMappings: v.array(
+      v.object({
+        projectId: v.id("projects"),
+        cohortKey: v.string(),
+      })
+    ),
     cohorts: v.array(cohort),
   },
   returns: v.null(),
@@ -157,6 +172,7 @@ export const persistInventory = internalMutation({
       expectedSubtasks: args.expectedSubtasks,
       expectedComments: args.expectedComments,
       expectedTaskStats: args.expectedTaskStats,
+      expectedOrphanProjectMappings: args.orphanProjectMappings.length,
       expectedCohorts: args.cohorts.length,
       updatedAt: now,
     }
@@ -222,6 +238,27 @@ export const persistInventory = internalMutation({
             updatedAt: now,
           })
         }
+      }
+    }
+    for (const orphan of args.orphanProjectMappings) {
+      const mapping = await ctx.db
+        .query("tenancyProjectMappings")
+        .withIndex("by_project", (q) => q.eq("projectId", orphan.projectId))
+        .unique()
+      if (mapping) {
+        if (mapping.cohortKey !== orphan.cohortKey) {
+          throw new Error(
+            `Conflicting Organization cohorts for deleted project ${orphan.projectId}`
+          )
+        }
+        await ctx.db.patch(mapping._id, { updatedAt: now })
+      } else {
+        await ctx.db.insert("tenancyProjectMappings", {
+          projectId: orphan.projectId,
+          cohortKey: orphan.cohortKey,
+          createdAt: now,
+          updatedAt: now,
+        })
       }
     }
     return null
