@@ -3,6 +3,7 @@ import { convexTest } from "convex-test"
 import { expect, test } from "vitest"
 
 import { api, internal } from "./_generated/api"
+import type { Id } from "./_generated/dataModel"
 import schema from "./schema"
 import { initialSprintBounds } from "./sprintTime"
 
@@ -466,6 +467,121 @@ test("capacity counts live work and rollover summarizes a larger audit in batche
       sprint: "current",
     })
   ).rejects.toThrow("at most 1,000 tasks")
+})
+
+test("rollover capacity fails before writes and recovers after replanning", async () => {
+  const { t, alice } = await setup()
+  const projectId = await alice.mutation(api.projects.create, {
+    name: "Rollover ceiling",
+  })
+  await alice.mutation(api.tasks.create, {
+    projectId,
+    title: "Carry me",
+    sprint: "current",
+  })
+  const current = await alice.query(api.sprints.current, {})
+  const upcoming = await alice.query(api.sprints.upcoming, {})
+  const upcomingTaskIds: Id<"tasks">[] = []
+  for (let batch = 0; batch < 10; batch += 1) {
+    await t.run(async (ctx) => {
+      for (let offset = 0; offset < 100; offset += 1) {
+        const index = batch * 100 + offset
+        const taskId = await ctx.db.insert("tasks", {
+          organizationId: "org_alpha",
+          projectId,
+          title: `Planned ${index}`,
+          status: "todo",
+          upcomingSprintId: upcoming!.sprint._id,
+          position: index,
+          createdAt: index,
+          updatedAt: index,
+        })
+        upcomingTaskIds.push(taskId)
+        await ctx.db.insert("sprintTaskEntries", {
+          organizationId: "org_alpha",
+          sprintId: upcoming!.sprint._id,
+          taskId,
+          projectId,
+          projectNameSnapshot: "Rollover ceiling",
+          taskTitleSnapshot: `Planned ${index}`,
+          origin: "planned",
+          actorUserId: "user_alice",
+          actorName: "Alice",
+          addedAt: index,
+        })
+      }
+    })
+  }
+
+  await t.run(async (ctx) => {
+    await ctx.db.patch(current!.sprint._id, { endsAt: Date.now() - 1 })
+  })
+  await expect(
+    alice.mutation(internal.sprintRollover.scheduled, {
+      organizationId: "org_alpha",
+      sprintId: current!.sprint._id,
+    })
+  ).rejects.toThrow("Move at least 1 task from Upcoming to Backlog")
+  await t.run(async (ctx) => {
+    const settings = await ctx.db
+      .query("organizationSettings")
+      .withIndex("by_organization", (q) => q.eq("organizationId", "org_alpha"))
+      .unique()
+    expect(settings?.rolloverStatus).toBe("idle")
+    expect(settings?.activeRolloverJobId).toBeUndefined()
+    expect(
+      await ctx.db
+        .query("sprintRolloverJobs")
+        .withIndex("by_organization_and_status", (q) =>
+          q.eq("organizationId", "org_alpha").eq("status", "running")
+        )
+        .take(1)
+    ).toHaveLength(0)
+  })
+
+  await alice.mutation(api.sprints.remove, {
+    taskIds: [upcomingTaskIds[0]],
+    sprint: "upcoming",
+  })
+  await alice.mutation(internal.sprintRollover.scheduled, {
+    organizationId: "org_alpha",
+    sprintId: current!.sprint._id,
+  })
+  const jobId = await t.run(async (ctx) => {
+    const jobs = await ctx.db
+      .query("sprintRolloverJobs")
+      .withIndex("by_organization_and_status", (q) =>
+        q.eq("organizationId", "org_alpha").eq("status", "running")
+      )
+      .take(2)
+    expect(jobs).toHaveLength(1)
+    return jobs[0]._id
+  })
+  await expect(
+    alice.mutation(api.sprints.plan, {
+      taskIds: [upcomingTaskIds[0]],
+      sprint: "upcoming",
+    })
+  ).rejects.toThrow("planning is paused")
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const done = await t.run(
+      async (ctx) => (await ctx.db.get(jobId))?.status === "completed"
+    )
+    if (done) break
+    await alice.mutation(internal.sprintRollover.process, { jobId })
+  }
+  await t.run(async (ctx) => {
+    expect(await ctx.db.get(jobId)).toMatchObject({ status: "completed" })
+    const settings = await ctx.db
+      .query("organizationSettings")
+      .withIndex("by_organization", (q) => q.eq("organizationId", "org_alpha"))
+      .unique()
+    expect(settings).toMatchObject({
+      rolloverStatus: "idle",
+      currentSprintId: upcoming!.sprint._id,
+    })
+    expect(settings?.activeRolloverJobId).toBeUndefined()
+  })
 })
 
 test("Sprint API keeps stable validation errors and allows member planning controls", async () => {

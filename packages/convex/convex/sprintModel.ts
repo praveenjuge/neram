@@ -113,6 +113,22 @@ async function assertCapacity(ctx: MutationCtx, sprintId: Id<"sprints">) {
   }
 }
 
+async function assertPlacementWritable(
+  ctx: MutationCtx,
+  organizationId: string
+) {
+  const settings = await ctx.db
+    .query("organizationSettings")
+    .withIndex("by_organization", (q) => q.eq("organizationId", organizationId))
+    .unique()
+  if (settings?.rolloverStatus === "running") {
+    throw new ConvexError({
+      code: "SPRINT_ROLLOVER_RUNNING",
+      message: "Sprint planning is paused while rollover completes.",
+    })
+  }
+}
+
 export async function addTaskToSprint(
   ctx: MutationCtx,
   args: {
@@ -134,6 +150,9 @@ export async function addTaskToSprint(
     throw new ConvexError({ code: "NOT_FOUND", message: "Sprint not found." })
   }
   if (await activeEntry(ctx, sprint._id, args.task._id)) return sprint
+  if (args.origin !== "carried") {
+    await assertPlacementWritable(ctx, sprint.organizationId)
+  }
   await assertCapacity(ctx, sprint._id)
   const now = args.now ?? Date.now()
   await ctx.db.insert("sprintTaskEntries", {
@@ -169,6 +188,7 @@ export async function removeTaskFromSprint(
 ) {
   const entry = await activeEntry(ctx, args.sprintId, args.task._id)
   if (!entry) return
+  await assertPlacementWritable(ctx, args.task.organizationId)
   const now = args.now ?? Date.now()
   await ctx.db.patch(entry._id, {
     removedAt: now,

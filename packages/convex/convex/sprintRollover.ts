@@ -4,7 +4,11 @@ import { internal } from "./_generated/api"
 import type { Doc } from "./_generated/dataModel"
 import { internalMutation } from "./_generated/server"
 import type { MutationCtx } from "./_generated/server"
-import { addTaskToSprint, ensureSprintPair } from "./sprintModel"
+import {
+  addTaskToSprint,
+  ensureSprintPair,
+  MAX_SPRINT_TASKS,
+} from "./sprintModel"
 import { nextSprintBounds } from "./sprintTime"
 
 const BATCH_SIZE = 100
@@ -16,6 +20,43 @@ type StartRolloverArgs = {
   actorName?: string
   reason?: string
   now?: number
+}
+
+async function assertRolloverCapacity(
+  ctx: MutationCtx,
+  args: {
+    organizationId: string
+    closingSprintId: Doc<"sprints">["_id"]
+    promotedSprintId: Doc<"sprints">["_id"]
+    cutoffAt: number
+  }
+) {
+  const [planned, current] = await Promise.all([
+    ctx.db
+      .query("sprintTaskEntries")
+      .withIndex("by_sprint_and_removed", (q) =>
+        q.eq("sprintId", args.promotedSprintId).eq("removedAt", undefined)
+      )
+      .take(MAX_SPRINT_TASKS + 1),
+    ctx.db
+      .query("tasks")
+      .withIndex("by_organization_and_current_sprint", (q) =>
+        q
+          .eq("organizationId", args.organizationId)
+          .eq("currentSprintId", args.closingSprintId)
+      )
+      .take(MAX_SPRINT_TASKS + 1),
+  ])
+  const carriedCount = current.filter(
+    (task) => task.completedAt === undefined || task.completedAt > args.cutoffAt
+  ).length
+  const overflow = planned.length + carriedCount - MAX_SPRINT_TASKS
+  if (overflow > 0) {
+    throw new ConvexError({
+      code: "SPRINT_ROLLOVER_CAPACITY",
+      message: `Move at least ${overflow} task${overflow === 1 ? "" : "s"} from Upcoming to Backlog before rollover.`,
+    })
+  }
 }
 
 export async function startRollover(ctx: MutationCtx, args: StartRolloverArgs) {
@@ -42,6 +83,12 @@ export async function startRollover(ctx: MutationCtx, args: StartRolloverArgs) {
     })
   }
   const cutoffAt = args.early ? now : closing.endsAt
+  await assertRolloverCapacity(ctx, {
+    organizationId: args.organizationId,
+    closingSprintId: closing._id,
+    promotedSprintId: promoted._id,
+    cutoffAt,
+  })
   const jobId = await ctx.db.insert("sprintRolloverJobs", {
     organizationId: args.organizationId,
     closingSprintId: closing._id,
