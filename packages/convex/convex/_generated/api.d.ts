@@ -16,6 +16,7 @@ import type * as http from "../http.js";
 import type * as model from "../model.js";
 import type * as organizationActions from "../organizationActions.js";
 import type * as organizationJobs from "../organizationJobs.js";
+import type * as organizationPagination from "../organizationPagination.js";
 import type * as organizations from "../organizations.js";
 import type * as projects from "../projects.js";
 import type * as sprintModel from "../sprintModel.js";
@@ -42,6 +43,7 @@ declare const fullApi: ApiFromModules<{
   model: typeof model;
   organizationActions: typeof organizationActions;
   organizationJobs: typeof organizationJobs;
+  organizationPagination: typeof organizationPagination;
   organizations: typeof organizations;
   projects: typeof projects;
   sprintModel: typeof sprintModel;

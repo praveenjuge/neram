@@ -1,4 +1,5 @@
 import { ConvexError, v } from "convex/values"
+import type { Infer } from "convex/values"
 
 import { internal } from "./_generated/api"
 import {
@@ -7,10 +8,21 @@ import {
   mutation,
   query,
 } from "./_generated/server"
+import type { MutationCtx } from "./_generated/server"
 import { actor, requireOrganization, requireOrganizationAdmin } from "./model"
 import { ensureSprintPair } from "./sprintModel"
 
 const role = v.union(v.literal("org:admin"), v.literal("org:member"))
+const memberFields = {
+  organizationId: v.string(),
+  membershipId: v.string(),
+  userId: v.string(),
+  role,
+  displayName: v.string(),
+  email: v.optional(v.string()),
+  imageUrl: v.optional(v.string()),
+}
+const memberInput = v.object(memberFields)
 const organization = v.object({
   _id: v.id("organizations"),
   _creationTime: v.number(),
@@ -168,41 +180,51 @@ export const upsertOrganization = internalMutation({
   },
 })
 
+async function upsertMemberProjection(
+  ctx: MutationCtx,
+  args: Infer<typeof memberInput>
+) {
+  const existing = await ctx.db
+    .query("organizationMembers")
+    .withIndex("by_membership_id", (q) =>
+      q.eq("membershipId", args.membershipId)
+    )
+    .unique()
+  const duplicate = await ctx.db
+    .query("organizationMembers")
+    .withIndex("by_organization_and_user", (q) =>
+      q.eq("organizationId", args.organizationId).eq("userId", args.userId)
+    )
+    .unique()
+  const now = Date.now()
+  if (existing) {
+    await ctx.db.patch(existing._id, { ...args, updatedAt: now })
+  } else if (duplicate) {
+    await ctx.db.patch(duplicate._id, { ...args, updatedAt: now })
+  } else {
+    await ctx.db.insert("organizationMembers", {
+      ...args,
+      createdAt: now,
+      updatedAt: now,
+    })
+  }
+}
+
 export const upsertMember = internalMutation({
-  args: {
-    organizationId: v.string(),
-    membershipId: v.string(),
-    userId: v.string(),
-    role,
-    displayName: v.string(),
-    email: v.optional(v.string()),
-    imageUrl: v.optional(v.string()),
-  },
+  args: memberFields,
   returns: v.null(),
   handler: async (ctx, args) => {
-    const existing = await ctx.db
-      .query("organizationMembers")
-      .withIndex("by_membership_id", (q) =>
-        q.eq("membershipId", args.membershipId)
-      )
-      .unique()
-    const duplicate = await ctx.db
-      .query("organizationMembers")
-      .withIndex("by_organization_and_user", (q) =>
-        q.eq("organizationId", args.organizationId).eq("userId", args.userId)
-      )
-      .unique()
-    const now = Date.now()
-    if (existing) {
-      await ctx.db.patch(existing._id, { ...args, updatedAt: now })
-    } else if (duplicate) {
-      await ctx.db.patch(duplicate._id, { ...args, updatedAt: now })
-    } else {
-      await ctx.db.insert("organizationMembers", {
-        ...args,
-        createdAt: now,
-        updatedAt: now,
-      })
+    await upsertMemberProjection(ctx, args)
+    return null
+  },
+})
+
+export const upsertMembers = internalMutation({
+  args: { members: v.array(memberInput) },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    for (const membership of args.members) {
+      await upsertMemberProjection(ctx, membership)
     }
     return null
   },

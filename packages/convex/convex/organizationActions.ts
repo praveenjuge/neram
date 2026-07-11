@@ -6,6 +6,9 @@ import { ConvexError, v } from "convex/values"
 import { internal } from "./_generated/api"
 import { action, env, internalAction } from "./_generated/server"
 import type { ActionCtx } from "./_generated/server"
+import { visitClerkMembershipPages } from "./organizationPagination"
+
+const PROJECTION_BATCH_SIZE = 100
 
 function clerk() {
   if (!env.CLERK_SECRET_KEY) {
@@ -66,19 +69,38 @@ function membershipView(
   }
 }
 
-async function syncMemberships(ctx: ActionCtx, organizationId: string) {
-  const memberships = await clerk().organizations.getOrganizationMembershipList(
-    {
-      organizationId,
-      limit: 500,
+async function syncMemberships(
+  ctx: ActionCtx,
+  organizationId: string,
+  requiredUserId?: string
+) {
+  let requiredMemberFound = false
+  await visitClerkMembershipPages(
+    async ({ limit, offset }) =>
+      clerk().organizations.getOrganizationMembershipList({
+        organizationId,
+        limit,
+        offset,
+        orderBy: "+created_at",
+      }),
+    async (memberships) => {
+      const views = memberships
+        .map(membershipView)
+        .filter((membership) => membership.userId)
+      if (
+        requiredUserId &&
+        views.some((membership) => membership.userId === requiredUserId)
+      ) {
+        requiredMemberFound = true
+      }
+      for (let index = 0; index < views.length; index += PROJECTION_BATCH_SIZE) {
+        await ctx.runMutation(internal.organizations.upsertMembers, {
+          members: views.slice(index, index + PROJECTION_BATCH_SIZE),
+        })
+      }
     }
   )
-  for (const membership of memberships.data) {
-    const view = membershipView(membership)
-    if (!view.userId) continue
-    await ctx.runMutation(internal.organizations.upsertMember, view)
-  }
-  return memberships.data.map(membershipView)
+  return requiredUserId === undefined || requiredMemberFound
 }
 
 export const syncCurrent = action({
@@ -92,8 +114,12 @@ export const syncCurrent = action({
     const organization = await clerk().organizations.getOrganization({
       organizationId: token.organizationId,
     })
-    const memberships = await syncMemberships(ctx, organization.id)
-    if (!memberships.some((membership) => membership.userId === token.userId)) {
+    const currentMember = await syncMemberships(
+      ctx,
+      organization.id,
+      token.userId
+    )
+    if (!currentMember) {
       throw new ConvexError({
         code: "FORBIDDEN",
         message: "You are no longer a member of this workspace.",
