@@ -16,17 +16,17 @@ any command for stable, machine-readable output; the JSON shape is additive and
 backward compatible, so the `--json` payload is exactly the underlying tool
 result.
 
-- `neram login` completes Clerk OAuth (PKCE), requires an active Clerk
-  Organization, and stores that Organization-bound session in the OS keychain,
-  with a chmod-600 file fallback.
+- `neram login` completes Clerk OAuth (PKCE) with `user:org:read`, lets the user
+  select a Clerk Organization, and stores that Organization-bound session in
+  the OS keychain, with a chmod-600 file fallback.
 - `neram whoami` shows your identity, active Organization and role, workspace
   totals, and MCP readiness hints.
 - `neram logout` clears local credentials, best-effort revokes the refresh
   token, and keeps the cached public config for your next login.
 - `neram mcp` starts the local stdio MCP server and fails fast with a friendly
   message when you aren't logged in. It refreshes the auth token per request, so
-  a long-lived server keeps working past the ~1h id-token lifetime as long as a
-  refresh token exists.
+  a long-lived server keeps working past token expiry as long as a refresh
+  token exists.
 - `neram mcp install [claude-code|cursor|vscode]` prints (does not write) the
   config snippet for wiring the server into a client.
 

@@ -44,6 +44,7 @@ function fakeApi(overrides: Partial<NeramApi> = {}): NeramApi {
     displayName: "Ada",
   }
   return {
+    syncCurrentWorkspace: vi.fn(async () => undefined),
     currentWorkspace: vi.fn(async () => ({
       organization,
       membership,

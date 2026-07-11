@@ -13,6 +13,7 @@ import { api } from "@neram/convex/api"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { messageFromError } from "@/lib/errors"
+import { findOrganizationBySlug } from "@/lib/sprint-planning"
 
 function LoadingWorkspace() {
   return (
@@ -24,9 +25,14 @@ function LoadingWorkspace() {
 
 export function WorkspaceGate({ children }: { children: ReactNode }) {
   const params = useParams()
-  const slug = typeof params.organizationSlug === "string" ? params.organizationSlug : ""
+  const slug =
+    typeof params.organizationSlug === "string" ? params.organizationSlug : ""
   const { isLoaded: organizationLoaded, organization } = useOrganization()
-  const { isLoaded: listLoaded, setActive, userMemberships } = useOrganizationList({
+  const {
+    isLoaded: listLoaded,
+    setActive,
+    userMemberships,
+  } = useOrganizationList({
     userMemberships: { infinite: true, pageSize: 100 },
   })
   const syncCurrent = useAction(api.organizationActions.syncCurrent)
@@ -34,24 +40,34 @@ export function WorkspaceGate({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)
 
-  const matchingMembership = userMemberships.data?.find(
-    (membership) => membership.organization.slug === slug
-  )
+  const matchingMembership = findOrganizationBySlug(userMemberships.data, slug)
 
   useEffect(() => {
-    if (!listLoaded || !setActive || !matchingMembership || organization?.slug === slug) return
+    if (
+      !listLoaded ||
+      !setActive ||
+      !matchingMembership ||
+      organization?.slug === slug
+    )
+      return
     void setActive({ organization: matchingMembership.organization.id })
   }, [listLoaded, matchingMembership, organization?.slug, setActive, slug])
 
   useEffect(() => {
-    if (!organizationLoaded || organization?.slug !== slug || syncedId === organization.id) return
+    if (
+      !organizationLoaded ||
+      organization?.slug !== slug ||
+      syncedId === organization.id
+    )
+      return
     let active = true
     void syncCurrent({})
       .then(() => {
         if (active) setSyncedId(organization.id)
       })
       .catch((reason) => {
-        if (active) setError(messageFromError(reason, "Could not load this workspace."))
+        if (active)
+          setError(messageFromError(reason, "Could not load this workspace."))
       })
     return () => {
       active = false

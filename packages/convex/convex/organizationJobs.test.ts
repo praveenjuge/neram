@@ -40,13 +40,27 @@ async function setup() {
     org_slug: "acme",
     org_role: "org:member",
   })
-  return { t, admin, member }
+  const spoofedAdmin = t.withIdentity({
+    subject: "user_member",
+    tokenIdentifier: "https://clerk.test|user_member",
+    name: "Bob",
+    org_id: "org_acme",
+    org_role: "org:admin",
+  })
+  return { t, admin, member, spoofedAdmin }
 }
 
 test("workspace deletion requires an admin and exact tenant confirmation", async () => {
-  const { admin, member } = await setup()
+  const { admin, member, spoofedAdmin } = await setup()
   await expect(
     member.mutation(api.organizations.beginDeletion, {
+      organizationId: "org_acme",
+      slug: "acme",
+      confirm: true,
+    })
+  ).rejects.toThrow('"code":"FORBIDDEN"')
+  await expect(
+    spoofedAdmin.mutation(api.organizations.beginDeletion, {
       organizationId: "org_acme",
       slug: "acme",
       confirm: true,

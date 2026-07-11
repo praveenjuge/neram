@@ -11,15 +11,25 @@ test("workspace switch forces Organization selection and reports reconnection", 
   login.mockResolvedValue({
     user: {
       org_id: "org_2",
-      org_slug: "beta",
-      org_role: "org:admin",
     },
   })
   const program = new Command()
   program.exitOverride()
   const emit = vi.fn()
+  const getWorkspace = vi.fn().mockResolvedValue({
+    organization: {
+      organizationId: "org_2",
+      slug: "beta",
+      name: "Beta",
+      state: "active",
+    },
+    membership: {
+      role: "org:admin",
+    },
+    settings: null,
+  })
   registerPlanningCommands(program, {
-    tools: vi.fn(),
+    tools: vi.fn().mockResolvedValue({ get_workspace: getWorkspace }),
     emit,
     wrap: (_opts, fn) => void fn(),
   })
@@ -28,6 +38,7 @@ test("workspace switch forces Organization selection and reports reconnection", 
     from: "node",
   })
   await vi.waitFor(() => expect(login).toHaveBeenCalledOnce())
+  await vi.waitFor(() => expect(getWorkspace).toHaveBeenCalledOnce())
   expect(login).toHaveBeenCalledWith({}, { forceOrganizationSelection: true })
   expect(emit).toHaveBeenCalledWith(
     expect.objectContaining({ json: true }),

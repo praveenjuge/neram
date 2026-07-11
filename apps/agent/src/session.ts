@@ -14,11 +14,7 @@ export function claims(idToken: string) {
 
 export function requireOrganizationClaims(idToken: string) {
   const user = claims(idToken)
-  if (
-    typeof user.org_id !== "string" ||
-    typeof user.org_slug !== "string" ||
-    (user.org_role !== "org:admin" && user.org_role !== "org:member")
-  ) {
+  if (typeof user.org_id !== "string" || user.org_id.length === 0) {
     throw new AgentError(
       "ORGANIZATION_REQUIRED",
       "Choose a Neram workspace during authorization."
@@ -26,7 +22,5 @@ export function requireOrganizationClaims(idToken: string) {
   }
   return user as Record<string, unknown> & {
     org_id: string
-    org_slug: string
-    org_role: "org:admin" | "org:member"
   }
 }

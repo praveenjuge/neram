@@ -63,7 +63,7 @@ async function validateMentions(
   const members = await ctx.db
     .query("organizationMembers")
     .withIndex("by_organization", (q) =>
-      q.eq("organizationId", args.project.organizationId as string)
+      q.eq("organizationId", args.project.organizationId)
     )
     .take(MAX_MEMBERS + 1)
   if (members.length > MAX_MEMBERS) {

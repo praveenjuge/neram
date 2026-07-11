@@ -274,7 +274,7 @@ async function refresh(session: Session) {
   )
     return session
   const meta = await discovery(session.config.clerkFrontendApiUrl)
-  const next = await exchange(
+  const refreshed = await exchange(
     meta.token_endpoint,
     new URLSearchParams({
       grant_type: "refresh_token",
@@ -283,6 +283,10 @@ async function refresh(session: Session) {
     }),
     session.config
   )
+  const next = {
+    ...refreshed,
+    refreshToken: refreshed.refreshToken ?? session.refreshToken,
+  }
   requireOrganizationClaims(next.idToken)
   await writeSession(next)
   return next

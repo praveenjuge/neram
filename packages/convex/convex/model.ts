@@ -8,8 +8,6 @@ export type Actor = {
   userId: string
   name: string
   organizationId: string
-  organizationSlug: string
-  organizationRole: "org:admin" | "org:member"
 }
 
 function stringClaim(identity: object, key: string) {
@@ -29,13 +27,7 @@ export async function actor(ctx: QueryCtx | MutationCtx): Promise<Actor> {
     })
   }
   const organizationId = stringClaim(identity, "org_id")
-  const organizationSlug = stringClaim(identity, "org_slug")
-  const organizationRole = stringClaim(identity, "org_role")
-  if (
-    !organizationId ||
-    !organizationSlug ||
-    (organizationRole !== "org:admin" && organizationRole !== "org:member")
-  ) {
+  if (!organizationId) {
     throw new ConvexError({
       code: "ORGANIZATION_REQUIRED",
       message: "Choose a workspace and sign in again.",
@@ -46,8 +38,6 @@ export async function actor(ctx: QueryCtx | MutationCtx): Promise<Actor> {
     userId: identity.subject,
     name: identity.name ?? identity.email ?? "Someone",
     organizationId,
-    organizationSlug,
-    organizationRole,
   }
 }
 
@@ -116,7 +106,7 @@ export async function requireOrganizationAdmin(ctx: QueryCtx | MutationCtx) {
  * Resolve a task assignee from a Clerk user id, validating they're in the
  * Organization. Returns the canonical id plus the
  * authoritative display name to denormalize onto the task. Throws if the
- * subject isn't part of the project so a task can't be assigned to a stranger.
+ * user isn't part of the Organization so a task can't be assigned to a stranger.
  */
 export async function resolveAssignee(
   ctx: QueryCtx | MutationCtx,
@@ -129,13 +119,11 @@ export async function resolveAssignee(
   organizationId: string
   organizationRole: "org:admin" | "org:member"
 }> {
-  if (!project.organizationId)
-    throw new ConvexError({ code: "NOT_FOUND", message: "Project not found." })
   const membership = await ctx.db
     .query("organizationMembers")
     .withIndex("by_organization_and_user", (q) =>
       q
-        .eq("organizationId", project.organizationId as string)
+        .eq("organizationId", project.organizationId)
         .eq("userId", assigneeSubject)
     )
     .unique()
@@ -174,7 +162,6 @@ export async function requireProjectAccess(
   const project = await ctx.db.get(projectId)
   if (
     !project ||
-    !project.organizationId ||
     project.organizationId !== access.organization.organizationId
   ) {
     throw new ConvexError({ code: "NOT_FOUND", message: "Project not found." })
@@ -224,8 +211,6 @@ export async function recordActivity(
     assigneeName?: string
   }
 ) {
-  if (!args.project.organizationId)
-    throw new ConvexError({ code: "NOT_FOUND", message: "Project not found." })
   await ctx.db.insert("organizationActivity", {
     organizationId: args.project.organizationId,
     actorUserId: args.actor.userId,
@@ -258,8 +243,6 @@ export async function recordTargetedActivity(
     commentExcerpt: string
   }
 ) {
-  if (!args.project.organizationId)
-    throw new ConvexError({ code: "NOT_FOUND", message: "Project not found." })
   await ctx.db.insert("organizationActivity", {
     organizationId: args.project.organizationId,
     actorUserId: args.actor.userId,
@@ -271,7 +254,7 @@ export async function recordTargetedActivity(
     taskId: args.taskId,
     commentId: args.commentId,
     commentExcerpt: args.commentExcerpt,
-    recipientUserId: args.subject.split("|").at(-1) ?? args.subject,
+    recipientUserId: args.subject,
     createdAt: Date.now(),
   })
 }

@@ -31,14 +31,13 @@ function memberLines(
     : "No members."
 }
 
-function sprintLines(
-  result: Awaited<ReturnType<Tools["list_sprint_tasks"]>>
-) {
+function sprintLines(result: Awaited<ReturnType<Tools["list_sprint_tasks"]>>) {
   const heading = result.details
     ? `Sprint ${result.details.number} · ${result.sprint} · ${result.tasks.length} tasks`
     : `${result.sprint} · ${result.tasks.length} tasks`
   const tasks = result.tasks.map(
-    (task) => `  ${task.taskId}  ${task.title} · ${task.projectName} · ${task.status}`
+    (task) =>
+      `  ${task.taskId}  ${task.title} · ${task.projectName} · ${task.status}`
   )
   return [heading, ...tasks].join("\n")
 }
@@ -83,11 +82,12 @@ export function registerPlanningCommands(program: Command, runtime: Runtime) {
     .option("--json")
     .action((opts) =>
       wrap(opts, async () => {
-        const { user } = await login({}, { forceOrganizationSelection: true })
+        await login({}, { forceOrganizationSelection: true })
+        const context = await (await tools()).get_workspace({})
         const organization = {
-          organizationId: String(user.org_id),
-          slug: String(user.org_slug),
-          role: String(user.org_role),
+          organizationId: context.organization.organizationId,
+          slug: context.organization.slug,
+          role: context.membership.role,
         }
         emit(
           opts,
@@ -117,7 +117,11 @@ export function registerPlanningCommands(program: Command, runtime: Runtime) {
     .action((opts) =>
       wrap(opts, async () => {
         const result = await (await tools()).invite_workspace_member(opts)
-        emit(opts, `Invitation ${result.status}: ${result.invitationId}`, result)
+        emit(
+          opts,
+          `Invitation ${result.status}: ${result.invitationId}`,
+          result
+        )
       })
     )
 
@@ -163,7 +167,9 @@ export function registerPlanningCommands(program: Command, runtime: Runtime) {
       })
     )
 
-  const sprint = program.command("sprint").description("Plan and manage Sprints")
+  const sprint = program
+    .command("sprint")
+    .description("Plan and manage Sprints")
 
   for (const placement of ["current", "backlog", "upcoming"] as const) {
     sprint
@@ -172,7 +178,9 @@ export function registerPlanningCommands(program: Command, runtime: Runtime) {
       .option("--json")
       .action((opts) =>
         wrap(opts, async () => {
-          const result = await (await tools()).list_sprint_tasks({
+          const result = await (
+            await tools()
+          ).list_sprint_tasks({
             sprint: placement,
           })
           emit(opts, sprintLines(result), result)
@@ -189,7 +197,9 @@ export function registerPlanningCommands(program: Command, runtime: Runtime) {
     .option("--json")
     .action((opts) =>
       wrap(opts, async () => {
-        const result = await (await tools()).sprint_history({
+        const result = await (
+          await tools()
+        ).sprint_history({
           sprintId: opts.sprintId,
           cursor: opts.cursor,
           pageSize: opts.limit,
@@ -206,11 +216,17 @@ export function registerPlanningCommands(program: Command, runtime: Runtime) {
     .option("--json")
     .action((opts) =>
       wrap(opts, async () => {
-        const result = await (await tools()).plan_sprint_tasks({
+        const result = await (
+          await tools()
+        ).plan_sprint_tasks({
           taskIds: opts.taskId,
           sprint: opts.sprint,
         })
-        emit(opts, `Planned ${result.taskIds.length} task(s) in ${result.sprint}.`, result)
+        emit(
+          opts,
+          `Planned ${result.taskIds.length} task(s) in ${result.sprint}.`,
+          result
+        )
       })
     )
 
@@ -222,11 +238,17 @@ export function registerPlanningCommands(program: Command, runtime: Runtime) {
     .option("--json")
     .action((opts) =>
       wrap(opts, async () => {
-        const result = await (await tools()).remove_sprint_tasks({
+        const result = await (
+          await tools()
+        ).remove_sprint_tasks({
           taskIds: opts.taskId,
           sprint: opts.sprint,
         })
-        emit(opts, `Returned ${result.taskIds.length} task(s) to Backlog.`, result)
+        emit(
+          opts,
+          `Returned ${result.taskIds.length} task(s) to Backlog.`,
+          result
+        )
       })
     )
 
@@ -242,7 +264,9 @@ export function registerPlanningCommands(program: Command, runtime: Runtime) {
         if (opts.goal === undefined && !opts.clear) {
           throw new AgentError("VALIDATION", "Provide --goal or --clear.")
         }
-        const result = await (await tools()).update_sprint_goal({
+        const result = await (
+          await tools()
+        ).update_sprint_goal({
           sprint: opts.sprint,
           goal: opts.clear ? undefined : opts.goal,
         })
@@ -259,7 +283,9 @@ export function registerPlanningCommands(program: Command, runtime: Runtime) {
     .option("--json")
     .action((opts) =>
       wrap(opts, async () => {
-        const result = await (await tools()).update_sprint_cadence({
+        const result = await (
+          await tools()
+        ).update_sprint_cadence({
           cadenceWeeks: opts.weeks,
           startWeekday: opts.startWeekday,
           timezone: opts.timezone,

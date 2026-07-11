@@ -192,7 +192,7 @@ async function latestCreditedSprint(ctx: MutationCtx, task: Doc<"tasks">) {
     .query("sprintTaskEntries")
     .withIndex("by_organization_task_and_completion", (q) =>
       q
-        .eq("organizationId", task.organizationId as string)
+        .eq("organizationId", task.organizationId)
         .eq("taskId", task._id)
         .gt("creditedCompletionAt", 0)
     )
@@ -212,7 +212,7 @@ export async function applyStatusSprintRules(
   }
 ) {
   const { task, project, actor, nextStatus, now } = args
-  if (!task.organizationId || task.status === nextStatus) return {}
+  if (task.status === nextStatus) return {}
   const settings = await ensureSprintPair(ctx, task.organizationId, now)
   const currentSprintId = settings.currentSprintId!
 

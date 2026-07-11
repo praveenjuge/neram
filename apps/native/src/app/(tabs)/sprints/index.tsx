@@ -14,6 +14,7 @@ import {
   SegmentedPicker,
   Text,
 } from "@/lib/ui"
+import { cadenceUpdate } from "@/lib/sprint-workspace"
 
 const views = [
   ["current", "Current"],
@@ -153,13 +154,17 @@ export default function SprintsScreen() {
       (value?: string) => {
         const next = (value ?? "").trim()
         if (!next) return
-        void updateCadence({
-          cadenceWeeks:
-            field === "weeks" ? Number(next) : (cadence?.cadenceWeeks ?? 2),
-          startWeekday:
-            field === "weekday" ? Number(next) : (cadence?.startWeekday ?? 1),
-          timezone: field === "timezone" ? next : (cadence?.timezone ?? "UTC"),
-        }).catch(showError)
+        void updateCadence(
+          cadenceUpdate(
+            {
+              cadenceWeeks: cadence?.cadenceWeeks ?? 2,
+              startWeekday: cadence?.startWeekday ?? 1,
+              timezone: cadence?.timezone ?? "UTC",
+            },
+            field,
+            next
+          )
+        ).catch(showError)
       },
       "plain-text",
       initial

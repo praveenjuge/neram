@@ -48,6 +48,7 @@ import {
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { messageFromError } from "@/lib/errors"
+import { groupBacklogTasks } from "@/lib/sprint-planning"
 import { cn } from "@/lib/utils"
 
 type SprintTab = "current" | "backlog" | "upcoming" | "history" | "settings"
@@ -303,24 +304,10 @@ function TaskPicker() {
   const plan = useMutation(api.sprints.plan)
   const [query, setQuery] = useState("")
   const [selected, setSelected] = useState<Set<Id<"tasks">>>(() => new Set())
-  const grouped = useMemo(() => {
-    const groups = new Map<string, SprintTask[]>()
-    for (const task of backlog ?? []) {
-      if (
-        query &&
-        !`${task.title} ${task.projectName}`
-          .toLowerCase()
-          .includes(query.toLowerCase())
-      )
-        continue
-      const tasks = groups.get(task.projectName) ?? []
-      tasks.push(task)
-      groups.set(task.projectName, tasks)
-    }
-    for (const tasks of groups.values())
-      tasks.sort((a, b) => a.position - b.position)
-    return [...groups.entries()]
-  }, [backlog, query])
+  const grouped = useMemo(
+    () => groupBacklogTasks(backlog ?? [], query),
+    [backlog, query]
+  )
   if (backlog === undefined) return <Loading />
 
   function submit(sprint: "current" | "upcoming") {

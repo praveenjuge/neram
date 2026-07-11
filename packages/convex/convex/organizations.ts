@@ -57,6 +57,11 @@ const tokenContext = v.object({
   userId: v.string(),
   name: v.string(),
 })
+const activeToken = v.object({
+  organizationId: v.string(),
+  userId: v.string(),
+  name: v.string(),
+})
 
 export const current = query({
   args: {},
@@ -111,18 +116,11 @@ export const adminContext = internalQuery({
 
 export const activeTokenContext = internalQuery({
   args: {},
-  returns: tokenContext,
+  returns: activeToken,
   handler: async (ctx) => {
     const who = await actor(ctx)
-    if (!who.organizationId || !who.organizationSlug) {
-      throw new ConvexError({
-        code: "ORGANIZATION_REQUIRED",
-        message: "Choose a workspace and sign in again.",
-      })
-    }
     return {
       organizationId: who.organizationId,
-      organizationSlug: who.organizationSlug,
       userId: who.userId,
       name: who.name,
     }

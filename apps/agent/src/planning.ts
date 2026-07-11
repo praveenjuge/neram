@@ -91,6 +91,7 @@ type Page<T> = { page: T[]; isDone: boolean; continueCursor: string }
 type SprintView = { sprint: Sprint; tasks: SprintTask[] }
 
 export type PlanningApi = {
+  syncCurrentWorkspace(): Promise<void>
   currentWorkspace(): Promise<WorkspaceContext>
   workspaceMembers(): Promise<OrganizationMember[]>
   createWorkspace(args: { name: string; slug?: string }): Promise<Organization>
@@ -154,9 +155,13 @@ export function createPlanningApi(
   calls: { query: Call; mutation: Call; action: Call }
 ): PlanningApi {
   return {
+    syncCurrentWorkspace: async () => {
+      await calls.action(api.organizationActions.syncCurrent, {})
+    },
     currentWorkspace: () => calls.query(api.organizations.current, {}),
     workspaceMembers: () => calls.query(api.organizations.members, {}),
-    createWorkspace: (args) => calls.action(api.organizationActions.create, args),
+    createWorkspace: (args) =>
+      calls.action(api.organizationActions.create, args),
     inviteWorkspaceMember: (args) =>
       calls.action(api.organizationActions.invite, args),
     updateWorkspaceMemberRole: async (args) => {
@@ -249,6 +254,7 @@ export function createPlanningTools(neram: PlanningApi) {
   return {
     async get_workspace(raw?: z.input<typeof schemas.get_workspace>) {
       schemas.get_workspace.parse(raw ?? {})
+      await neram.syncCurrentWorkspace()
       return await neram.currentWorkspace()
     },
     async create_workspace(raw: z.input<typeof schemas.create_workspace>) {

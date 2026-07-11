@@ -5,15 +5,20 @@ import { router } from "expo-router"
 import { Alert } from "react-native"
 
 import { Button, Empty, Row, Screen, Section, Text } from "@/lib/ui"
+import {
+  canManageOrganizationMember,
+  toggledOrganizationRole,
+} from "@/lib/sprint-workspace"
 
 export default function WorkspaceScreen() {
   const { user } = useUser()
   const { organization, membership, memberships } = useOrganization({
     memberships: { infinite: true, pageSize: 100 },
   })
-  const { createOrganization, setActive, userMemberships } = useOrganizationList({
-    userMemberships: { infinite: true, pageSize: 100 },
-  })
+  const { createOrganization, setActive, userMemberships } =
+    useOrganizationList({
+      userMemberships: { infinite: true, pageSize: 100 },
+    })
   const beginDeletion = useMutation(api.organizations.beginDeletion)
   const isAdmin = membership?.role === "org:admin"
 
@@ -21,7 +26,9 @@ export default function WorkspaceScreen() {
     Alert.prompt("Create workspace", "Workspace name", (value?: string) => {
       const name = (value ?? "").trim()
       if (!name || !createOrganization) return
-      void createOrganization({ name }).then((created) => setActive?.({ organization: created.id }))
+      void createOrganization({ name }).then((created) =>
+        setActive?.({ organization: created.id })
+      )
     })
   }
 
@@ -41,28 +48,32 @@ export default function WorkspaceScreen() {
     member: NonNullable<NonNullable<typeof memberships>["data"]>[number]
   ) => {
     const userId = member.publicUserData?.userId
-    if (!isAdmin || !userId || userId === user?.id) return
+    if (!canManageOrganizationMember(isAdmin, user?.id, userId)) return
     Alert.alert(memberName(member), member.role, [
       { text: "Cancel", style: "cancel" },
       {
         text: member.role === "org:admin" ? "Make member" : "Make admin",
         onPress: () =>
           void member
-            .update({ role: member.role === "org:admin" ? "org:member" : "org:admin" })
+            .update({ role: toggledOrganizationRole(member.role) })
             .catch(showError),
       },
       {
         text: "Remove",
         style: "destructive",
         onPress: () =>
-          Alert.alert("Remove member?", "Their open tasks will be unassigned.", [
-            { text: "Cancel", style: "cancel" },
-            {
-              text: "Remove",
-              style: "destructive",
-              onPress: () => void member.destroy().catch(showError),
-            },
-          ]),
+          Alert.alert(
+            "Remove member?",
+            "Their open tasks will be unassigned.",
+            [
+              { text: "Cancel", style: "cancel" },
+              {
+                text: "Remove",
+                style: "destructive",
+                onPress: () => void member.destroy().catch(showError),
+              },
+            ]
+          ),
       },
     ])
   }
@@ -84,7 +95,10 @@ export default function WorkspaceScreen() {
               confirm: true,
             })
               .then(() => {
-                Alert.alert("Deletion started", "Neram will delete Clerk last after all workspace data is purged.")
+                Alert.alert(
+                  "Deletion started",
+                  "Neram will delete Clerk last after all workspace data is purged."
+                )
                 router.back()
               })
               .catch(showError),
@@ -102,7 +116,10 @@ export default function WorkspaceScreen() {
             <Text>{membership?.role ?? "member"}</Text>
           </>
         ) : (
-          <Empty title="No active workspace" detail="Choose or create one below." />
+          <Empty
+            title="No active workspace"
+            detail="Choose or create one below."
+          />
         )}
       </Section>
       <Section title="Switch workspace">
@@ -110,26 +127,48 @@ export default function WorkspaceScreen() {
           <Row
             key={item.id}
             label={item.organization.name}
-            systemImage={item.organization.id === organization?.id ? "checkmark.circle" : "building.2"}
-            onPress={() => void setActive?.({ organization: item.organization.id })}
+            systemImage={
+              item.organization.id === organization?.id
+                ? "checkmark.circle"
+                : "building.2"
+            }
+            onPress={() =>
+              void setActive?.({ organization: item.organization.id })
+            }
           />
         ))}
-        <Button label="Create workspace" systemImage="plus" onPress={promptCreate} />
+        <Button
+          label="Create workspace"
+          systemImage="plus"
+          onPress={promptCreate}
+        />
       </Section>
       <Section title="Members">
         {memberships?.data?.map((member) => (
           <Row
             key={member.id}
             label={`${memberName(member)} - ${member.role}`}
-            systemImage={member.role === "org:admin" ? "person.badge.key" : "person"}
+            systemImage={
+              member.role === "org:admin" ? "person.badge.key" : "person"
+            }
             onPress={() => manageMember(member)}
           />
         )) ?? <Text>Loading members...</Text>}
-        {isAdmin ? <Button label="Invite member" systemImage="person.badge.plus" onPress={promptInvite} /> : null}
+        {isAdmin ? (
+          <Button
+            label="Invite member"
+            systemImage="person.badge.plus"
+            onPress={promptInvite}
+          />
+        ) : null}
       </Section>
       {isAdmin ? (
         <Section title="Danger zone">
-          <Button label="Delete workspace" systemImage="trash" onPress={confirmDeletion} />
+          <Button
+            label="Delete workspace"
+            systemImage="trash"
+            onPress={confirmDeletion}
+          />
         </Section>
       ) : null}
     </Screen>
@@ -137,12 +176,23 @@ export default function WorkspaceScreen() {
 }
 
 function memberName(member: {
-  publicUserData?: { firstName?: string | null; lastName?: string | null; identifier?: string }
+  publicUserData?: {
+    firstName?: string | null
+    lastName?: string | null
+    identifier?: string
+  }
 }) {
   const user = member.publicUserData
-  return [user?.firstName, user?.lastName].filter(Boolean).join(" ") || user?.identifier || "Member"
+  return (
+    [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
+    user?.identifier ||
+    "Member"
+  )
 }
 
 function showError(error: unknown) {
-  Alert.alert("Could not update workspace", error instanceof Error ? error.message : "Try again.")
+  Alert.alert(
+    "Could not update workspace",
+    error instanceof Error ? error.message : "Try again."
+  )
 }

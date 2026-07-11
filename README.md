@@ -64,8 +64,9 @@ neram project summary --project "Project name" --json
 neram mcp
 ```
 
-`neram login` uses Clerk OAuth Authorization Code with PKCE and requires an
-active Organization. It opens the browser, returns to a loopback `127.0.0.1`
+`neram login` uses Clerk OAuth Authorization Code with PKCE and the
+`user:org:read` scope, so authorization includes an Organization selector. It
+opens the browser, returns to a loopback `127.0.0.1`
 callback, stores the Organization-bound tokens in the OS keychain when
 available, and falls back to `~/.config/neram/credentials.json` with `0600`
 permissions. Switching workspaces reruns OAuth and requires MCP reconnection.

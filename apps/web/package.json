@@ -9,6 +9,7 @@
     "format": "prettier --write \"src/**/*.{ts,tsx}\"",
     "lint": "eslint .",
     "preview": "next start",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -50,6 +51,7 @@
     "prettier-plugin-tailwindcss": "^0.8.0",
     "shadcn": "^4.11.0",
     "typescript": "~6",
-    "typescript-eslint": "^8"
+    "typescript-eslint": "^8",
+    "vitest": "^4.1.9"
   }
 }
