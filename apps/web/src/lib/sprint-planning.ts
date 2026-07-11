@@ -34,3 +34,23 @@ export function findOrganizationBySlug<
     (membership) => membership.organization.slug === slug
   )
 }
+
+export function membershipLookupState({
+  listLoaded,
+  hasMatch,
+  hasNextPage,
+  isFetching,
+  isError,
+}: {
+  listLoaded: boolean
+  hasMatch: boolean
+  hasNextPage: boolean
+  isFetching: boolean
+  isError: boolean
+}): "loading" | "fetch-next" | "found" | "missing" | "error" {
+  if (!listLoaded) return "loading"
+  if (hasMatch) return "found"
+  if (isError) return "error"
+  if (isFetching) return "loading"
+  return hasNextPage ? "fetch-next" : "missing"
+}

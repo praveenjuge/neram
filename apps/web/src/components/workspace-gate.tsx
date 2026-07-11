@@ -13,12 +13,35 @@ import { api } from "@neram/convex/api"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { messageFromError } from "@/lib/errors"
-import { findOrganizationBySlug } from "@/lib/sprint-planning"
+import {
+  findOrganizationBySlug,
+  membershipLookupState,
+} from "@/lib/sprint-planning"
 
 function LoadingWorkspace() {
   return (
     <main className="grid min-h-svh place-items-center p-6">
       <Spinner className="size-6 text-muted-foreground" />
+    </main>
+  )
+}
+
+function WorkspaceError({
+  message,
+  onRetry,
+}: {
+  message: string
+  onRetry: () => void
+}) {
+  return (
+    <main className="grid min-h-svh place-items-center p-6 text-center">
+      <div className="grid max-w-sm gap-3">
+        <p className="font-medium">Workspace unavailable</p>
+        <p className="text-sm text-muted-foreground">{message}</p>
+        <Button onClick={onRetry} variant="outline">
+          Try again
+        </Button>
+      </div>
     </main>
   )
 }
@@ -39,8 +62,28 @@ export function WorkspaceGate({ children }: { children: ReactNode }) {
   const [syncedId, setSyncedId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)
+  const {
+    data: memberships,
+    fetchNext,
+    hasNextPage,
+    isError: membershipsError,
+    isFetching: membershipsFetching,
+    revalidate: revalidateMemberships,
+  } = userMemberships
 
-  const matchingMembership = findOrganizationBySlug(userMemberships.data, slug)
+  const matchingMembership = findOrganizationBySlug(memberships, slug)
+  const membershipState = membershipLookupState({
+    listLoaded,
+    hasMatch: Boolean(matchingMembership),
+    hasNextPage,
+    isFetching: membershipsFetching,
+    isError: membershipsError,
+  })
+
+  useEffect(() => {
+    if (membershipState !== "fetch-next" || !fetchNext) return
+    fetchNext()
+  }, [fetchNext, membershipState])
 
   useEffect(() => {
     if (
@@ -74,8 +117,21 @@ export function WorkspaceGate({ children }: { children: ReactNode }) {
     }
   }, [attempt, organization, organizationLoaded, slug, syncCurrent, syncedId])
 
-  if (!organizationLoaded || !listLoaded) return <LoadingWorkspace />
-  if (!matchingMembership) {
+  if (
+    !organizationLoaded ||
+    membershipState === "loading" ||
+    membershipState === "fetch-next"
+  )
+    return <LoadingWorkspace />
+  if (membershipState === "error") {
+    return (
+      <WorkspaceError
+        message="Could not load your workspace memberships."
+        onRetry={() => void revalidateMemberships?.()}
+      />
+    )
+  }
+  if (membershipState === "missing") {
     return (
       <main className="grid min-h-svh place-items-center bg-muted/30 p-6">
         <OrganizationList
@@ -89,21 +145,13 @@ export function WorkspaceGate({ children }: { children: ReactNode }) {
   if (organization?.slug !== slug || syncedId !== organization.id) {
     if (error) {
       return (
-        <main className="grid min-h-svh place-items-center p-6 text-center">
-          <div className="grid max-w-sm gap-3">
-            <p className="font-medium">Workspace unavailable</p>
-            <p className="text-sm text-muted-foreground">{error}</p>
-            <Button
-              onClick={() => {
-                setError(null)
-                setAttempt((current) => current + 1)
-              }}
-              variant="outline"
-            >
-              Try again
-            </Button>
-          </div>
-        </main>
+        <WorkspaceError
+          message={error}
+          onRetry={() => {
+            setError(null)
+            setAttempt((current) => current + 1)
+          }}
+        />
       )
     }
     return <LoadingWorkspace />
