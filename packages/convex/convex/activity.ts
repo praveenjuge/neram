@@ -16,14 +16,14 @@ export const list = query({
       .withIndex("by_organization_and_created_at", (q) =>
         q.eq("organizationId", access.organization.organizationId)
       )
+      .filter((q) =>
+        q.or(
+          q.eq(q.field("recipientUserId"), undefined),
+          q.eq(q.field("recipientUserId"), access.actor.userId)
+        )
+      )
       .order("desc")
       .paginate(args.paginationOpts)
-    return {
-      ...result,
-      page: result.page.filter(
-        (row) =>
-          !row.recipientUserId || row.recipientUserId === access.actor.userId
-      ),
-    }
+    return result
   },
 })

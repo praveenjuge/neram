@@ -159,6 +159,46 @@ test("threaded comments paginate by level and target mention/reply activity", as
   )
 })
 
+test("activity filters private notifications before paginating", async () => {
+  const { t, alice, projectId } = await organizationProject()
+  const taskId = await alice.mutation(api.tasks.create, {
+    projectId,
+    title: "Visible history",
+  })
+  await t.run(async (ctx) => {
+    const project = await ctx.db.get(projectId)
+    if (!project) throw new Error("Missing project fixture")
+    const newest = Date.now() + 1_000
+    for (let index = 0; index < 20; index += 1) {
+      await ctx.db.insert("organizationActivity", {
+        organizationId: project.organizationId,
+        actorUserId: "user_bob",
+        actorName: "Bob",
+        recipientUserId: "user_bob",
+        type: "comment.mentioned",
+        projectId,
+        projectName: project.name,
+        taskId,
+        taskTitle: "Private notification",
+        createdAt: newest + index,
+      })
+    }
+  })
+
+  const activity = await alice.query(api.activity.list, {
+    paginationOpts: { numItems: 5, cursor: null },
+  })
+  expect(activity.page).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        type: "task.created",
+        taskTitle: "Visible history",
+      }),
+    ])
+  )
+  expect(activity.page.every((row) => !row.recipientUserId)).toBe(true)
+})
+
 test("comment edit permissions and admin tombstones preserve descendants", async () => {
   const { alice, bob, projectId } = await organizationProject()
   const taskId = await alice.mutation(api.tasks.create, {
