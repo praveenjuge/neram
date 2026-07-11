@@ -17,7 +17,7 @@ import {
 
 const ROOT_PAGE_SIZE = 20
 const REPLY_PAGE_SIZE = 10
-const MAX_MEMBERS = 500
+const MAX_MENTIONS = 50
 const MAX_ANCESTRY_PAGE = 100
 
 const comment = v.object({
@@ -60,19 +60,12 @@ async function validateMentions(
     mentions: Mention[]
   }
 ) {
-  const members = await ctx.db
-    .query("organizationMembers")
-    .withIndex("by_organization", (q) =>
-      q.eq("organizationId", args.project.organizationId)
-    )
-    .take(MAX_MEMBERS + 1)
-  if (members.length > MAX_MEMBERS) {
+  if (args.mentions.length > MAX_MENTIONS) {
     throw new ConvexError({
-      code: "MEMBER_LIMIT",
-      message: "This workspace exceeds the supported member limit.",
+      code: "MENTION_LIMIT",
+      message: `A comment can mention at most ${MAX_MENTIONS} members.`,
     })
   }
-  const subjects = new Set(members.map((member) => member.userId))
   const ordered = [...args.mentions].sort((a, b) => a.start - b.start)
   let previousEnd = 0
   for (const item of ordered) {
@@ -91,14 +84,29 @@ async function validateMentions(
         message: "Mention spans must match the comment text.",
       })
     }
-    if (!subjects.has(item.subject)) {
-      throw new ConvexError({
-        code: "INVALID_MENTION_SUBJECT",
-        message: `${item.label} is not a member of this workspace.`,
-        subject: item.subject,
-      })
-    }
     previousEnd = end
+  }
+  const subjects = [...new Set(ordered.map((item) => item.subject))]
+  const memberships = await Promise.all(
+    subjects.map(async (subject) =>
+      await ctx.db
+        .query("organizationMembers")
+        .withIndex("by_organization_and_user", (q) =>
+          q
+            .eq("organizationId", args.project.organizationId)
+            .eq("userId", subject)
+        )
+        .unique()
+    )
+  )
+  const missingSubject = subjects.find((_, index) => !memberships[index])
+  if (missingSubject) {
+    const mention = ordered.find((item) => item.subject === missingSubject)!
+    throw new ConvexError({
+      code: "INVALID_MENTION_SUBJECT",
+      message: `${mention.label} is not a member of this workspace.`,
+      subject: missingSubject,
+    })
   }
   return ordered
 }

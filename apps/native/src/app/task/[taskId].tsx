@@ -25,6 +25,7 @@ import {
   taskStyles,
   useTaskColors,
 } from "@/lib/task-ui"
+import { useOrganizationMembers } from "@/lib/use-organization-members"
 
 type Status = "todo" | "inProgress" | "done"
 const statuses: [Status, string][] = [
@@ -175,7 +176,7 @@ function TaskMetadata({ task }: { task: Task }) {
   const changeProject = useMutation(api.tasks.changeProject)
   const remove = useMutation(api.tasks.remove)
   const projects = useQuery(api.projects.names, {})
-  const members = useQuery(api.organizations.members)
+  const { members } = useOrganizationMembers()
   const [projectSheet, setProjectSheet] = useState(false)
   const [assigneeSheet, setAssigneeSheet] = useState(false)
   const [dueDateSheet, setDueDateSheet] = useState(false)
@@ -306,7 +307,7 @@ function TaskMetadata({ task }: { task: Task }) {
         visible={assigneeSheet}
         choices={[
           { id: "", label: "Unassigned" },
-          ...(members ?? []).map((member) => ({
+          ...members.map((member) => ({
             id: member.userId,
             label: member.displayName,
           })),

@@ -19,9 +19,10 @@ import { cn } from "@/lib/utils"
 import { messageFromError } from "@/lib/errors"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
+import { useOrganizationMembers } from "@/lib/use-organization-members"
 
 type Comment = FunctionReturnType<typeof api.taskComments.list>["page"][number]
-type Member = FunctionReturnType<typeof api.organizations.members>[number]
+type Member = FunctionReturnType<typeof api.organizations.members>["page"][number]
 type Mention = Comment["mentions"][number]
 
 export function TaskComments({
@@ -31,7 +32,7 @@ export function TaskComments({
   taskId: Id<"tasks">
   targetCommentId: Id<"taskComments"> | null
 }) {
-  const members = useQuery(api.organizations.members)
+  const { members } = useOrganizationMembers()
   const context = useQuery(api.organizations.current)
   const create = useMutation(api.taskComments.create)
   const currentSubject = context?.membership.userId
@@ -46,7 +47,7 @@ export function TaskComments({
         </p>
       </div>
       <CommentComposer
-        members={members ?? []}
+        members={members}
         onSubmit={async (payload) => {
           await create({ taskId, ...payload })
         }}
@@ -56,7 +57,7 @@ export function TaskComments({
         <LinkedThread
           currentSubject={currentSubject}
           isAdmin={isAdmin}
-          members={members ?? []}
+          members={members}
           targetCommentId={targetCommentId}
           taskId={taskId}
         />
@@ -65,7 +66,7 @@ export function TaskComments({
         currentSubject={currentSubject}
         depth={0}
         isAdmin={isAdmin}
-        members={members ?? []}
+        members={members}
         taskId={taskId}
         targetCommentId={targetCommentId}
       />

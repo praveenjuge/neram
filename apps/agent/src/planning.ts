@@ -159,7 +159,19 @@ export function createPlanningApi(
       await calls.action(api.organizationActions.syncCurrent, {})
     },
     currentWorkspace: () => calls.query(api.organizations.current, {}),
-    workspaceMembers: () => calls.query(api.organizations.members, {}),
+    workspaceMembers: async () => {
+      const members: OrganizationMember[] = []
+      let cursor: string | null = null
+      for (;;) {
+        const result: Page<OrganizationMember> = await calls.query(
+          api.organizations.members,
+          { paginationOpts: { cursor, numItems: 100 } }
+        )
+        members.push(...result.page)
+        if (result.isDone) return members
+        cursor = result.continueCursor
+      }
+    },
     createWorkspace: (args) =>
       calls.action(api.organizationActions.create, args),
     inviteWorkspaceMember: (args) =>

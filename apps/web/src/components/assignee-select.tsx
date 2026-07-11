@@ -1,7 +1,5 @@
 import { useUser } from "@clerk/nextjs"
-import { useQuery } from "convex-helpers/react/cache"
 
-import { api } from "@neram/convex/api"
 import { Label } from "@/components/ui/label"
 import {
   Select,
@@ -11,6 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { UserAvatar } from "@/components/user-avatar"
+import { useOrganizationMembers } from "@/lib/use-organization-members"
 
 // Radix Select items can't use an empty-string value, so the "no one" option
 // gets its own sentinel that the forms translate back to "no assignee".
@@ -35,7 +34,7 @@ export function AssigneeSelect({
 }) {
   // Only subscribe while the form is open so closed dialogs don't hold a
   // members subscription open.
-  const members = useQuery(api.organizations.members, enabled ? {} : "skip")
+  const { members } = useOrganizationMembers(enabled)
   const { user } = useUser()
 
   return (
@@ -47,7 +46,7 @@ export function AssigneeSelect({
             onChange(UNASSIGNED, null)
             return
           }
-          const member = members?.find((candidate) => candidate.userId === next)
+          const member = members.find((candidate) => candidate.userId === next)
           onChange(next, member?.displayName ?? null)
         }}
         value={value}
@@ -66,7 +65,7 @@ export function AssigneeSelect({
           >
             Unassigned
           </SelectItem>
-          {members?.map((member) => (
+          {members.map((member) => (
             <SelectItem
               data-testid="assignee-option"
               key={member.userId}

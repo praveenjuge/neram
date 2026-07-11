@@ -1,3 +1,7 @@
+import {
+  paginationOptsValidator,
+  paginationResultValidator,
+} from "convex/server"
 import { ConvexError, v } from "convex/values"
 import type { Infer } from "convex/values"
 
@@ -99,16 +103,16 @@ export const current = query({
 })
 
 export const members = query({
-  args: {},
-  returns: v.array(member),
-  handler: async (ctx) => {
+  args: { paginationOpts: paginationOptsValidator },
+  returns: paginationResultValidator(member),
+  handler: async (ctx, args) => {
     const access = await requireOrganization(ctx)
     return await ctx.db
       .query("organizationMembers")
       .withIndex("by_organization", (q) =>
         q.eq("organizationId", access.organization.organizationId)
       )
-      .take(500)
+      .paginate(args.paginationOpts)
   },
 })
 

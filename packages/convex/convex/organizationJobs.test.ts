@@ -75,6 +75,60 @@ test("workspace deletion requires an admin and exact tenant confirmation", async
   ).rejects.toThrow('"code":"CONFIRMATION_REQUIRED"')
 })
 
+test("projected members paginate beyond 500 without truncation", async () => {
+  const { t, admin } = await setup()
+  const additional = Array.from({ length: 499 }, (_, index) => {
+    const number = index + 3
+    return {
+      organizationId: "org_acme",
+      membershipId: `mem_user_${number}`,
+      userId: `user_${number}`,
+      role: "org:member" as const,
+      displayName: `Member ${number}`,
+    }
+  })
+  for (let index = 0; index < additional.length; index += 100) {
+    await t.mutation(internal.organizations.upsertMembers, {
+      members: additional.slice(index, index + 100),
+    })
+  }
+
+  const first = await admin.query(api.organizations.members, {
+    paginationOpts: { cursor: null, numItems: 500 },
+  })
+  const second = await admin.query(api.organizations.members, {
+    paginationOpts: { cursor: first.continueCursor, numItems: 500 },
+  })
+
+  expect(first.isDone).toBe(false)
+  expect([...first.page, ...second.page]).toHaveLength(501)
+  expect(second.page).toContainEqual(
+    expect.objectContaining({ userId: "user_501" })
+  )
+
+  const projectId = await admin.mutation(api.projects.create, {
+    name: "Large workspace",
+  })
+  const taskId = await admin.mutation(api.tasks.create, {
+    projectId,
+    title: "Mention anyone",
+  })
+  await expect(
+    admin.mutation(api.taskComments.create, {
+      taskId,
+      body: "Thanks @Member 501",
+      mentions: [
+        {
+          start: 7,
+          length: 11,
+          subject: "user_501",
+          label: "Member 501",
+        },
+      ],
+    })
+  ).resolves.toBeDefined()
+})
+
 test("member removal unassigns open work and preserves completed attribution", async () => {
   const { t, admin } = await setup()
   const projectId = await admin.mutation(api.projects.create, {

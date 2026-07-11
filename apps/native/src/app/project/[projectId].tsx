@@ -8,6 +8,7 @@ import { Alert } from "react-native"
 
 import { HeaderIconButton } from "@/lib/header"
 import { NativeTextPrompt } from "@/lib/task-ui"
+import { useOrganizationMembers } from "@/lib/use-organization-members"
 import {
   Empty,
   Row,
@@ -26,7 +27,7 @@ export default function ProjectScreen() {
   const [creatingTask, setCreatingTask] = useState(false)
   const project = useQuery(api.projects.get, { projectId: id })
   const tasks = useQuery(api.tasks.list, { projectId: id })
-  const members = useQuery(api.organizations.members, {})
+  const { members, loading: membersLoading } = useOrganizationMembers()
   const { user } = useUser()
   const createTask = useMutation(api.tasks.create)
 
@@ -74,9 +75,10 @@ export default function ProjectScreen() {
           )}
         </Section>
         <Section title="People">
-          {members?.map((member) => (
+          {members.map((member) => (
             <Text key={member.userId}>{`${member.displayName} - ${member.role}${member.userId === user?.id ? " - you" : ""}`}</Text>
-          )) ?? <Text>Loading members...</Text>}
+          ))}
+          {membersLoading ? <Text>Loading members...</Text> : null}
         </Section>
         <Section title="Board">
           <StatusPicker value={status} onChange={setStatus} />

@@ -14,9 +14,10 @@ import {
   taskStyles,
   useTaskColors,
 } from "@/lib/task-ui"
+import { useOrganizationMembers } from "@/lib/use-organization-members"
 
 type Comment = FunctionReturnType<typeof api.taskComments.list>["page"][number]
-type Member = FunctionReturnType<typeof api.organizations.members>[number]
+type Member = FunctionReturnType<typeof api.organizations.members>["page"][number]
 type Mention = Comment["mentions"][number]
 
 export function NativeTaskComments({
@@ -26,7 +27,7 @@ export function NativeTaskComments({
   taskId: Id<"tasks">
   targetCommentId?: Id<"taskComments">
 }) {
-  const members = useQuery(api.organizations.members)
+  const { members } = useOrganizationMembers()
   const context = useQuery(api.organizations.current)
   const currentSubject = context?.membership.userId
   const isAdmin = context?.membership.role === "org:admin"
@@ -38,7 +39,7 @@ export function NativeTaskComments({
     >
       <CommentComposer
         draftKey={draftKey(taskId)}
-        members={members ?? []}
+        members={members}
         onSubmit={async (payload) => {
           await create({ taskId, ...payload })
         }}
@@ -48,7 +49,7 @@ export function NativeTaskComments({
         <NativeLinkedThread
           currentSubject={currentSubject}
           isAdmin={isAdmin}
-          members={members ?? []}
+          members={members}
           targetCommentId={targetCommentId}
           taskId={taskId}
         />
@@ -57,7 +58,7 @@ export function NativeTaskComments({
         currentSubject={currentSubject}
         depth={0}
         isAdmin={isAdmin}
-        members={members ?? []}
+        members={members}
         targetCommentId={targetCommentId}
         taskId={taskId}
       />
