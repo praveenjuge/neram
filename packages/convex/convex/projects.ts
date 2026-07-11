@@ -148,8 +148,8 @@ export const listArchived = query({
  * project's icon + color so the nav can render each project's own glyph, the
  * caller's role (so the sidebar can offer the right per-project actions), and a
  * single `openCount` (todo + in-progress) for an at-a-glance badge. It still
- * omits the full count breakdown, so the payload stays small. Includes shared
- * projects so collaborators see them in the sidebar.
+ * omits the full count breakdown, so the payload stays small. Every project in
+ * the active Organization is available to its members.
  */
 export const names = query({
   args: {},

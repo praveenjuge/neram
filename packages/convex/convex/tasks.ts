@@ -135,7 +135,7 @@ export const list = query({
     await requireProjectAccess(ctx, args.projectId)
     // Ordered by position ascending via the index, so each column renders in
     // the right order without a client-side sort. Keyed only off the project so
-    // collaborators (who don't know the owner's subject) can read the board.
+    // Organization members read the same project-level board order.
     const tasks = await ctx.db
       .query("tasks")
       .withIndex("by_project_position", (q) =>
@@ -193,7 +193,7 @@ const taskWithProject = v.object({
   activeCommentCount: v.number(),
 })
 
-// Tasks across every project the caller can see (owned + shared), flattened
+// Tasks across every project in the active Organization, flattened
 // into a single list. When `assignedToMe` is true (the default), only tasks
 // assigned to the caller are returned. We read each project's board with the
 // same per-project cap as `list`, then sort by most recent update so the

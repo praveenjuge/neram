@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/select"
 
 /**
- * Project picker listing every project the caller can access (owned + shared),
+ * Project picker listing every project in the active Organization,
  * each shown with its own icon + color glyph. `value` is the current project
  * id; `onChange` reports the chosen project id so the caller can move the task
  * there. Only subscribes while `enabled` so closed dialogs don't hold a query

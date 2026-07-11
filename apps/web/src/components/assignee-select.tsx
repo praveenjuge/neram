@@ -17,7 +17,7 @@ import { UserAvatar } from "@/components/user-avatar"
 export const UNASSIGNED = "unassigned"
 
 /**
- * An optional assignee picker listing everyone on the project (owner + members)
+ * An optional assignee picker listing everyone in the active Organization.
  * plus an "Unassigned" option. `value` is a member subject or `UNASSIGNED`;
  * `onChange` reports the chosen subject and its display name (null when cleared)
  * so the caller can persist both for the optimistic UI.

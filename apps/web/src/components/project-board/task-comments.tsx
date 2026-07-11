@@ -42,7 +42,7 @@ export function TaskComments({
       <div>
         <h2 className="font-heading text-sm font-medium">Comments</h2>
         <p className="text-xs text-muted-foreground">
-          Reply in context and mention project members directly.
+          Reply in context and mention workspace members directly.
         </p>
       </div>
       <CommentComposer

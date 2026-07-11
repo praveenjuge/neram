@@ -223,7 +223,7 @@ function EmptyState() {
         <div className="space-y-1">
           <p className="font-medium">No activity yet</p>
           <p className="text-sm text-muted-foreground">
-            Actions on your projects and shared boards will show up here.
+            Actions across this workspace will show up here.
           </p>
         </div>
       </CardContent>

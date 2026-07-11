@@ -359,7 +359,7 @@ export function createNeramMcpServer(client: NeramApi) {
   register(
     "create_project",
     "Create Project",
-    "Create a new project owned by the caller.",
+    "Create a new project in the active Organization.",
     schemas.create_project,
     creates,
     (input) => tools.create_project(schemas.create_project.parse(input)),

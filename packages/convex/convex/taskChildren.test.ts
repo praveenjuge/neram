@@ -9,7 +9,7 @@ const modules = import.meta.glob("./**/*.ts")
 
 const firstPage = { paginationOpts: { numItems: 20, cursor: null } }
 
-async function sharedProject() {
+async function organizationProject() {
   const { t, alice, bob } = await organizationFixture(modules)
   const projectId = await alice.mutation(api.projects.create, {
     name: "Roadmap",
@@ -35,7 +35,7 @@ test("missing taskStats is canonically zero", async () => {
 })
 
 test("editors manage ordered subtasks and counters stay correct", async () => {
-  const { alice, bob, projectId } = await sharedProject()
+  const { alice, bob, projectId } = await organizationProject()
   const taskId = await alice.mutation(api.tasks.create, {
     projectId,
     title: "Ship",
@@ -99,7 +99,7 @@ test("completion requires explicit acknowledgement when subtasks remain", async 
 })
 
 test("threaded comments paginate by level and target mention/reply activity", async () => {
-  const { alice, bob, projectId } = await sharedProject()
+  const { alice, bob, projectId } = await organizationProject()
   const taskId = await alice.mutation(api.tasks.create, {
     projectId,
     title: "Ship",
@@ -159,8 +159,8 @@ test("threaded comments paginate by level and target mention/reply activity", as
   )
 })
 
-test("comment edit permissions and owner tombstones preserve descendants", async () => {
-  const { alice, bob, projectId } = await sharedProject()
+test("comment edit permissions and admin tombstones preserve descendants", async () => {
+  const { alice, bob, projectId } = await organizationProject()
   const taskId = await alice.mutation(api.tasks.create, {
     projectId,
     title: "Ship",
