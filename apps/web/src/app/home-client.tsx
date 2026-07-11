@@ -1,6 +1,6 @@
 "use client"
 
-import { SignIn, useAuth } from "@clerk/nextjs"
+import { OrganizationList, SignIn, useAuth, useOrganization } from "@clerk/nextjs"
 import { CheckCircle2 } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -8,23 +8,37 @@ import { useEffect } from "react"
 
 import { Spinner } from "@/components/ui/spinner"
 import { Button } from "@/components/ui/button"
+import { workspaceHref } from "@/lib/workspace"
 
 export function HomeClient() {
   const { isLoaded, isSignedIn } = useAuth()
+  const { organization } = useOrganization()
   const router = useRouter()
 
   useEffect(() => {
-    if (isLoaded && isSignedIn) {
-      router.replace("/dashboard")
+    if (isLoaded && isSignedIn && organization?.slug) {
+      router.replace(workspaceHref(organization.slug))
     }
-  }, [isLoaded, isSignedIn, router])
+  }, [isLoaded, isSignedIn, organization?.slug, router])
 
-  if (!isLoaded || isSignedIn)
+  if (!isLoaded || (isSignedIn && organization?.slug))
     return (
       <main className="grid min-h-svh place-items-center p-6">
         <Spinner className="size-6 text-muted-foreground" />
       </main>
     )
+
+  if (isSignedIn) {
+    return (
+      <main className="grid min-h-svh place-items-center bg-muted/30 p-6">
+        <OrganizationList
+          afterCreateOrganizationUrl="/w/:slug/dashboard"
+          afterSelectOrganizationUrl="/w/:slug/dashboard"
+          hidePersonal
+        />
+      </main>
+    )
+  }
 
   return (
     <main className="grid min-h-svh place-items-center bg-muted/30 p-6">
@@ -35,15 +49,15 @@ export function HomeClient() {
               Neram
             </h1>
             <p className="max-w-md text-sm leading-6 text-muted-foreground">
-              A personal project board for keeping projects, due dates, and task
-              status in one quiet place.
+              Organization-wide projects and Sprints for keeping commitments,
+              due dates, and task status in one quiet place.
             </p>
           </div>
           <ul className="grid gap-2 text-sm text-muted-foreground">
             {[
-              "Personal projects only",
-              "Persistent kanban status",
-              "Due dates without noisy setup",
+              "Cross-project Sprint planning",
+              "Commitment and carryover history",
+              "Clerk-managed workspaces and members",
             ].map((item) => (
               <li className="flex items-center gap-2" key={item}>
                 <CheckCircle2 className="size-4 text-primary" />
@@ -61,7 +75,8 @@ export function HomeClient() {
         >
           <SignIn
             routing="hash"
-            signUpForceRedirectUrl="/dashboard"
+            forceRedirectUrl="/"
+            signUpForceRedirectUrl="/"
             withSignUp
           />
         </div>

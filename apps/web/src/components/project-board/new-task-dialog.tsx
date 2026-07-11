@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { SprintSelect, type SprintPlacement } from "@/components/sprint-select"
 import { Textarea } from "@/components/ui/textarea"
 
 export function NewTaskDialog({ projectId }: { projectId: Id<"projects"> }) {
@@ -35,6 +36,7 @@ export function NewTaskDialog({ projectId }: { projectId: Id<"projects"> }) {
   const [dueDate, setDueDate] = useState("")
   const [assigneeSubject, setAssigneeSubject] = useState(UNASSIGNED)
   const [assigneeName, setAssigneeName] = useState<string | null>(null)
+  const [sprint, setSprint] = useState<SprintPlacement>("backlog")
 
   function reset() {
     setTitle("")
@@ -42,6 +44,7 @@ export function NewTaskDialog({ projectId }: { projectId: Id<"projects"> }) {
     setDueDate("")
     setAssigneeSubject(UNASSIGNED)
     setAssigneeName(null)
+    setSprint("backlog")
   }
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -65,6 +68,7 @@ export function NewTaskDialog({ projectId }: { projectId: Id<"projects"> }) {
         assigneeSubject === UNASSIGNED
           ? undefined
           : (assigneeName ?? undefined),
+      sprint,
     })
       .then(() => toast.success("Task added."))
       .catch((error) =>
@@ -128,9 +132,9 @@ export function NewTaskDialog({ projectId }: { projectId: Id<"projects"> }) {
               setAssigneeSubject(subject)
               setAssigneeName(name)
             }}
-            projectId={projectId}
             value={assigneeSubject}
           />
+          <SprintSelect id="task-sprint" onChange={setSprint} value={sprint} />
           <DialogFooter>
             <DialogClose asChild>
               <Button type="button" variant="outline">

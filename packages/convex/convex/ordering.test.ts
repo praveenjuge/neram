@@ -1,21 +1,10 @@
 /// <reference types="vite/client" />
-import { convexTest } from "convex-test"
 import { afterEach, beforeEach, expect, test, vi } from "vitest"
 
 import { api } from "./_generated/api"
-import schema from "./schema"
+import { organizationFixture } from "../test-utils/organization"
 
 const modules = import.meta.glob("./**/*.ts")
-
-function setup() {
-  const t = convexTest(schema, modules)
-  const alice = t.withIdentity({
-    name: "Alice",
-    subject: "alice",
-    tokenIdentifier: "alice",
-  })
-  return { t, alice }
-}
 
 // Drive the clock so each mutation stamps a distinct updatedAt; otherwise
 // operations inside a single millisecond tie and the ordering isn't observable.
@@ -28,7 +17,7 @@ afterEach(() => {
 })
 
 test("projects.list surfaces the most recently updated project first", async () => {
-  const { alice } = setup()
+  const { alice } = await organizationFixture(modules)
   const alpha = await alice.mutation(api.projects.create, { name: "Alpha" })
   vi.setSystemTime(2_000)
   await alice.mutation(api.projects.create, { name: "Beta" })
@@ -49,7 +38,7 @@ test("projects.list surfaces the most recently updated project first", async () 
 })
 
 test("creating a task bumps its project to the top of the list", async () => {
-  const { alice } = setup()
+  const { alice } = await organizationFixture(modules)
   await alice.mutation(api.projects.create, { name: "Alpha" })
   vi.setSystemTime(2_000)
   const beta = await alice.mutation(api.projects.create, { name: "Beta" })
@@ -63,7 +52,7 @@ test("creating a task bumps its project to the top of the list", async () => {
 })
 
 test("editing a task bumps its project to the top of the list", async () => {
-  const { alice } = setup()
+  const { alice } = await organizationFixture(modules)
   const alpha = await alice.mutation(api.projects.create, { name: "Alpha" })
   const taskId = await alice.mutation(api.tasks.create, {
     projectId: alpha,

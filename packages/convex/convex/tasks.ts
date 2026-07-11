@@ -10,11 +10,16 @@ import {
   requireProjectAccess,
   resolveAssignee,
   statusCountField,
-  type Actor,
   type ProjectCounts,
 } from "./model"
 import { accessibleProjects } from "./projects"
 import { status } from "./schema"
+import {
+  addTaskToSprint,
+  applyStatusSprintRules,
+  ensureSprintPair,
+  markTaskEntriesRemoved,
+} from "./sprintModel"
 import {
   taskCounts,
   taskStats,
@@ -36,6 +41,9 @@ const task = v.object({
   status,
   assigneeSubject: v.optional(v.string()),
   assigneeName: v.optional(v.string()),
+  currentSprintId: v.optional(v.id("sprints")),
+  upcomingSprintId: v.optional(v.id("sprints")),
+  completedAt: v.optional(v.number()),
   position: v.number(),
   createdAt: v.number(),
   updatedAt: v.number(),
@@ -55,6 +63,9 @@ function publicTask(taskDoc: Doc<"tasks">, counts: TaskCounts) {
     status: taskDoc.status,
     assigneeSubject: taskDoc.assigneeSubject,
     assigneeName: taskDoc.assigneeName,
+    currentSprintId: taskDoc.currentSprintId,
+    upcomingSprintId: taskDoc.upcomingSprintId,
+    completedAt: taskDoc.completedAt,
     position: taskDoc.position,
     createdAt: taskDoc.createdAt,
     updatedAt: taskDoc.updatedAt,
@@ -124,7 +135,7 @@ export const list = query({
     await requireProjectAccess(ctx, args.projectId)
     // Ordered by position ascending via the index, so each column renders in
     // the right order without a client-side sort. Keyed only off the project so
-    // collaborators (who don't know the owner's subject) can read the board.
+    // Organization members read the same project-level board order.
     const tasks = await ctx.db
       .query("tasks")
       .withIndex("by_project_position", (q) =>
@@ -171,6 +182,9 @@ const taskWithProject = v.object({
   status,
   assigneeSubject: v.optional(v.string()),
   assigneeName: v.optional(v.string()),
+  currentSprintId: v.optional(v.id("sprints")),
+  upcomingSprintId: v.optional(v.id("sprints")),
+  completedAt: v.optional(v.number()),
   position: v.number(),
   createdAt: v.number(),
   updatedAt: v.number(),
@@ -179,7 +193,7 @@ const taskWithProject = v.object({
   activeCommentCount: v.number(),
 })
 
-// Tasks across every project the caller can see (owned + shared), flattened
+// Tasks across every project in the active Organization, flattened
 // into a single list. When `assignedToMe` is true (the default), only tasks
 // assigned to the caller are returned. We read each project's board with the
 // same per-project cap as `list`, then sort by most recent update so the
@@ -192,7 +206,7 @@ export const listAll = query({
   handler: async (ctx, args) => {
     const { subject } = await actor(ctx)
     const onlyMine = args.assignedToMe ?? true
-    const projects = await accessibleProjects(ctx, subject)
+    const projects = await accessibleProjects(ctx)
     const results: Array<
       Awaited<ReturnType<typeof taskResult>> & {
         projectName: string
@@ -204,17 +218,16 @@ export const listAll = query({
       const [tasks, counts] = await Promise.all([
         ctx.db
           .query("tasks")
-          .withIndex("by_project_position", (q) => q.eq("projectId", project._id))
+          .withIndex("by_project_position", (q) =>
+            q.eq("projectId", project._id)
+          )
           .take(MAX_TASKS),
         projectTaskCounts(ctx, project._id),
       ])
       for (const taskDoc of tasks) {
         if (onlyMine && taskDoc.assigneeSubject !== subject) continue
         results.push({
-          ...publicTask(
-            taskDoc,
-            counts.get(taskDoc._id) ?? taskCounts(null)
-          ),
+          ...publicTask(taskDoc, counts.get(taskDoc._id) ?? taskCounts(null)),
           projectName: project.name,
           projectIcon: project.icon,
           projectColor: project.color,
@@ -236,6 +249,9 @@ export const create = mutation({
     // Display hint used only for the optimistic UI; the server stores the
     // authoritative name resolved from the project's membership.
     assigneeName: v.optional(v.string()),
+    sprint: v.optional(
+      v.union(v.literal("backlog"), v.literal("current"), v.literal("upcoming"))
+    ),
   },
   returns: v.id("tasks"),
   handler: async (ctx, args) => {
@@ -246,9 +262,7 @@ export const create = mutation({
       ? await resolveAssignee(ctx, project, args.assigneeSubject)
       : null
     const taskId = await ctx.db.insert("tasks", {
-      // Keep the owner's subject as a consistent key; it's no longer the access
-      // gate (that's the membership check) but stays set for every task.
-      ownerSubject: project.ownerSubject,
+      organizationId: actor.organizationId,
       projectId: args.projectId,
       title,
       description: cleanDescription(args.description),
@@ -262,6 +276,22 @@ export const create = mutation({
       createdAt: now,
       updatedAt: now,
     })
+    if (args.sprint && args.sprint !== "backlog") {
+      const settings = await ensureSprintPair(ctx, actor.organizationId, now)
+      const taskDoc = await ctx.db.get(taskId)
+      if (!taskDoc) throw new Error("Created task not found")
+      await addTaskToSprint(ctx, {
+        task: taskDoc,
+        project,
+        sprintId:
+          args.sprint === "current"
+            ? settings.currentSprintId!
+            : settings.upcomingSprintId!,
+        actor,
+        origin: args.sprint === "current" ? "scope_added" : "planned",
+        now,
+      })
+    }
     await ctx.db.patch(args.projectId, {
       taskCount: project.taskCount + 1,
       todoCount: project.todoCount + 1,
@@ -345,7 +375,7 @@ export const update = mutation({
     }
     if (args.dueDate !== undefined) patch.dueDate = cleanDueDate(args.dueDate)
 
-    let newlyAssigned: Actor | null = null
+    let newlyAssigned: { subject: string; name: string } | null = null
     if (args.assigneeSubject !== undefined) {
       if (args.assigneeSubject === "") {
         // Empty string clears the assignment (mirrors the field cleaners).
@@ -419,9 +449,17 @@ export const move = mutation({
     }
     const now = Date.now()
     const position = args.position ?? now
+    const sprintPatch = await applyStatusSprintRules(ctx, {
+      task: current,
+      project,
+      actor,
+      nextStatus: args.status,
+      now,
+    })
     await ctx.db.patch(args.taskId, {
       status: args.status,
       position,
+      ...sprintPatch,
       updatedAt: now,
     })
     // Only touch the project doc + feed when the status actually changed: pure
@@ -473,6 +511,20 @@ export const changeProject = mutation({
       args.projectId
     )
 
+    if (
+      source.organizationId !== destination.organizationId ||
+      current.currentSprintId ||
+      current.upcomingSprintId
+    ) {
+      throw new ConvexError({
+        code: "INVALID_PROJECT_MOVE",
+        message:
+          current.currentSprintId || current.upcomingSprintId
+            ? "Move the task to Backlog before changing projects."
+            : "Tasks cannot move between workspaces.",
+      })
+    }
+
     const now = Date.now()
 
     // The current assignee may not belong to the destination project; keep them
@@ -497,8 +549,7 @@ export const changeProject = mutation({
 
     await ctx.db.patch(args.taskId, {
       projectId: args.projectId,
-      // Keep ownerSubject aligned with the destination owner, mirroring create.
-      ownerSubject: destination.ownerSubject,
+      organizationId: destination.organizationId,
       // Append to the end of the destination board; the status is preserved.
       position: now,
       assigneeSubject,
@@ -556,10 +607,7 @@ export const remove = mutation({
         .withIndex("by_task_and_created", (q) => q.eq("taskId", current._id))
         .first()
     )
-    if (
-      (counts.totalSubtasks > 0 || hasCommentRows) &&
-      !args.confirmCascade
-    ) {
+    if ((counts.totalSubtasks > 0 || hasCommentRows) && !args.confirmCascade) {
       throw new ConvexError({
         code: "CASCADE_CONFIRMATION_REQUIRED",
         message: "Confirm deletion of this task and its children.",
@@ -568,6 +616,7 @@ export const remove = mutation({
       })
     }
     const now = Date.now()
+    await markTaskEntriesRemoved(ctx, current, actor, "task_deleted")
     await ctx.db.delete(args.taskId)
     await ctx.scheduler.runAfter(0, internal.tasks.purgeTaskData, {
       taskId: args.taskId,

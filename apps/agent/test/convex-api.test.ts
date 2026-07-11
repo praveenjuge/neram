@@ -6,6 +6,7 @@ const mock = vi.hoisted(() => ({
   setAuth: vi.fn(),
   query: vi.fn(async () => [] as unknown),
   mutation: vi.fn(async () => "ok" as unknown),
+  action: vi.fn(async () => null as unknown),
 }))
 
 vi.mock("convex/browser", () => ({
@@ -13,6 +14,7 @@ vi.mock("convex/browser", () => ({
     setAuth = mock.setAuth
     query = mock.query
     mutation = mock.mutation
+    action = mock.action
   },
 }))
 
@@ -22,6 +24,7 @@ beforeEach(() => {
   mock.setAuth.mockClear()
   mock.query.mockClear()
   mock.mutation.mockClear()
+  mock.action.mockClear()
 })
 
 describe("createConvexApi token provider", () => {
@@ -49,5 +52,14 @@ describe("createConvexApi token provider", () => {
     expect(provider).toHaveBeenCalledTimes(1)
     expect(mock.setAuth).toHaveBeenCalledWith("m-token")
     expect(mock.mutation).toHaveBeenCalledOnce()
+  })
+
+  test("authenticates Organization synchronization actions", async () => {
+    const provider = vi.fn(async () => "organization-token")
+    const api = createConvexApi("https://example.convex.cloud", provider)
+    await api.syncCurrentWorkspace()
+    expect(provider).toHaveBeenCalledOnce()
+    expect(mock.setAuth).toHaveBeenCalledWith("organization-token")
+    expect(mock.action).toHaveBeenCalledOnce()
   })
 })

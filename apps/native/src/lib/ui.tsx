@@ -122,4 +122,31 @@ export function StatusPicker({
   )
 }
 
+export function SegmentedPicker<T extends string>({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string
+  options: readonly (readonly [T, string])[]
+  value: T
+  onChange: (value: T) => void
+}) {
+  return (
+    <Picker
+      label={label}
+      selection={value}
+      onSelectionChange={onChange}
+      modifiers={[pickerStyle("segmented")]}
+    >
+      {options.map(([id, optionLabel]) => (
+        <Text key={id} modifiers={[tag(id)]}>
+          {optionLabel}
+        </Text>
+      ))}
+    </Picker>
+  )
+}
+
 export { Button, Section, Text, VStack }

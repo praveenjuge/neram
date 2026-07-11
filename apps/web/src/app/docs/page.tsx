@@ -9,10 +9,10 @@ export const metadata = {
   title: "Docs",
 }
 
-const setupCommands = `npx neram login          # Clerk OAuth (PKCE); tokens in OS keychain
+const setupCommands = `npx neram login          # Clerk OAuth (PKCE); choose an Organization
                          # fallback: ~/.config/neram/credentials.json (chmod 600)
 npx neram doctor --json  # config, auth, and MCP readiness
-npx neram whoami --json  # identity + workspace totals
+npx neram whoami --json  # identity + active Organization + workspace totals
 npx neram logout         # clear creds; best-effort revoke refresh token`
 
 const configReference = `# published config (used by default)
@@ -25,17 +25,16 @@ export NERAM_CLERK_OAUTH_CLIENT_ID=...`
 
 const whoamiExample = `{
   "ok": true,
-  "user": { "name": "Ada Lovelace", "email": "ada@example.com" },
-  "convexUrl": "https://your-team.convex.cloud",
+  "identity": { "name": "Ada Lovelace", "email": "ada@example.com" },
+  "organization": {
+    "organizationId": "org_123",
+    "slug": "acme",
+    "name": "Acme",
+    "role": "org:admin"
+  },
   "workspace": {
     "projects": 8,
-    "ownedProjects": 5,
-    "sharedProjects": 3,
     "openTasks": 12
-  },
-  "mcp": {
-    "stdio": "neram mcp",
-    "hosted": "https://neram.praveenjuge.com/mcp"
   }
 }`
 
@@ -44,7 +43,7 @@ npx neram brief --project-limit 5 --json  # alias for daily
 npx neram activity --limit 20 --json      # recent activity feed`
 
 const taskCommands = `npx neram task list --project "Project name" --status inProgress
-npx neram task add --project "Project name" --title "Follow up" --due 2026-02-01
+npx neram task add --project "Project name" --title "Follow up" --due 2026-02-01 --sprint backlog
 npx neram task move --task-id TASK_ID --status inProgress
 npx neram task move --task-id TASK_ID --status inProgress --position 1.5  # kanban order
 npx neram task done --task-id TASK_ID
@@ -58,6 +57,23 @@ npx neram project add --name "Project name" --icon rocket --color blue
 npx neram project update --project "Project name" --name "Renamed"
 npx neram project summary --project "Project name" --json
 npx neram project rm --project-id PROJECT_ID   # id required; purges tasks`
+
+const workspaceCommands = `npx neram workspace current --json
+npx neram workspace create --name "Acme" --slug acme
+npx neram workspace switch              # rerun OAuth, then reconnect MCP
+npx neram workspace members --json
+npx neram workspace invite --email member@example.com --role org:member
+npx neram workspace role --user-id USER_ID --role org:admin
+npx neram workspace remove-member --user-id USER_ID --organization-id ORG_ID --organization-slug SLUG --confirm
+npx neram workspace delete --organization-id ORG_ID --organization-slug SLUG --confirm`
+
+const sprintCommands = `npx neram sprint current --json          # also: backlog, upcoming
+npx neram sprint history [--sprint-id SPRINT_ID] --limit 20 --json
+npx neram sprint plan --task-id TASK_ID --sprint upcoming
+npx neram sprint remove --task-id TASK_ID --sprint current
+npx neram sprint goal --sprint current --goal "Ship the cutover"
+npx neram sprint cadence --weeks 2 --start-weekday 1 --timezone Asia/Kolkata
+npx neram sprint rollover --reason "Customer deadline" --organization-id ORG_ID --organization-slug SLUG --confirm`
 
 const mcpStdioCommands = `npx neram login   # sign in first
 npx neram mcp     # stdio server; refreshes the token per request
@@ -84,6 +100,11 @@ curl -s https://neram.praveenjuge.com/mcp \\
 const mcpTools = `# read-only
 daily_brief
 workspace_status
+get_workspace
+list_workspace_members
+get_sprint
+list_sprint_tasks
+sprint_history
 list_projects
 list_tasks
 summarize_project
@@ -99,6 +120,16 @@ delete_task
 create_project
 update_project
 delete_project          # destructive — purges every task
+create_workspace
+invite_workspace_member
+update_workspace_member_role
+remove_workspace_member # destructive — exact Organization confirmation
+delete_workspace        # destructive — exact Organization confirmation
+plan_sprint_tasks
+remove_sprint_tasks
+update_sprint_goal
+update_sprint_cadence
+rollover_sprint         # destructive — exact Organization confirmation
 
 # failures return isError results with:
 # { error: { code, message, details } }`
@@ -126,6 +157,8 @@ MISSING_CONFIG    # config fetch failed; check network or env overrides
 AMBIGUOUS         # name matched multiple records; retry with an id from details.matches
 NOT_FOUND         # project or task does not exist
 FORBIDDEN         # caller lacks access
+ORGANIZATION_REQUIRED # choose a workspace and sign in again
+CONFIRMATION_REQUIRED # exact Organization id/slug or confirmation is missing
 VALIDATION        # bad input shape or value`
 
 async function CodeBlock({
@@ -200,17 +233,18 @@ export default function DocsPage() {
           <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
             Agent surfaces for the Neram workspace: the npm CLI, the MCP tools,
             and the Neram agent skill. CLI, MCP, and browser actions share the
-            same signed-in Clerk identity and kanban task board.
+            same Organization-bound Clerk identity, Sprint engine, and kanban
+            task board.
           </p>
         </header>
 
         <Section icon={Terminal} title="CLI">
           <Prose>
-            Package <code>neram</code>. Commands print human text by
-            default; add <code>--json</code> for the exact, backward-compatible
-            tool payload. Address tasks and projects by exact id (
-            <code>--task-id</code>, <code>--project-id</code>) or by
-            unambiguous name.
+            Package <code>neram</code>. Commands print human text by default;
+            add <code>--json</code> for the exact, backward-compatible tool
+            payload. Address tasks and projects by exact id (
+            <code>--task-id</code>, <code>--project-id</code>) or by unambiguous
+            name.
           </Prose>
 
           <SubHeading>Sign in and check readiness</SubHeading>
@@ -230,6 +264,16 @@ export default function DocsPage() {
           <SubHeading>Daily work</SubHeading>
           <CodeBlock lang="bash">{dailyCommands}</CodeBlock>
 
+          <SubHeading>Organizations</SubHeading>
+          <Prose>
+            Clerk Organizations are the workspace boundary. Switching replaces
+            the stored token; reconnect local or hosted MCP afterward.
+          </Prose>
+          <CodeBlock lang="bash">{workspaceCommands}</CodeBlock>
+
+          <SubHeading>Sprints</SubHeading>
+          <CodeBlock lang="bash">{sprintCommands}</CodeBlock>
+
           <SubHeading>Tasks</SubHeading>
           <CodeBlock lang="bash">{taskCommands}</CodeBlock>
 
@@ -247,10 +291,10 @@ export default function DocsPage() {
 
         <Section icon={Plug} title="MCP">
           <Prose>
-            Local stdio and hosted Streamable HTTP run the same tools, so agents
-            get identical behavior either way. Tool failures come back as{" "}
-            <code>isError</code> results (not protocol exceptions) with stable
-            error codes.
+            Local stdio and hosted Streamable HTTP run the same Organization-
+            scoped tools, so agents get identical behavior either way. Tool
+            failures come back as <code>isError</code> results (not protocol
+            exceptions) with stable error codes.
           </Prose>
 
           <SubHeading>Local stdio</SubHeading>

@@ -9,7 +9,7 @@ function initials(name: string): string {
 }
 
 /**
- * A small initials avatar for a project member. There are no uploaded photos,
+ * A small initials avatar for an Organization member. There are no uploaded photos,
  * so we render initials in a muted circle. `title` surfaces the full name on
  * hover; the element is hidden from the accessibility tree since the name is
  * already conveyed by surrounding text.

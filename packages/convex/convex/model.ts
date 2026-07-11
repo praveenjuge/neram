@@ -3,32 +3,20 @@ import { ConvexError } from "convex/values"
 import type { Doc, Id } from "./_generated/dataModel"
 import type { MutationCtx, QueryCtx } from "./_generated/server"
 
-// Upper bound on how many member rows a single action fans out to / reads.
-// Membership lists are small in practice; this keeps the read/write bounded.
-const MAX_MEMBERS = 200
-
-/**
- * The canonical owner key for the authenticated caller.
- *
- * Per Convex guidance we key ownership off `identity.tokenIdentifier` (a stable,
- * issuer-scoped identifier) rather than `identity.subject` alone.
- */
-export async function owner(ctx: QueryCtx | MutationCtx) {
-  const identity = await ctx.auth.getUserIdentity()
-  if (!identity) {
-    throw new ConvexError({
-      code: "UNAUTHENTICATED",
-      message: "Sign in required.",
-    })
-  }
-  return identity.tokenIdentifier
+export type Actor = {
+  subject: string
+  userId: string
+  name: string
+  organizationId: string
 }
 
-export type Actor = { subject: string; name: string }
+function stringClaim(identity: object, key: string) {
+  const value = (identity as Record<string, unknown>)[key]
+  return typeof value === "string" && value.length > 0 ? value : undefined
+}
 
 /**
- * The authenticated caller as an actor: their canonical subject plus a
- * best-effort display name used to denormalize activity rows and member names.
+ * The authenticated caller and their required active Clerk Organization.
  */
 export async function actor(ctx: QueryCtx | MutationCtx): Promise<Actor> {
   const identity = await ctx.auth.getUserIdentity()
@@ -38,108 +26,175 @@ export async function actor(ctx: QueryCtx | MutationCtx): Promise<Actor> {
       message: "Sign in required.",
     })
   }
+  const organizationId = stringClaim(identity, "org_id")
+  if (!organizationId) {
+    throw new ConvexError({
+      code: "ORGANIZATION_REQUIRED",
+      message: "Choose a workspace and sign in again.",
+    })
+  }
   return {
-    subject: identity.tokenIdentifier,
+    subject: identity.subject,
+    userId: identity.subject,
     name: identity.name ?? identity.email ?? "Someone",
+    organizationId,
   }
 }
 
+export type OrganizationAccess = {
+  actor: Actor & { organizationId: string }
+  organization: Doc<"organizations">
+  membership: Doc<"organizationMembers">
+}
+
 /**
- * Resolve a task assignee from a subject, validating they're actually on the
- * project (the owner or a member). Returns the canonical subject plus the
+ * Resolve the active Clerk Organization and its webhook-synchronized member.
+ * The projection is intentionally required even when a signed token still has
+ * an Organization claim, so a removed member loses access immediately.
+ */
+export async function requireOrganization(
+  ctx: QueryCtx | MutationCtx
+): Promise<OrganizationAccess> {
+  const a = await actor(ctx)
+  const organization = await ctx.db
+    .query("organizations")
+    .withIndex("by_organization_id", (q) =>
+      q.eq("organizationId", a.organizationId)
+    )
+    .unique()
+  if (!organization || organization.state !== "active") {
+    throw new ConvexError({
+      code:
+        organization?.state === "deleting" ? "WORKSPACE_DELETING" : "NOT_FOUND",
+      message:
+        organization?.state === "deleting"
+          ? "This workspace is being deleted."
+          : "Workspace not found.",
+    })
+  }
+  const membership = await ctx.db
+    .query("organizationMembers")
+    .withIndex("by_organization_and_user", (q) =>
+      q.eq("organizationId", a.organizationId).eq("userId", a.userId)
+    )
+    .unique()
+  if (!membership) {
+    throw new ConvexError({
+      code: "FORBIDDEN",
+      message: "You are no longer a member of this workspace.",
+    })
+  }
+  return {
+    actor: a,
+    organization,
+    membership,
+  }
+}
+
+export async function requireOrganizationAdmin(ctx: QueryCtx | MutationCtx) {
+  const access = await requireOrganization(ctx)
+  if (access.membership.role !== "org:admin") {
+    throw new ConvexError({
+      code: "FORBIDDEN",
+      message: "Workspace admin access required.",
+    })
+  }
+  return access
+}
+
+/**
+ * Resolve a task assignee from a Clerk user id, validating they're in the
+ * Organization. Returns the canonical id plus the
  * authoritative display name to denormalize onto the task. Throws if the
- * subject isn't part of the project so a task can't be assigned to a stranger.
+ * user isn't part of the Organization so a task can't be assigned to a stranger.
  */
 export async function resolveAssignee(
   ctx: QueryCtx | MutationCtx,
   project: Doc<"projects">,
   assigneeSubject: string
-): Promise<Actor> {
-  if (assigneeSubject === project.ownerSubject) {
-    return { subject: assigneeSubject, name: project.ownerName ?? "Owner" }
-  }
+): Promise<{
+  subject: string
+  userId: string
+  name: string
+  organizationId: string
+  organizationRole: "org:admin" | "org:member"
+}> {
   const membership = await ctx.db
-    .query("projectMembers")
-    .withIndex("by_project_member", (q) =>
-      q.eq("projectId", project._id).eq("subject", assigneeSubject)
+    .query("organizationMembers")
+    .withIndex("by_organization_and_user", (q) =>
+      q
+        .eq("organizationId", project.organizationId)
+        .eq("userId", assigneeSubject)
     )
     .unique()
   if (!membership) {
     throw new ConvexError({
       code: "INVALID_ASSIGNEE",
-      message: "Choose someone on this project.",
+      message: "Choose someone in this workspace.",
     })
   }
-  return { subject: membership.subject, name: membership.displayName }
+  return {
+    subject: membership.userId,
+    userId: membership.userId,
+    name: membership.displayName,
+    organizationId: membership.organizationId,
+    organizationRole: membership.role,
+  }
 }
 
-export type ProjectRole = "owner" | "editor"
+export type ProjectRole = "org:admin" | "org:member"
 
 export type ProjectAccess = {
   project: Doc<"projects">
   actor: Actor
   role: ProjectRole
-  isOwner: boolean
+  isAdmin: boolean
 }
 
 /**
- * Resolve the caller's access to a project. The owner always has access; anyone
- * else must have a `projectMembers` row. Throws NOT_FOUND otherwise, so callers
- * can't tell apart "missing" from "no access". Used by every read/edit path.
+ * Resolve project access exclusively through the active Organization.
  */
 export async function requireProjectAccess(
   ctx: QueryCtx | MutationCtx,
   projectId: Id<"projects">
 ): Promise<ProjectAccess> {
-  const a = await actor(ctx)
+  const access = await requireOrganization(ctx)
   const project = await ctx.db.get(projectId)
-  if (!project) {
+  if (
+    !project ||
+    project.organizationId !== access.organization.organizationId
+  ) {
     throw new ConvexError({ code: "NOT_FOUND", message: "Project not found." })
   }
-  if (project.ownerSubject === a.subject) {
-    return { project, actor: a, role: "owner", isOwner: true }
+  return {
+    project,
+    actor: access.actor,
+    role: access.membership.role,
+    isAdmin: access.membership.role === "org:admin",
   }
-  const membership = await ctx.db
-    .query("projectMembers")
-    .withIndex("by_project_member", (q) =>
-      q.eq("projectId", projectId).eq("subject", a.subject)
-    )
-    .unique()
-  if (!membership) {
-    throw new ConvexError({ code: "NOT_FOUND", message: "Project not found." })
-  }
-  return { project, actor: a, role: "editor", isOwner: false }
 }
 
-/**
- * Resolve the caller as the project owner, throwing otherwise. Used by the
- * owner-only paths: sharing, member removal, and project deletion.
- */
-export async function requireProjectOwner(
+/** Resolve a project and require Organization admin governance. */
+export async function requireProjectAdmin(
   ctx: QueryCtx | MutationCtx,
   projectId: Id<"projects">
 ): Promise<{ project: Doc<"projects">; actor: Actor }> {
-  const a = await actor(ctx)
+  const access = await requireOrganizationAdmin(ctx)
   const project = await ctx.db.get(projectId)
-  if (!project) {
+  if (
+    !project ||
+    project.organizationId !== access.organization.organizationId
+  ) {
     throw new ConvexError({ code: "NOT_FOUND", message: "Project not found." })
   }
-  if (project.ownerSubject !== a.subject) {
-    throw new ConvexError({
-      code: "FORBIDDEN",
-      message: "Only the project owner can do this.",
-    })
-  }
-  return { project, actor: a }
+  return { project, actor: access.actor }
 }
 
-export type ActivityType = Doc<"activity">["type"]
+export type ActivityType = Doc<"organizationActivity">["type"]
 
 /**
- * Fan an activity entry out to everyone who can see the project: the owner plus
- * every member. One row per recipient keeps each user's feed a single indexed
- * read. Members only receive rows created after they joined, since their rows
- * only start being written once they appear in `projectMembers`.
+ * Append one Organization activity row. All current and future members can
+ * read the complete workspace history.
  */
 export async function recordActivity(
   ctx: MutationCtx,
@@ -156,35 +211,22 @@ export async function recordActivity(
     assigneeName?: string
   }
 ) {
-  const members = await ctx.db
-    .query("projectMembers")
-    .withIndex("by_project", (q) => q.eq("projectId", args.project._id))
-    .take(MAX_MEMBERS)
-
-  // Dedupe defensively; the owner is never stored as a member, but this keeps
-  // the fan-out correct even if that invariant ever changes.
-  const recipients = new Set<string>([args.project.ownerSubject])
-  for (const member of members) recipients.add(member.subject)
-
-  const now = Date.now()
-  for (const subject of recipients) {
-    await ctx.db.insert("activity", {
-      subject,
-      actorSubject: args.actor.subject,
-      actorName: args.actor.name,
-      projectId: args.project._id,
-      projectName: args.project.name,
-      type: args.type,
-      taskTitle: args.taskTitle,
-      taskId: args.taskId,
-      commentId: args.commentId,
-      commentExcerpt: args.commentExcerpt,
-      toStatus: args.toStatus,
-      assigneeSubject: args.assigneeSubject,
-      assigneeName: args.assigneeName,
-      createdAt: now,
-    })
-  }
+  await ctx.db.insert("organizationActivity", {
+    organizationId: args.project.organizationId,
+    actorUserId: args.actor.userId,
+    actorName: args.actor.name,
+    projectId: args.project._id,
+    projectName: args.project.name,
+    type: args.type,
+    taskTitle: args.taskTitle,
+    taskId: args.taskId,
+    commentId: args.commentId,
+    commentExcerpt: args.commentExcerpt,
+    toStatus: args.toStatus,
+    assigneeUserId: args.assigneeSubject,
+    assigneeName: args.assigneeName,
+    createdAt: Date.now(),
+  })
 }
 
 /** Write one targeted activity row without broadcasting ordinary comment work. */
@@ -201,9 +243,9 @@ export async function recordTargetedActivity(
     commentExcerpt: string
   }
 ) {
-  await ctx.db.insert("activity", {
-    subject: args.subject,
-    actorSubject: args.actor.subject,
+  await ctx.db.insert("organizationActivity", {
+    organizationId: args.project.organizationId,
+    actorUserId: args.actor.userId,
     actorName: args.actor.name,
     projectId: args.project._id,
     projectName: args.project.name,
@@ -212,6 +254,7 @@ export async function recordTargetedActivity(
     taskId: args.taskId,
     commentId: args.commentId,
     commentExcerpt: args.commentExcerpt,
+    recipientUserId: args.subject,
     createdAt: Date.now(),
   })
 }

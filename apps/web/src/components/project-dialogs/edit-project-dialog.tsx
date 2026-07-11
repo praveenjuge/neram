@@ -46,7 +46,7 @@ type EditProjectDialogProps = DialogControlProps & {
   name: string
   icon?: string
   color?: string
-  role: "owner" | "editor"
+  role: "org:admin" | "org:member"
 }
 
 export function EditProjectDialog({
@@ -166,7 +166,7 @@ export function EditProjectDialog({
             <Label>Icon</Label>
             <IconPicker onChange={setNextIcon} value={nextIcon} />
           </div>
-          {confirmArchive && role === "owner" ? (
+          {confirmArchive && role === "org:admin" ? (
             <div className="grid gap-3 rounded-2xl border border-border bg-muted/40 p-3">
               <p className="text-sm text-muted-foreground">
                 This hides the project from your dashboard and sidebar. You can
@@ -191,9 +191,9 @@ export function EditProjectDialog({
             </div>
           ) : null}
           <DialogFooter
-            className={cn(role === "owner" && "sm:justify-between")}
+            className={cn(role === "org:admin" && "sm:justify-between")}
           >
-            {role === "owner" ? (
+            {role === "org:admin" ? (
               <Button
                 className={confirmArchive ? "invisible" : undefined}
                 data-testid="archive-project-trigger"

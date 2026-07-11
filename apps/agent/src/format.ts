@@ -1,4 +1,4 @@
-import type { WorkspaceStatus } from "./agent.js"
+import type { WorkspaceStatus } from "./agent-types.js"
 
 /** How to reach the MCP server, surfaced in both human and JSON output. */
 export const MCP_INFO = {
@@ -63,6 +63,7 @@ const EXPIRY_WARNING_WINDOW_MS = 10 * 60 * 1000
 /** Human workspace snapshot for `whoami`: identity, totals, target, MCP hints. */
 export function formatWhoami(input: {
   identity: WorkspaceStatus["identity"]
+  organization: WorkspaceStatus["organization"]
   convexUrl: string
   workspace: WorkspaceStatus["workspace"]
   expiresAt: number
@@ -72,10 +73,13 @@ export function formatWhoami(input: {
   const lines = [
     `Logged in as ${bold(identityLabel(input.identity.name, input.identity.email))}.`,
     "",
-    `Projects:   ${w.projects} (${w.ownedProjects} owned, ${w.sharedProjects} shared)`,
+    `Workspace:  ${input.organization.name} (${input.organization.slug})`,
+    `Role:       ${input.organization.role}`,
+    "",
+    `Projects:   ${w.projects}`,
     `Open tasks: ${w.openTasks}`,
     "",
-    dim(`Workspace: ${input.convexUrl}`),
+    dim(`Convex: ${input.convexUrl}`),
     "",
     "MCP:",
     `  stdio    ${MCP_INFO.stdio}`,
@@ -143,7 +147,7 @@ const STATUS_LABEL: Record<string, string> = {
 }
 
 function statusLabel(status?: string) {
-  return status ? STATUS_LABEL[status] ?? status : ""
+  return status ? (STATUS_LABEL[status] ?? status) : ""
 }
 
 /** Date portion (YYYY-MM-DD) of an ISO timestamp, for compact display. */
@@ -177,7 +181,11 @@ function taskBullet(task: CompactTaskLike) {
 }
 
 function projectBullet(project: CompactProjectLike) {
-  const bits = [`${project.openTasks} open`, `${project.taskCount} total`, project.role]
+  const bits = [
+    `${project.openTasks} open`,
+    `${project.taskCount} total`,
+    project.role,
+  ]
   return bullet(`${project.name} ${dim(`(${bits.join(", ")})`)}`)
 }
 
@@ -228,17 +236,28 @@ export function formatDailyBrief(brief: {
   assignedOpenTasks: CompactTaskLike[]
   openTasks: CompactTaskLike[]
   recentActivity: CompactActivityLike[]
-  suggestedNextActions: Array<{ title: string; status: string; dueDate?: string }>
+  suggestedNextActions: Array<{
+    title: string
+    status: string
+    dueDate?: string
+  }>
 }) {
   return [
     bold("Daily brief"),
-    dim(`${brief.projects} projects · ${brief.assignedOpenTasks.length} assigned · ${brief.openTasks.length} open tracked`),
+    dim(
+      `${brief.projects} projects · ${brief.assignedOpenTasks.length} assigned · ${brief.openTasks.length} open tracked`
+    ),
     "",
-    section("Next actions", brief.suggestedNextActions.map((a) => {
-      const meta: string[] = [statusLabel(a.status)]
-      if (a.dueDate) meta.push(`due ${a.dueDate}`)
-      return bullet(`${a.title} ${dim(`(${meta.filter(Boolean).join(", ")})`)}`)
-    })),
+    section(
+      "Next actions",
+      brief.suggestedNextActions.map((a) => {
+        const meta: string[] = [statusLabel(a.status)]
+        if (a.dueDate) meta.push(`due ${a.dueDate}`)
+        return bullet(
+          `${a.title} ${dim(`(${meta.filter(Boolean).join(", ")})`)}`
+        )
+      })
+    ),
     "",
     section("Assigned to you", brief.assignedOpenTasks.map(taskBullet)),
     "",
@@ -248,11 +267,17 @@ export function formatDailyBrief(brief: {
 
 /** The `list_projects` result as a one-line-per-project list. */
 export function formatProjectList(result: { projects: CompactProjectLike[] }) {
-  return section(`Projects (${result.projects.length})`, result.projects.map(projectBullet))
+  return section(
+    `Projects (${result.projects.length})`,
+    result.projects.map(projectBullet)
+  )
 }
 
 /** The `list_tasks` result: a project header plus one line per task. */
-export function formatTaskList(result: { project: CompactProjectLike; tasks: CompactTaskLike[] }) {
+export function formatTaskList(result: {
+  project: CompactProjectLike
+  tasks: CompactTaskLike[]
+}) {
   return [
     bold(result.project.name),
     dim(`${result.tasks.length} task(s)`),
@@ -267,19 +292,6 @@ export function formatTaskDetail(task: CompactTaskLike) {
   return lines.join("\n")
 }
 
-export function formatProjectMembers(result: {
-  members: Array<{ subject: string; displayName: string; role: string; isYou: boolean }>
-}) {
-  return section(
-    `Members (${result.members.length})`,
-    result.members.map((member) =>
-      bullet(
-        `${member.displayName}${member.isYou ? " (you)" : ""} ${dim(`(${member.role}) ${member.subject}`)}`
-      )
-    )
-  )
-}
-
 type CompactSubtaskLike = {
   subtaskId: string
   title: string
@@ -291,7 +303,9 @@ export function formatSubtasks(result: { subtasks: CompactSubtaskLike[] }) {
   return section(
     `Subtasks (${result.subtasks.length})`,
     result.subtasks.map((item) =>
-      bullet(`${item.completed ? "[x]" : "[ ]"} ${item.title} ${dim(item.subtaskId)}`)
+      bullet(
+        `${item.completed ? "[x]" : "[ ]"} ${item.title} ${dim(item.subtaskId)}`
+      )
     )
   )
 }
@@ -344,11 +358,18 @@ export function formatProjectSummary(result: {
 
 /** The `recent_activity` result as a newest-first feed. */
 export function formatActivity(result: { activity: CompactActivityLike[] }) {
-  return section(`Recent activity (${result.activity.length})`, result.activity.map(activityBullet))
+  return section(
+    `Recent activity (${result.activity.length})`,
+    result.activity.map(activityBullet)
+  )
 }
 
 /** Confirmation after `capture_task`. */
-export function formatCaptureTask(result: { taskId: string; projectName: string; title: string }) {
+export function formatCaptureTask(result: {
+  taskId: string
+  projectName: string
+  title: string
+}) {
   return `Created ${bold(`"${result.title}"`)} in ${result.projectName}.\n${dim(`Task ${result.taskId}`)}`
 }
 
@@ -373,12 +394,18 @@ export function formatTaskDeleted(result: {
 }
 
 /** Confirmation after `move_task_to_project`. */
-export function formatTaskMovedToProject(result: { taskId: string; projectName: string }) {
+export function formatTaskMovedToProject(result: {
+  taskId: string
+  projectName: string
+}) {
   return `Moved task to ${bold(result.projectName)}.\n${dim(`Task ${result.taskId}`)}`
 }
 
 /** Confirmation after `create_project`. */
-export function formatProjectCreated(result: { projectId: string; name: string }) {
+export function formatProjectCreated(result: {
+  projectId: string
+  name: string
+}) {
   return `Created project ${bold(`"${result.name}"`)}.\n${dim(result.projectId)}`
 }
 
@@ -396,15 +423,30 @@ export function formatProjectDeleted(result: { projectId: string }) {
 export type DoctorReport =
   | {
       ok: true
-      config: { convexUrl: string; clerkFrontendApiUrl: string; oauthClientId: string }
+      config: {
+        convexUrl: string
+        clerkFrontendApiUrl: string
+        oauthClientId: string
+      }
       token: { issuer: unknown; audience: unknown; expiresAt: string }
       convex: { authenticated: boolean; visibleProjects: number }
       mcp: { stdio: string; hosted: string }
     }
   | {
       ok: false
-      config: { convexUrl: string; clerkFrontendApiUrl: string; oauthClientId: string }
-      auth: { authenticated: false; error: { code: string; message: string; details?: Record<string, unknown> } }
+      config: {
+        convexUrl: string
+        clerkFrontendApiUrl: string
+        oauthClientId: string
+      }
+      auth: {
+        authenticated: false
+        error: {
+          code: string
+          message: string
+          details?: Record<string, unknown>
+        }
+      }
       mcp: { stdio: string; hosted: string }
     }
 
@@ -424,18 +466,23 @@ export function formatDoctor(report: DoctorReport) {
       "  Authenticated: yes",
       `  Issuer:   ${String(report.token.issuer)}`,
       `  Expires:  ${report.token.expiresAt}`,
-      `  Visible projects: ${report.convex.visibleProjects}`,
+      `  Visible projects: ${report.convex.visibleProjects}`
     )
   } else {
     lines.push(
       bold("Auth"),
       "  Authenticated: no",
-      `  ${report.auth.error.code}: ${report.auth.error.message}`,
+      `  ${report.auth.error.code}: ${report.auth.error.message}`
     )
     const hint = ERROR_HINTS[report.auth.error.code]
     if (hint) lines.push(`  ${dim(hint)}`)
   }
-  lines.push("", bold("MCP"), `  stdio    ${report.mcp.stdio}`, `  hosted   ${report.mcp.hosted}`)
+  lines.push(
+    "",
+    bold("MCP"),
+    `  stdio    ${report.mcp.stdio}`,
+    `  hosted   ${report.mcp.hosted}`
+  )
   return lines.join("\n")
 }
 
@@ -452,7 +499,9 @@ export function formatMcpInstall(client?: string) {
   const target = (client ?? "generic").toLowerCase()
   const footer = [
     "",
-    dim(`Sign in first: ${MCP_INFO.stdio.replace("mcp", "login")} then ${MCP_INFO.stdio}`),
+    dim(
+      `Sign in first: ${MCP_INFO.stdio.replace("mcp", "login")} then ${MCP_INFO.stdio}`
+    ),
     dim(`Hosted endpoint (Streamable HTTP): ${MCP_INFO.hosted}`),
   ]
   const blocks: Record<string, string[]> = {
@@ -497,9 +546,17 @@ export function loginPayload(user: Claims, convexUrl: string) {
 export function whoamiPayload(
   user: Claims,
   convexUrl: string,
-  workspace: WorkspaceStatus["workspace"]
+  workspace: WorkspaceStatus["workspace"],
+  organization: WorkspaceStatus["organization"]
 ) {
-  return { ok: true as const, user, convexUrl, workspace, mcp: MCP_INFO }
+  return {
+    ok: true as const,
+    user,
+    convexUrl,
+    organization,
+    workspace,
+    mcp: MCP_INFO,
+  }
 }
 
 /** Additive JSON payload for `logout`. */

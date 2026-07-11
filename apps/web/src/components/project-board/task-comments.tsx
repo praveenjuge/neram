@@ -3,7 +3,13 @@
 import { useQuery } from "convex-helpers/react/cache"
 import { useMutation, usePaginatedQuery } from "convex/react"
 import type { FunctionReturnType } from "convex/server"
-import { ChevronDown, MessageSquareReply, Pencil, Send, Trash2 } from "lucide-react"
+import {
+  ChevronDown,
+  MessageSquareReply,
+  Pencil,
+  Send,
+  Trash2,
+} from "lucide-react"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
 
@@ -13,34 +19,35 @@ import { cn } from "@/lib/utils"
 import { messageFromError } from "@/lib/errors"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
+import { useOrganizationMembers } from "@/lib/use-organization-members"
 
 type Comment = FunctionReturnType<typeof api.taskComments.list>["page"][number]
-type Member = FunctionReturnType<typeof api.members.list>[number]
+type Member = FunctionReturnType<typeof api.organizations.members>["page"][number]
 type Mention = Comment["mentions"][number]
 
 export function TaskComments({
   taskId,
-  projectId,
   targetCommentId,
 }: {
   taskId: Id<"tasks">
-  projectId: Id<"projects">
   targetCommentId: Id<"taskComments"> | null
 }) {
-  const members = useQuery(api.members.list, { projectId })
+  const { members } = useOrganizationMembers()
+  const context = useQuery(api.organizations.current)
   const create = useMutation(api.taskComments.create)
-  const current = members?.find((member) => member.isYou)
+  const currentSubject = context?.membership.userId
+  const isAdmin = context?.membership.role === "org:admin"
 
   return (
     <section className="grid gap-4" data-testid="task-comments">
       <div>
         <h2 className="font-heading text-sm font-medium">Comments</h2>
         <p className="text-xs text-muted-foreground">
-          Reply in context and mention project members directly.
+          Reply in context and mention workspace members directly.
         </p>
       </div>
       <CommentComposer
-        members={members ?? []}
+        members={members}
         onSubmit={async (payload) => {
           await create({ taskId, ...payload })
         }}
@@ -48,18 +55,18 @@ export function TaskComments({
       />
       {targetCommentId ? (
         <LinkedThread
-          currentSubject={current?.subject}
-          isOwner={current?.role === "owner"}
-          members={members ?? []}
+          currentSubject={currentSubject}
+          isAdmin={isAdmin}
+          members={members}
           targetCommentId={targetCommentId}
           taskId={taskId}
         />
       ) : null}
       <CommentBranch
-        currentSubject={current?.subject}
+        currentSubject={currentSubject}
         depth={0}
-        isOwner={current?.role === "owner"}
-        members={members ?? []}
+        isAdmin={isAdmin}
+        members={members}
         taskId={taskId}
         targetCommentId={targetCommentId}
       />
@@ -73,7 +80,7 @@ function CommentBranch({
   depth,
   members,
   currentSubject,
-  isOwner,
+  isAdmin,
   targetCommentId,
 }: {
   taskId: Id<"tasks">
@@ -81,7 +88,7 @@ function CommentBranch({
   depth: number
   members: Member[]
   currentSubject?: string
-  isOwner: boolean
+  isAdmin: boolean
   targetCommentId: Id<"taskComments"> | null
 }) {
   const { results, status, loadMore } = usePaginatedQuery(
@@ -106,7 +113,7 @@ function CommentBranch({
           comment={comment}
           currentSubject={currentSubject}
           depth={depth}
-          isOwner={isOwner}
+          isAdmin={isAdmin}
           key={comment._id}
           members={members}
           targetCommentId={targetCommentId}
@@ -132,14 +139,14 @@ function CommentNode({
   depth,
   members,
   currentSubject,
-  isOwner,
+  isAdmin,
   targetCommentId,
 }: {
   comment: Comment
   depth: number
   members: Member[]
   currentSubject?: string
-  isOwner: boolean
+  isAdmin: boolean
   targetCommentId: Id<"taskComments"> | null
 }) {
   const [showReplies, setShowReplies] = useState(false)
@@ -149,7 +156,7 @@ function CommentNode({
   const edit = useMutation(api.taskComments.edit)
   const remove = useMutation(api.taskComments.remove)
   const canEdit = !comment.deletedAt && comment.authorSubject === currentSubject
-  const canDelete = !comment.deletedAt && (canEdit || isOwner)
+  const canDelete = !comment.deletedAt && (canEdit || isAdmin)
   const highlighted = comment._id === targetCommentId
 
   return (
@@ -163,13 +170,22 @@ function CommentNode({
     >
       <header className="flex items-center justify-between gap-2">
         <p className="text-xs text-muted-foreground">
-          <span className="font-medium text-foreground">{comment.authorName}</span>
-          {comment.updatedAt > comment.createdAt && !comment.deletedAt ? " · edited" : ""}
+          <span className="font-medium text-foreground">
+            {comment.authorName}
+          </span>
+          {comment.updatedAt > comment.createdAt && !comment.deletedAt
+            ? " · edited"
+            : ""}
         </p>
         {!comment.deletedAt ? (
           <div className="flex gap-1">
             {canEdit ? (
-              <Button aria-label="Edit comment" onClick={() => setEditing(true)} size="icon-sm" variant="ghost">
+              <Button
+                aria-label="Edit comment"
+                onClick={() => setEditing(true)}
+                size="icon-sm"
+                variant="ghost"
+              >
                 <Pencil />
               </Button>
             ) : null}
@@ -198,15 +214,28 @@ function CommentNode({
           }}
         />
       ) : (
-        <p className={cn("mt-2 whitespace-pre-wrap text-sm", comment.deletedAt && "italic text-muted-foreground")}>
+        <p
+          className={cn(
+            "mt-2 text-sm whitespace-pre-wrap",
+            comment.deletedAt && "text-muted-foreground italic"
+          )}
+        >
           {comment.deletedAt ? "Comment deleted" : comment.body}
         </p>
       )}
       <div className="mt-2 flex gap-2">
-        <Button onClick={() => setReplying((value) => !value)} size="sm" variant="ghost">
+        <Button
+          onClick={() => setReplying((value) => !value)}
+          size="sm"
+          variant="ghost"
+        >
           <MessageSquareReply /> Reply
         </Button>
-        <Button onClick={() => setShowReplies((value) => !value)} size="sm" variant="ghost">
+        <Button
+          onClick={() => setShowReplies((value) => !value)}
+          size="sm"
+          variant="ghost"
+        >
           <ChevronDown /> {showReplies ? "Hide replies" : "Show replies"}
         </Button>
       </div>
@@ -230,7 +259,7 @@ function CommentNode({
           <CommentBranch
             currentSubject={currentSubject}
             depth={depth + 1}
-            isOwner={isOwner}
+            isAdmin={isAdmin}
             members={members}
             parentCommentId={comment._id}
             targetCommentId={targetCommentId}
@@ -247,13 +276,13 @@ function LinkedThread({
   targetCommentId,
   members,
   currentSubject,
-  isOwner,
+  isAdmin,
 }: {
   taskId: Id<"tasks">
   targetCommentId: Id<"taskComments">
   members: Member[]
   currentSubject?: string
-  isOwner: boolean
+  isAdmin: boolean
 }) {
   const result = useQuery(api.taskComments.getAncestry, {
     commentId: targetCommentId,
@@ -269,9 +298,16 @@ function LinkedThread({
     }, 80)
     return () => window.clearTimeout(timer)
   }, [result, targetCommentId])
-  if (!result) return <p className="text-sm text-muted-foreground">Loading linked thread…</p>
+  if (!result)
+    return (
+      <p className="text-sm text-muted-foreground">Loading linked thread…</p>
+    )
   if (result.taskId !== taskId) {
-    return <p className="text-sm text-muted-foreground">Linked comment unavailable.</p>
+    return (
+      <p className="text-sm text-muted-foreground">
+        Linked comment unavailable.
+      </p>
+    )
   }
   return (
     <aside className="grid gap-2 rounded-2xl bg-muted/40 p-3">
@@ -279,7 +315,7 @@ function LinkedThread({
       {result.nextCommentId ? (
         <OlderAncestry
           currentSubject={currentSubject}
-          isOwner={isOwner}
+          isAdmin={isAdmin}
           members={members}
           startCommentId={result.nextCommentId}
           targetCommentId={targetCommentId}
@@ -290,7 +326,7 @@ function LinkedThread({
           comment={comment}
           currentSubject={currentSubject}
           depth={index}
-          isOwner={isOwner}
+          isAdmin={isAdmin}
           key={comment._id}
           members={members}
           targetCommentId={targetCommentId}
@@ -305,26 +341,29 @@ function OlderAncestry({
   startCommentId,
   members,
   currentSubject,
-  isOwner,
+  isAdmin,
 }: {
   targetCommentId: Id<"taskComments">
   startCommentId: Id<"taskComments">
   members: Member[]
   currentSubject?: string
-  isOwner: boolean
+  isAdmin: boolean
 }) {
   const result = useQuery(api.taskComments.getAncestry, {
     commentId: targetCommentId,
     startCommentId,
     limit: 100,
   })
-  if (!result) return <p className="text-xs text-muted-foreground">Loading older ancestry…</p>
+  if (!result)
+    return (
+      <p className="text-xs text-muted-foreground">Loading older ancestry…</p>
+    )
   return (
     <>
       {result.nextCommentId ? (
         <OlderAncestry
           currentSubject={currentSubject}
-          isOwner={isOwner}
+          isAdmin={isAdmin}
           members={members}
           startCommentId={result.nextCommentId}
           targetCommentId={targetCommentId}
@@ -335,7 +374,7 @@ function OlderAncestry({
           comment={comment}
           currentSubject={currentSubject}
           depth={index}
-          isOwner={isOwner}
+          isAdmin={isAdmin}
           key={comment._id}
           members={members}
           targetCommentId={targetCommentId}
@@ -373,7 +412,7 @@ function CommentComposer({
     setBody((value) => `${value}${prefix}@${member.displayName} `)
     setTokens((value) => [
       ...value,
-      { subject: member.subject, label: member.displayName },
+      { subject: member.userId, label: member.displayName },
     ])
   }
 
@@ -418,7 +457,13 @@ function CommentComposer({
       {members.length ? (
         <div className="flex flex-wrap gap-1">
           {members.map((member) => (
-            <Button key={member.subject} onClick={() => addMention(member)} size="xs" type="button" variant="secondary">
+            <Button
+              key={member.userId}
+              onClick={() => addMention(member)}
+              size="xs"
+              type="button"
+              variant="secondary"
+            >
               @{member.displayName}
             </Button>
           ))}
@@ -430,7 +475,12 @@ function CommentComposer({
             Cancel
           </Button>
         ) : null}
-        <Button disabled={busy || !body.trim()} onClick={() => void submit()} size="sm" type="button">
+        <Button
+          disabled={busy || !body.trim()}
+          onClick={() => void submit()}
+          size="sm"
+          type="button"
+        >
           <Send /> {busy ? "Saving…" : "Post"}
         </Button>
       </div>

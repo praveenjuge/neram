@@ -1,13 +1,18 @@
 import { Stack } from "expo-router"
 
-import { HeaderAvatar } from "@/lib/header"
+import { HeaderAvatar, HeaderRow, HeaderWorkspaceButton } from "@/lib/header"
 
 export default function TasksLayout() {
   return (
     <Stack
       screenOptions={{
         headerLargeTitle: true,
-        headerRight: () => <HeaderAvatar />,
+        headerRight: () => (
+          <HeaderRow>
+            <HeaderWorkspaceButton />
+            <HeaderAvatar />
+          </HeaderRow>
+        ),
       }}
     >
       <Stack.Screen name="index" options={{ title: "Tasks" }} />

@@ -19,12 +19,17 @@
     "deploy": "convex deploy --cmd-url-env-var-name NEXT_PUBLIC_CONVEX_URL --cmd 'turbo run build --filter=neram --filter=@neram/web'",
     "dev": "convex dev",
     "format": "prettier --write \"convex/**/*.ts\"",
-    "lint": "eslint convex",
+    "lint": "eslint convex test-utils",
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p convex/tsconfig.json"
   },
   "dependencies": {
-    "convex": "^1.41.0"
+    "@clerk/backend": "^3.11.3",
+    "@date-fns/tz": "^1.5.0",
+    "convex": "^1.41.0",
+    "convex-helpers": "^0.1.120",
+    "date-fns": "^4.4.0",
+    "svix": "^1.96.1"
   },
   "devDependencies": {
     "@edge-runtime/vm": "^5.0.0",

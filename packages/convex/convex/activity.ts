@@ -1,21 +1,29 @@
 import { paginationOptsValidator } from "convex/server"
 
 import { query } from "./_generated/server"
-import { actor } from "./model"
+import { requireOrganization } from "./model"
 
 /**
- * The caller's personal activity feed: their own and collaborators' actions
- * across every project they own or have joined, newest first. Backed by the
- * per-recipient fan-out, so this is a single indexed read of the caller's rows.
+ * Organization history, newest first. Targeted comment notifications are
+ * visible only to their recipient; general history is visible to all members.
  */
 export const list = query({
   args: { paginationOpts: paginationOptsValidator },
   handler: async (ctx, args) => {
-    const { subject } = await actor(ctx)
-    return await ctx.db
-      .query("activity")
-      .withIndex("by_subject_created", (q) => q.eq("subject", subject))
+    const access = await requireOrganization(ctx)
+    const result = await ctx.db
+      .query("organizationActivity")
+      .withIndex("by_organization_and_created_at", (q) =>
+        q.eq("organizationId", access.organization.organizationId)
+      )
+      .filter((q) =>
+        q.or(
+          q.eq(q.field("recipientUserId"), undefined),
+          q.eq(q.field("recipientUserId"), access.actor.userId)
+        )
+      )
       .order("desc")
       .paginate(args.paginationOpts)
+    return result
   },
 })

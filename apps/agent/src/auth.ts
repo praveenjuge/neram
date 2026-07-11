@@ -10,13 +10,17 @@ import * as z from "zod/v3"
 
 import { AgentError, createConvexApi, type NeramApi } from "./agent.js"
 import type { RevocationResult } from "./format.js"
+import { requireOrganizationClaims } from "./session.js"
+
+export { claims, requireOrganizationClaims } from "./session.js"
 
 const appDir = join(homedir(), ".config", "neram")
 const credentialsFile = join(appDir, "credentials.json")
 const configFile = join(appDir, "config.json")
 const service = "neram"
 const account = "default"
-const defaultConfigUrl = "https://neram.praveenjuge.com/.well-known/neram-agent.json"
+const defaultConfigUrl =
+  "https://neram.praveenjuge.com/.well-known/neram-agent.json"
 // Refresh a little ahead of the hard expiry so an in-flight request never races
 // the token going stale. Shared by refresh() and the per-request provider.
 const REFRESH_WINDOW_MS = 90_000
@@ -36,7 +40,11 @@ type Session = {
 }
 
 function b64url(bytes: Buffer) {
-  return bytes.toString("base64").replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "")
+  return bytes
+    .toString("base64")
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replaceAll("=", "")
 }
 
 async function ensureDir() {
@@ -45,30 +53,44 @@ async function ensureDir() {
 
 async function readConfig() {
   try {
-    return publicConfigSchema.parse(JSON.parse(await readFile(configFile, "utf8")))
+    return publicConfigSchema.parse(
+      JSON.parse(await readFile(configFile, "utf8"))
+    )
   } catch {
     return null
   }
 }
 
 function definedConfig(config: Partial<PublicConfig>) {
-  return Object.fromEntries(Object.entries(config).filter(([, value]) => value !== undefined))
+  return Object.fromEntries(
+    Object.entries(config).filter(([, value]) => value !== undefined)
+  )
 }
 
 export async function loadPublicConfig(overrides: Partial<PublicConfig> = {}) {
   const env = {
     convexUrl: process.env.NERAM_CONVEX_URL,
-    clerkFrontendApiUrl: process.env.NERAM_CLERK_FRONTEND_API_URL ?? process.env.CLERK_FRONTEND_API_URL,
+    clerkFrontendApiUrl:
+      process.env.NERAM_CLERK_FRONTEND_API_URL ??
+      process.env.CLERK_FRONTEND_API_URL,
     oauthClientId: process.env.NERAM_CLERK_OAUTH_CLIENT_ID,
   }
   const local = await readConfig()
-  const merged = { ...local, ...definedConfig(env), ...definedConfig(overrides) }
+  const merged = {
+    ...local,
+    ...definedConfig(env),
+    ...definedConfig(overrides),
+  }
   const parsed = publicConfigSchema.safeParse(merged)
   if (parsed.success) return parsed.data
 
   const url = process.env.NERAM_AGENT_CONFIG_URL ?? defaultConfigUrl
   const res = await fetch(url)
-  if (!res.ok) throw new AgentError("MISSING_CONFIG", `Unable to load Neram agent config from ${url}.`)
+  if (!res.ok)
+    throw new AgentError(
+      "MISSING_CONFIG",
+      `Unable to load Neram agent config from ${url}.`
+    )
   return publicConfigSchema.parse(await res.json())
 }
 
@@ -114,28 +136,46 @@ export async function clearSession() {
 }
 
 async function discovery(issuer: string) {
-  const res = await fetch(`${issuer.replace(/\/$/, "")}/.well-known/openid-configuration`)
-  if (!res.ok) throw new AgentError("MISSING_CONFIG", "Unable to load Clerk OIDC discovery metadata.")
-  return z.object({
-    authorization_endpoint: z.string().url(),
-    token_endpoint: z.string().url(),
-    revocation_endpoint: z.string().url().optional(),
-  }).parse(await res.json())
+  const res = await fetch(
+    `${issuer.replace(/\/$/, "")}/.well-known/openid-configuration`
+  )
+  if (!res.ok)
+    throw new AgentError(
+      "MISSING_CONFIG",
+      "Unable to load Clerk OIDC discovery metadata."
+    )
+  return z
+    .object({
+      authorization_endpoint: z.string().url(),
+      token_endpoint: z.string().url(),
+      revocation_endpoint: z.string().url().optional(),
+    })
+    .parse(await res.json())
 }
 
-async function exchange(tokenEndpoint: string, body: URLSearchParams, config: PublicConfig) {
+async function exchange(
+  tokenEndpoint: string,
+  body: URLSearchParams,
+  config: PublicConfig
+) {
   const res = await fetch(tokenEndpoint, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body,
   })
-  if (!res.ok) throw new AgentError("AUTH_FAILED", `Clerk token exchange failed with HTTP ${res.status}.`)
-  const token = z.object({
-    id_token: z.string(),
-    access_token: z.string().optional(),
-    refresh_token: z.string().optional(),
-    expires_in: z.number().default(3600),
-  }).parse(await res.json())
+  if (!res.ok)
+    throw new AgentError(
+      "AUTH_FAILED",
+      `Clerk token exchange failed with HTTP ${res.status}.`
+    )
+  const token = z
+    .object({
+      id_token: z.string(),
+      access_token: z.string().optional(),
+      refresh_token: z.string().optional(),
+      expires_in: z.number().default(3600),
+    })
+    .parse(await res.json())
   return {
     idToken: token.id_token,
     accessToken: token.access_token,
@@ -145,7 +185,10 @@ async function exchange(tokenEndpoint: string, body: URLSearchParams, config: Pu
   } satisfies Session
 }
 
-export async function login(overrides: Partial<PublicConfig> = {}) {
+export async function login(
+  overrides: Partial<PublicConfig> = {},
+  options: { forceOrganizationSelection?: boolean } = {}
+) {
   const config = await loadPublicConfig(overrides)
   const meta = await discovery(config.clerkFrontendApiUrl)
   const verifier = b64url(randomBytes(32))
@@ -168,60 +211,96 @@ export async function login(overrides: Partial<PublicConfig> = {}) {
       const received = url.searchParams.get("code")
       if (!received) {
         res.writeHead(400).end("Missing code")
-        reject(new AgentError("AUTH_FAILED", "OAuth callback did not include a code."))
+        reject(
+          new AgentError(
+            "AUTH_FAILED",
+            "OAuth callback did not include a code."
+          )
+        )
         server.close()
         return
       }
-      res.writeHead(200, { "content-type": "text/plain" }).end("Neram CLI login complete. You can close this tab.")
+      res
+        .writeHead(200, { "content-type": "text/plain" })
+        .end("Neram CLI login complete. You can close this tab.")
       resolve(received)
       server.close()
     })
     server.listen(0, "127.0.0.1", () => {
       const address = server.address()
-      if (!address || typeof address === "string") return reject(new AgentError("AUTH_FAILED", "Unable to bind callback port."))
+      if (!address || typeof address === "string")
+        return reject(
+          new AgentError("AUTH_FAILED", "Unable to bind callback port.")
+        )
       redirectUri = `http://127.0.0.1:${address.port}/callback`
       const authUrl = new URL(meta.authorization_endpoint)
       authUrl.search = new URLSearchParams({
         response_type: "code",
         client_id: config.oauthClientId,
         redirect_uri: redirectUri,
-        scope: "openid profile email offline_access",
+        scope: "openid profile email offline_access user:org:read",
         state,
         code_challenge: challenge,
         code_challenge_method: "S256",
       }).toString()
+      if (options.forceOrganizationSelection) {
+        authUrl.searchParams.set("prompt", "consent")
+      }
       void open(authUrl.toString()).catch(() => undefined)
       console.error(`Open this URL to sign in:\n${authUrl.toString()}`)
     })
   })
-  const session = await exchange(meta.token_endpoint, new URLSearchParams({
-    grant_type: "authorization_code",
-    client_id: config.oauthClientId,
-    code,
-    redirect_uri: redirectUri,
-    code_verifier: verifier,
-  }), config)
+  const session = await exchange(
+    meta.token_endpoint,
+    new URLSearchParams({
+      grant_type: "authorization_code",
+      client_id: config.oauthClientId,
+      code,
+      redirect_uri: redirectUri,
+      code_verifier: verifier,
+    }),
+    config
+  )
+  const user = requireOrganizationClaims(session.idToken)
   await writeConfig(config)
   await writeSession(session)
-  return { user: claims(session.idToken), config }
+  return { user, config }
 }
 
 async function refresh(session: Session) {
-  if (session.expiresAt - Date.now() > REFRESH_WINDOW_MS || !session.refreshToken) return session
+  if (
+    session.expiresAt - Date.now() > REFRESH_WINDOW_MS ||
+    !session.refreshToken
+  )
+    return session
   const meta = await discovery(session.config.clerkFrontendApiUrl)
-  const next = await exchange(meta.token_endpoint, new URLSearchParams({
-    grant_type: "refresh_token",
-    client_id: session.config.oauthClientId,
-    refresh_token: session.refreshToken,
-  }), session.config)
+  const refreshed = await exchange(
+    meta.token_endpoint,
+    new URLSearchParams({
+      grant_type: "refresh_token",
+      client_id: session.config.oauthClientId,
+      refresh_token: session.refreshToken,
+    }),
+    session.config
+  )
+  const next = {
+    ...refreshed,
+    refreshToken: refreshed.refreshToken ?? session.refreshToken,
+  }
+  requireOrganizationClaims(next.idToken)
   await writeSession(next)
   return next
 }
 
-export async function authClient(): Promise<{ client: NeramApi; session: Session }> {
+export async function authClient(): Promise<{
+  client: NeramApi
+  session: Session
+}> {
   const stored = await readSession()
-  if (!stored) throw new AgentError("UNAUTHENTICATED", "Run `neram login` first.")
+  if (!stored)
+    throw new AgentError("UNAUTHENTICATED", "Run `neram login` first.")
   const session = await refresh(stored)
+  requireOrganizationClaims(session.idToken)
   // Cache the session in the closure so the hot path (token still comfortably
   // valid) returns synchronously without touching disk, keyring, or the
   // network. Only when the token nears expiry do we re-read the latest stored
@@ -231,13 +310,19 @@ export async function authClient(): Promise<{ client: NeramApi; session: Session
   // is available the stale token surfaces the usual UNAUTHENTICATED error.
   let current = session
   const provider = async () => {
-    if (current.expiresAt - Date.now() > REFRESH_WINDOW_MS) return current.idToken
+    if (current.expiresAt - Date.now() > REFRESH_WINDOW_MS)
+      return current.idToken
     const latest = await readSession()
-    if (!latest) throw new AgentError("UNAUTHENTICATED", "Run `neram login` first.")
+    if (!latest)
+      throw new AgentError("UNAUTHENTICATED", "Run `neram login` first.")
     current = await refresh(latest)
+    requireOrganizationClaims(current.idToken)
     return current.idToken
   }
-  return { client: createConvexApi(session.config.convexUrl, provider), session }
+  return {
+    client: createConvexApi(session.config.convexUrl, provider),
+    session,
+  }
 }
 
 export async function logout(): Promise<{
@@ -256,7 +341,10 @@ export async function logout(): Promise<{
         const res = await fetch(meta.revocation_endpoint, {
           method: "POST",
           headers: { "content-type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams({ token: session.refreshToken, client_id: session.config.oauthClientId }),
+          body: new URLSearchParams({
+            token: session.refreshToken,
+            client_id: session.config.oauthClientId,
+          }),
         })
         revocation = res.ok ? "succeeded" : "failed"
       }
@@ -268,10 +356,4 @@ export async function logout(): Promise<{
   await clearSession()
   // Cached public config (config.json) is intentionally kept for the next login.
   return { revocation, configRetained: true }
-}
-
-export function claims(idToken: string) {
-  const [, payload] = idToken.split(".")
-  if (!payload) throw new AgentError("AUTH_FAILED", "Invalid id_token.")
-  return JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as Record<string, unknown>
 }

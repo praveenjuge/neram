@@ -2,24 +2,47 @@
 import { convexTest } from "convex-test"
 import { expect, test } from "vitest"
 
-import { api } from "./_generated/api"
+import { api, internal } from "./_generated/api"
 import schema from "./schema"
 
 const modules = import.meta.glob("./**/*.ts")
 
-function setup() {
+async function setup() {
   const t = convexTest(schema, modules)
+  await t.mutation(internal.organizations.upsertOrganization, {
+    organizationId: "org_acme",
+    slug: "acme",
+    name: "Acme",
+  })
+  for (const [userId, role, displayName] of [
+    ["alice", "org:admin", "Alice"],
+    ["bob", "org:member", "Bob"],
+  ] as const) {
+    await t.mutation(internal.organizations.upsertMember, {
+      organizationId: "org_acme",
+      membershipId: `mem_${userId}`,
+      userId,
+      role,
+      displayName,
+    })
+  }
   const alice = t.withIdentity({
     name: "Alice",
     email: "alice@example.com",
     subject: "alice",
     tokenIdentifier: "alice",
+    org_id: "org_acme",
+    org_slug: "acme",
+    org_role: "org:admin",
   })
   const bob = t.withIdentity({
     name: "Bob",
     email: "bob@example.com",
     subject: "bob",
     tokenIdentifier: "bob",
+    org_id: "org_acme",
+    org_slug: "acme",
+    org_role: "org:member",
   })
   return { t, alice, bob }
 }
@@ -30,38 +53,32 @@ test("status requires authentication", async () => {
 })
 
 test("status returns the caller's identity from the auth token", async () => {
-  const { alice } = setup()
+  const { alice } = await setup()
   const status = await alice.query(api.agent.status, {})
   expect(status.identity).toEqual({ name: "Alice", email: "alice@example.com" })
 })
 
-test("status reports owned vs shared project counts", async () => {
-  const { alice, bob } = setup()
-  // Alice owns two projects.
+test("status reports Organization-wide project counts", async () => {
+  const { alice, bob } = await setup()
   await alice.mutation(api.projects.create, { name: "Alpha" })
-  const beta = await alice.mutation(api.projects.create, { name: "Beta" })
-  // Bob owns one and joins Beta as an editor.
+  await alice.mutation(api.projects.create, { name: "Beta" })
   await bob.mutation(api.projects.create, { name: "Gamma" })
-  const token = await alice.mutation(api.invites.ensure, { projectId: beta })
-  await bob.mutation(api.invites.accept, { token })
 
   const aliceStatus = await alice.query(api.agent.status, {})
-  expect(aliceStatus.workspace).toMatchObject({
-    projects: 2,
-    ownedProjects: 2,
-    sharedProjects: 0,
+  expect(aliceStatus).toMatchObject({
+    organization: { organizationId: "org_acme", role: "org:admin" },
+    workspace: { projects: 3 },
   })
 
   const bobStatus = await bob.query(api.agent.status, {})
-  expect(bobStatus.workspace).toMatchObject({
-    projects: 2,
-    ownedProjects: 1,
-    sharedProjects: 1,
+  expect(bobStatus).toMatchObject({
+    organization: { organizationId: "org_acme", role: "org:member" },
+    workspace: { projects: 3 },
   })
 })
 
 test("status totals open (todo + in-progress) tasks, excluding done", async () => {
-  const { alice } = setup()
+  const { alice } = await setup()
   const projectId = await alice.mutation(api.projects.create, { name: "Alpha" })
 
   const todo = await alice.mutation(api.tasks.create, { projectId, title: "Todo task" })

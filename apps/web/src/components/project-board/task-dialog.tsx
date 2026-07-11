@@ -3,7 +3,12 @@
 import { useQuery } from "convex-helpers/react/cache"
 import { useMutation } from "convex/react"
 import type { FunctionReturnType } from "convex/server"
-import { CalendarClock, CheckCircle2, MoreHorizontal, Trash2 } from "lucide-react"
+import {
+  CalendarClock,
+  CheckCircle2,
+  MoreHorizontal,
+  Trash2,
+} from "lucide-react"
 import { useRef, useState } from "react"
 import { toast } from "sonner"
 
@@ -94,10 +99,13 @@ function TaskView({
         <div>
           <p className="font-medium">Task unavailable</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            It was deleted, moved somewhere you cannot access, or the link is invalid.
+            It was deleted, moved somewhere you cannot access, or the link is
+            invalid.
           </p>
         </div>
-        <Button onClick={onClose} variant="outline">Close</Button>
+        <Button onClick={onClose} variant="outline">
+          Close
+        </Button>
       </div>
     )
   }
@@ -108,11 +116,7 @@ function TaskView({
         <Separator />
         <TaskSubtasks taskId={task._id} />
         <Separator />
-        <TaskComments
-          projectId={task.projectId}
-          targetCommentId={commentId}
-          taskId={task._id}
-        />
+        <TaskComments targetCommentId={commentId} taskId={task._id} />
       </main>
       <TaskMetadata
         onClose={onClose}
@@ -147,14 +151,19 @@ function InlineFields({ task }: { task: TaskDetail }) {
     } catch (error) {
       const data = dataFromError(error)
       if (data?.code === "EDIT_CONFLICT") {
-        setConflict({ field: "title", latestValue: String(data.latestValue ?? "") })
+        setConflict({
+          field: "title",
+          latestValue: String(data.latestValue ?? ""),
+        })
         return
       }
       toast.error(messageFromError(error, "Could not update the title."))
     }
   }
 
-  async function saveDescription(expectedDescription = task.description ?? null) {
+  async function saveDescription(
+    expectedDescription = task.description ?? null
+  ) {
     if (description.trim() === (task.description ?? "")) return
     try {
       await update({
@@ -323,7 +332,9 @@ function TaskMetadata({
     <aside className="border-t bg-muted/25 p-5 lg:border-t-0 lg:border-l lg:p-6">
       <div className="grid gap-5 lg:sticky lg:top-0">
         <div className="flex items-center justify-between gap-2">
-          <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Task details</p>
+          <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            Task details
+          </p>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button aria-label="Task actions" size="icon-sm" variant="ghost">
@@ -331,7 +342,10 @@ function TaskMetadata({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem variant="destructive" onSelect={() => setConfirmDelete(true)}>
+              <DropdownMenuItem
+                variant="destructive"
+                onSelect={() => setConfirmDelete(true)}
+              >
                 <Trash2 /> Delete task
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -339,8 +353,13 @@ function TaskMetadata({
         </div>
         <div className="grid gap-2">
           <Label>Status</Label>
-          <Select onValueChange={(value) => void changeStatus(value as Status)} value={task.status}>
-            <SelectTrigger data-testid="task-status-select"><SelectValue /></SelectTrigger>
+          <Select
+            onValueChange={(value) => void changeStatus(value as Status)}
+            value={task.status}
+          >
+            <SelectTrigger data-testid="task-status-select">
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
               {columns.map((column) => (
                 <SelectItem key={column.key} value={column.key}>
@@ -371,7 +390,6 @@ function TaskMetadata({
               assigneeName: name ?? undefined,
             })
           }
-          projectId={task.projectId}
           value={task.assigneeSubject ?? UNASSIGNED}
         />
         <div className="grid gap-2 rounded-xl border bg-background/60 p-3 text-xs text-muted-foreground">
@@ -388,10 +406,17 @@ function TaskMetadata({
         {confirmDelete ? (
           <div className="grid gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-3">
             <p className="text-sm">
-              Delete this task, {task.totalSubtasks} subtasks, and {task.activeCommentCount} active comments?
+              Delete this task, {task.totalSubtasks} subtasks, and{" "}
+              {task.activeCommentCount} active comments?
             </p>
             <div className="flex gap-2">
-              <Button onClick={() => setConfirmDelete(false)} size="sm" variant="ghost">Cancel</Button>
+              <Button
+                onClick={() => setConfirmDelete(false)}
+                size="sm"
+                variant="ghost"
+              >
+                Cancel
+              </Button>
               <Button
                 data-testid="confirm-delete-task-button"
                 onClick={() =>
@@ -401,7 +426,9 @@ function TaskMetadata({
                       onClose()
                     })
                     .catch((error) =>
-                      toast.error(messageFromError(error, "Could not delete the task."))
+                      toast.error(
+                        messageFromError(error, "Could not delete the task.")
+                      )
                     )
                 }
                 size="sm"

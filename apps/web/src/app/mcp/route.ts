@@ -1,5 +1,6 @@
 import { createConvexApi } from "neram"
 import { handleFetchMcp } from "neram/mcp"
+import { requireOrganizationClaims } from "neram/session"
 
 const corsHeaders = {
   "access-control-allow-headers": "authorization, content-type, mcp-session-id",
@@ -43,6 +44,25 @@ export async function POST(request: Request) {
       }
     )
   }
+  try {
+    requireOrganizationClaims(token)
+  } catch {
+    return Response.json(
+      {
+        error: {
+          code: "ORGANIZATION_REQUIRED",
+          message: "Choose a Neram workspace and authorize MCP again.",
+        },
+      },
+      {
+        headers: {
+          ...corsHeaders,
+          "www-authenticate": 'Bearer realm="Neram MCP"',
+        },
+        status: 401,
+      }
+    )
+  }
 
   const convexUrl =
     process.env.NERAM_CONVEX_URL ?? process.env.NEXT_PUBLIC_CONVEX_URL
@@ -58,5 +78,7 @@ export async function POST(request: Request) {
     )
   }
 
-  return withCors(await handleFetchMcp(request, createConvexApi(convexUrl, token)))
+  return withCors(
+    await handleFetchMcp(request, createConvexApi(convexUrl, token))
+  )
 }

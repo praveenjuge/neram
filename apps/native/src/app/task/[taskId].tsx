@@ -25,6 +25,7 @@ import {
   taskStyles,
   useTaskColors,
 } from "@/lib/task-ui"
+import { useOrganizationMembers } from "@/lib/use-organization-members"
 
 type Status = "todo" | "inProgress" | "done"
 const statuses: [Status, string][] = [
@@ -43,23 +44,32 @@ export default function TaskScreen() {
   const colors = useTaskColors()
 
   return (
-    <SafeAreaView style={[taskStyles.screen, { backgroundColor: colors.background }]}>
+    <SafeAreaView
+      style={[taskStyles.screen, { backgroundColor: colors.background }]}
+    >
       <Stack.Screen options={{ title: task?.title ?? "Task" }} />
       {task === undefined ? (
-        <View style={taskStyles.content}><InlineMeta>Loading task…</InlineMeta></View>
+        <View style={taskStyles.content}>
+          <InlineMeta>Loading task…</InlineMeta>
+        </View>
       ) : task === null ? (
         <View style={taskStyles.content}>
-          <NativeSection title="Task unavailable" detail="It was deleted, moved somewhere you cannot access, or the link is invalid.">
+          <NativeSection
+            title="Task unavailable"
+            detail="It was deleted, moved somewhere you cannot access, or the link is invalid."
+          >
             <NativeButton label="Go back" onPress={() => router.back()} />
           </NativeSection>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={taskStyles.content} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          contentContainerStyle={taskStyles.content}
+          keyboardShouldPersistTaps="handled"
+        >
           <TaskFields task={task} />
           <TaskMetadata task={task} />
           <NativeTaskSubtasks taskId={task._id} />
           <NativeTaskComments
-            projectId={task.projectId}
             targetCommentId={commentId as Id<"taskComments"> | undefined}
             taskId={task._id}
           />
@@ -76,14 +86,18 @@ function TaskFields({ task }: { task: Task }) {
   const update = useMutation(api.tasks.update)
   const [editing, setEditing] = useState<"title" | "description" | null>(null)
 
-  async function saveWithConflict(field: "title" | "description", value: string) {
-    const args = field === "title"
-      ? { taskId: task._id, title: value, expectedTitle: task.title }
-      : {
-          taskId: task._id,
-          description: value,
-          expectedDescription: task.description ?? null,
-        }
+  async function saveWithConflict(
+    field: "title" | "description",
+    value: string
+  ) {
+    const args =
+      field === "title"
+        ? { taskId: task._id, title: value, expectedTitle: task.title }
+        : {
+            taskId: task._id,
+            description: value,
+            expectedDescription: task.description ?? null,
+          }
     try {
       await update(args)
     } catch (error) {
@@ -105,7 +119,9 @@ function TaskFields({ task }: { task: Task }) {
                     description: value,
                     expectedDescription: latest || null,
                   }
-            ).catch((retryError) => showError("Could not update task", retryError)),
+            ).catch((retryError) =>
+              showError("Could not update task", retryError)
+            ),
         },
       ])
     }
@@ -114,17 +130,28 @@ function TaskFields({ task }: { task: Task }) {
   return (
     <NativeSection detail="Tap either field to edit it." title="Task">
       <Pressable onPress={() => setEditing("title")}>
-        <Text style={[taskStyles.title, { color: colors.text }]}>{task.title}</Text>
+        <Text style={[taskStyles.title, { color: colors.text }]}>
+          {task.title}
+        </Text>
       </Pressable>
       <Pressable onPress={() => setEditing("description")}>
-        <Text style={[taskStyles.body, { color: task.description ? colors.text : colors.muted }]}>
+        <Text
+          style={[
+            taskStyles.body,
+            { color: task.description ? colors.text : colors.muted },
+          ]}
+        >
           {task.description || "Add a description"}
         </Text>
       </Pressable>
       <NativeTextPrompt
         allowEmpty={editing === "description"}
-        detail={editing === "description" ? "Leave empty to clear it." : undefined}
-        initialValue={editing === "title" ? task.title : task.description ?? ""}
+        detail={
+          editing === "description" ? "Leave empty to clear it." : undefined
+        }
+        initialValue={
+          editing === "title" ? task.title : (task.description ?? "")
+        }
         multiline={editing === "description"}
         onClose={() => setEditing(null)}
         onSubmit={(value) => {
@@ -149,7 +176,7 @@ function TaskMetadata({ task }: { task: Task }) {
   const changeProject = useMutation(api.tasks.changeProject)
   const remove = useMutation(api.tasks.remove)
   const projects = useQuery(api.projects.names, {})
-  const members = useQuery(api.members.list, { projectId: task.projectId })
+  const { members } = useOrganizationMembers()
   const [projectSheet, setProjectSheet] = useState(false)
   const [assigneeSheet, setAssigneeSheet] = useState(false)
   const [dueDateSheet, setDueDateSheet] = useState(false)
@@ -174,7 +201,9 @@ function TaskMetadata({ task }: { task: Task }) {
                 taskId: task._id,
                 status,
                 confirmIncompleteSubtasks: true,
-              }).catch((retryError) => showError("Could not move task", retryError)),
+              }).catch((retryError) =>
+                showError("Could not move task", retryError)
+              ),
           },
         ]
       )
@@ -203,16 +232,42 @@ function TaskMetadata({ task }: { task: Task }) {
     <NativeSection title="Details">
       <View style={taskStyles.row}>
         {statuses.map(([status, label]) => (
-          <NativeButton active={task.status === status} key={status} label={label} onPress={() => void changeStatus(status)} />
+          <NativeButton
+            active={task.status === status}
+            key={status}
+            label={label}
+            onPress={() => void changeStatus(status)}
+          />
         ))}
       </View>
-      <NativeButton label={`Project · ${projects?.find((project) => project._id === task.projectId)?.name ?? "Loading"}`} onPress={() => setProjectSheet(true)} />
-      <NativeButton label={`Due · ${task.dueDate ?? "None"}`} onPress={() => setDueDateSheet(true)} />
-      <NativeButton label={`Assignee · ${task.assigneeName ?? "Unassigned"}`} onPress={() => setAssigneeSheet(true)} />
-      <View style={[taskStyles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <InlineMeta>{task.completedSubtasks}/{task.totalSubtasks} subtasks complete · {task.activeCommentCount} comments</InlineMeta>
-        <InlineMeta>Created {new Date(task.createdAt).toLocaleString()}</InlineMeta>
-        <InlineMeta>Updated {new Date(task.updatedAt).toLocaleString()}</InlineMeta>
+      <NativeButton
+        label={`Project · ${projects?.find((project) => project._id === task.projectId)?.name ?? "Loading"}`}
+        onPress={() => setProjectSheet(true)}
+      />
+      <NativeButton
+        label={`Due · ${task.dueDate ?? "None"}`}
+        onPress={() => setDueDateSheet(true)}
+      />
+      <NativeButton
+        label={`Assignee · ${task.assigneeName ?? "Unassigned"}`}
+        onPress={() => setAssigneeSheet(true)}
+      />
+      <View
+        style={[
+          taskStyles.card,
+          { backgroundColor: colors.surface, borderColor: colors.border },
+        ]}
+      >
+        <InlineMeta>
+          {task.completedSubtasks}/{task.totalSubtasks} subtasks complete ·{" "}
+          {task.activeCommentCount} comments
+        </InlineMeta>
+        <InlineMeta>
+          Created {new Date(task.createdAt).toLocaleString()}
+        </InlineMeta>
+        <InlineMeta>
+          Updated {new Date(task.updatedAt).toLocaleString()}
+        </InlineMeta>
       </View>
       <NativeButton destructive label="Delete task" onPress={confirmDelete} />
       <NativeTextPrompt
@@ -233,7 +288,10 @@ function TaskMetadata({ task }: { task: Task }) {
         onClose={() => setProjectSheet(false)}
         title="Move to project"
         visible={projectSheet}
-        choices={(projects ?? []).map((project) => ({ id: project._id, label: project.name }))}
+        choices={(projects ?? []).map((project) => ({
+          id: project._id,
+          label: project.name,
+        }))}
         onChoose={(projectId) =>
           void changeProject({
             taskId: task._id,
@@ -249,7 +307,10 @@ function TaskMetadata({ task }: { task: Task }) {
         visible={assigneeSheet}
         choices={[
           { id: "", label: "Unassigned" },
-          ...(members ?? []).map((member) => ({ id: member.subject, label: member.displayName })),
+          ...members.map((member) => ({
+            id: member.userId,
+            label: member.displayName,
+          })),
         ]}
         onChoose={(subject) =>
           void update({
@@ -279,15 +340,28 @@ function ChoiceSheet({
 }) {
   const colors = useTaskColors()
   return (
-    <Modal animationType="slide" onRequestClose={onClose} presentationStyle="pageSheet" visible={visible}>
-      <SafeAreaView style={[taskStyles.screen, { backgroundColor: colors.background }]}>
+    <Modal
+      animationType="slide"
+      onRequestClose={onClose}
+      presentationStyle="pageSheet"
+      visible={visible}
+    >
+      <SafeAreaView
+        style={[taskStyles.screen, { backgroundColor: colors.background }]}
+      >
         <View style={taskStyles.content}>
           <View style={taskStyles.between}>
-            <Text style={[taskStyles.sectionTitle, { color: colors.text }]}>{title}</Text>
+            <Text style={[taskStyles.sectionTitle, { color: colors.text }]}>
+              {title}
+            </Text>
             <NativeButton label="Close" onPress={onClose} />
           </View>
           {choices.map((choice) => (
-            <NativeButton key={choice.id || "none"} label={choice.label} onPress={() => onChoose(choice.id)} />
+            <NativeButton
+              key={choice.id || "none"}
+              label={choice.label}
+              onPress={() => onChoose(choice.id)}
+            />
           ))}
         </View>
       </SafeAreaView>
@@ -299,7 +373,8 @@ function convexData(error: unknown) {
   if (
     !(error instanceof ConvexError) &&
     (typeof error !== "object" || error === null || !("data" in error))
-  ) return null
+  )
+    return null
   return (error as { data: Record<string, unknown> }).data
 }
 

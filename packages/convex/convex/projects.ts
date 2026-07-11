@@ -5,13 +5,14 @@ import { internal } from "./_generated/api"
 import type { Doc } from "./_generated/dataModel"
 import { internalMutation, mutation, query } from "./_generated/server"
 import {
-  actor,
   projectCounts,
   recordActivity,
+  requireOrganization,
   requireProjectAccess,
-  requireProjectOwner,
+  requireProjectAdmin,
   type ProjectRole,
 } from "./model"
+import { markTaskEntriesRemoved } from "./sprintModel"
 
 // Upper bound for how many projects a single dashboard / switcher load reads.
 // Keeps the query bounded as the table grows instead of an unbounded collect().
@@ -29,7 +30,7 @@ const projectSummary = v.object({
   todoCount: v.number(),
   inProgressCount: v.number(),
   doneCount: v.number(),
-  role: v.union(v.literal("owner"), v.literal("editor")),
+  role: v.union(v.literal("org:admin"), v.literal("org:member")),
 })
 
 function publicProject(project: Doc<"projects">) {
@@ -85,109 +86,60 @@ function cleanColor(color: string) {
   return trimmed
 }
 
-/**
- * Load the projects the caller can see: the ones they own plus the ones they've
- * joined as a member. Deduped and each tagged with the caller's role. Every read
- * is bounded to `MAX_PROJECTS` so the query stays cheap as the workspace grows,
- * and the returned set is ordered by the project's own `updatedAt` (most
- * recently updated first).
- *
- * Ordering is exact within each bounded read: owned projects are read straight
- * off the `by_owner_archived_updated` index in updatedAt order, so the newest
- * owned projects are always included. Shared memberships are read off
- * `by_member` (which has no project-updatedAt key), so if a single caller
- * belongs to more than `MAX_PROJECTS` *shared* projects, the updatedAt ranking
- * of shared projects beyond that bound is best-effort. That cap is far above any real
- * per-user project count here; making it exact would require denormalizing each
- * project's `updatedAt` onto every membership row and fanning writes out to all
- * members on every task/project mutation — a hot-path cost not worth paying for
- * a bound no user reaches.
- */
+/** Load active projects for exactly one active Organization. */
 export async function accessibleProjects(
-  ctx: Parameters<typeof requireProjectAccess>[0],
-  subject: string
+  ctx: Parameters<typeof requireProjectAccess>[0]
 ): Promise<Array<{ project: Doc<"projects">; role: ProjectRole }>> {
-  // Read only *active* owned projects (archivedAt unset), newest-updated first.
-  // Pinning archivedAt to undefined in the index means archived projects live
-  // in a different slice entirely, so they can never consume this bounded read
-  // and push active projects out of the window.
-  const owned = await ctx.db
+  const access = await requireOrganization(ctx)
+  const projects = await ctx.db
     .query("projects")
-    .withIndex("by_owner_archived_updated", (q) =>
-      q.eq("ownerSubject", subject).eq("archivedAt", undefined)
+    .withIndex("by_organization_archived_updated", (q) =>
+      q
+        .eq("organizationId", access.organization.organizationId)
+        .eq("archivedAt", undefined)
     )
     .order("desc")
     .take(MAX_PROJECTS)
-
-  // Bounded like the owned read. `by_member` has no project-updatedAt key, so
-  // the exact updatedAt ranking of shared projects past this cap is best-effort
-  // (see the function doc); the cap sits well above any real per-user count.
-  const memberships = await ctx.db
-    .query("projectMembers")
-    .withIndex("by_member", (q) => q.eq("subject", subject))
-    .take(MAX_PROJECTS)
-
-  const byId = new Map<
-    string,
-    { project: Doc<"projects">; role: ProjectRole }
-  >()
-  for (const project of owned) {
-    byId.set(project._id, { project, role: "owner" })
-  }
-  for (const membership of memberships) {
-    if (byId.has(membership.projectId)) continue
-    const project = await ctx.db.get(membership.projectId)
-    if (project) byId.set(project._id, { project, role: "editor" })
-  }
-
-  return (
-    [...byId.values()]
-      // Archived projects are hidden from every active list; they live only on
-      // the owner's Archived page (see `listArchived`).
-      .filter((entry) => entry.project.archivedAt === undefined)
-      // Most recently updated first, so the freshest projects surface on top.
-      .sort((a, b) => b.project.updatedAt - a.project.updatedAt)
-      .slice(0, MAX_PROJECTS)
-  )
+  return projects.map((project) => ({
+    project,
+    role: access.membership.role,
+  }))
 }
 
 export const list = query({
   args: {},
   returns: v.array(projectSummary),
   handler: async (ctx) => {
-    const { subject } = await actor(ctx)
-    // accessibleProjects already returns most-recently-updated order.
-    const projects = await accessibleProjects(ctx, subject)
+    const projects = await accessibleProjects(ctx)
     return projects.map(({ project, role }) => summarize(project, role))
   },
 })
 
 /**
- * The caller's archived projects, newest-archived first. Owner-only: archiving
- * (and deleting) is an owner action, so only the owner's own archived projects
- * are listed here. Paginated so the Archived page can reach every archived
- * project (via "load more") no matter how many there are — the only UI path to
- * unarchive or permanently delete them.
+ * Organization admins can page archived projects newest first.
  */
 export const listArchived = query({
   args: { paginationOpts: paginationOptsValidator },
   handler: async (ctx, args) => {
-    const { subject } = await actor(ctx)
-    // Read only *archived* owned projects off the shared index. The
-    // `gt("archivedAt", 0)` lower bound excludes active projects (whose
-    // archivedAt is undefined and sorts below any timestamp), so active
-    // projects never leak into this list. `order("desc")` yields
-    // newest-archived first.
+    const access = await requireOrganization(ctx)
+    if (access.membership.role !== "org:admin") {
+      throw new ConvexError({
+        code: "FORBIDDEN",
+        message: "Workspace admin access required.",
+      })
+    }
     const result = await ctx.db
       .query("projects")
-      .withIndex("by_owner_archived_updated", (q) =>
-        q.eq("ownerSubject", subject).gt("archivedAt", 0)
+      .withIndex("by_organization_archived_updated", (q) =>
+        q
+          .eq("organizationId", access.organization.organizationId)
+          .gt("archivedAt", 0)
       )
       .order("desc")
       .paginate(args.paginationOpts)
     return {
       ...result,
-      page: result.page.map((project) => summarize(project, "owner")),
+      page: result.page.map((project) => summarize(project, "org:admin")),
     }
   },
 })
@@ -197,8 +149,8 @@ export const listArchived = query({
  * project's icon + color so the nav can render each project's own glyph, the
  * caller's role (so the sidebar can offer the right per-project actions), and a
  * single `openCount` (todo + in-progress) for an at-a-glance badge. It still
- * omits the full count breakdown, so the payload stays small. Includes shared
- * projects so collaborators see them in the sidebar.
+ * omits the full count breakdown, so the payload stays small. Every project in
+ * the active Organization is available to its members.
  */
 export const names = query({
   args: {},
@@ -208,13 +160,12 @@ export const names = query({
       name: v.string(),
       icon: v.optional(v.string()),
       color: v.optional(v.string()),
-      role: v.union(v.literal("owner"), v.literal("editor")),
+      role: v.union(v.literal("org:admin"), v.literal("org:member")),
       openCount: v.number(),
     })
   ),
   handler: async (ctx) => {
-    const { subject } = await actor(ctx)
-    const projects = await accessibleProjects(ctx, subject)
+    const projects = await accessibleProjects(ctx)
     return projects.map(({ project, role }) => {
       const counts = projectCounts(project)
       return {
@@ -233,20 +184,14 @@ export const get = query({
   args: { projectId: v.id("projects") },
   returns: v.union(v.null(), projectSummary),
   handler: async (ctx, args) => {
-    const { subject } = await actor(ctx)
+    const access = await requireOrganization(ctx)
     const project = await ctx.db.get(args.projectId)
-    if (!project) return null
-    if (project.ownerSubject === subject) {
-      return summarize(project, "owner")
-    }
-    const membership = await ctx.db
-      .query("projectMembers")
-      .withIndex("by_project_member", (q) =>
-        q.eq("projectId", args.projectId).eq("subject", subject)
-      )
-      .unique()
-    if (!membership) return null
-    return summarize(project, "editor")
+    if (
+      !project ||
+      project.organizationId !== access.organization.organizationId
+    )
+      return null
+    return summarize(project, access.membership.role)
   },
 })
 
@@ -258,11 +203,10 @@ export const create = mutation({
   },
   returns: v.id("projects"),
   handler: async (ctx, args) => {
-    const { subject, name } = await actor(ctx)
+    const access = await requireOrganization(ctx)
     const now = Date.now()
     return await ctx.db.insert("projects", {
-      ownerSubject: subject,
-      ownerName: name,
+      organizationId: access.organization.organizationId,
       name: cleanName(args.name),
       icon: args.icon === undefined ? undefined : cleanIcon(args.icon),
       color: args.color === undefined ? undefined : cleanColor(args.color),
@@ -314,14 +258,13 @@ export const update = mutation({
 
 /**
  * Archive a project: hide it from every active list (dashboard + sidebar) for
- * the owner and all collaborators. The project and its tasks are untouched, so
- * it can be unarchived later. Owner-only; a no-op if already archived.
+ * every member. The project and tasks are untouched. Admin-only.
  */
 export const archive = mutation({
   args: { projectId: v.id("projects") },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const { project } = await requireProjectOwner(ctx, args.projectId)
+    const { project } = await requireProjectAdmin(ctx, args.projectId)
     if (project.archivedAt !== undefined) return null
     const now = Date.now()
     await ctx.db.patch(args.projectId, { archivedAt: now, updatedAt: now })
@@ -330,14 +273,14 @@ export const archive = mutation({
 })
 
 /**
- * Unarchive a project, restoring it to the active lists. Owner-only; a no-op if
+ * Unarchive a project, restoring it to the active lists. Admin-only; a no-op if
  * the project isn't archived.
  */
 export const unarchive = mutation({
   args: { projectId: v.id("projects") },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const { project } = await requireProjectOwner(ctx, args.projectId)
+    const { project } = await requireProjectAdmin(ctx, args.projectId)
     if (project.archivedAt === undefined) return null
     // Patching a field to `undefined` removes it, marking the project active.
     await ctx.db.patch(args.projectId, {
@@ -352,21 +295,7 @@ export const remove = mutation({
   args: { projectId: v.id("projects") },
   returns: v.null(),
   handler: async (ctx, args) => {
-    // Only the owner can delete a project.
-    await requireProjectOwner(ctx, args.projectId)
-
-    // Remove this project's membership + invite rows inline (bounded, few rows)
-    // so it disappears from collaborators' dashboards and the link stops working.
-    const members = await ctx.db
-      .query("projectMembers")
-      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
-      .take(MAX_PROJECTS)
-    for (const member of members) await ctx.db.delete(member._id)
-    const invites = await ctx.db
-      .query("projectInvites")
-      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
-      .take(MAX_PROJECTS)
-    for (const invite of invites) await ctx.db.delete(invite._id)
+    const { actor } = await requireProjectAdmin(ctx, args.projectId)
 
     // Remove the project immediately so it disappears from the dashboard, then
     // delete its tasks in background batches. Batching keeps each transaction
@@ -375,6 +304,7 @@ export const remove = mutation({
     await ctx.db.delete(args.projectId)
     await ctx.scheduler.runAfter(0, internal.projects.purgeProjectData, {
       projectId: args.projectId,
+      actor: { userId: actor.userId, name: actor.name },
     })
     return null
   },
@@ -389,7 +319,10 @@ const PURGE_BATCH = 100
  * within its document limits.
  */
 export const purgeProjectData = internalMutation({
-  args: { projectId: v.id("projects") },
+  args: {
+    projectId: v.id("projects"),
+    actor: v.object({ userId: v.string(), name: v.string() }),
+  },
   returns: v.null(),
   handler: async (ctx, args) => {
     const tasks = await ctx.db
@@ -399,6 +332,7 @@ export const purgeProjectData = internalMutation({
       )
       .take(PURGE_BATCH)
     for (const task of tasks) {
+      await markTaskEntriesRemoved(ctx, task, args.actor, "project_deleted")
       await ctx.db.delete(task._id)
       await ctx.scheduler.runAfter(0, internal.tasks.purgeTaskData, {
         taskId: task._id,

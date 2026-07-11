@@ -20,6 +20,8 @@
     "typecheck": "turbo run typecheck"
   },
   "devDependencies": {
+    "prettier": "^3.9.4",
+    "prettier-plugin-tailwindcss": "^0.8.0",
     "turbo": "^2.10.2"
   }
 }

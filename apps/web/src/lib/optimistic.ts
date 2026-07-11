@@ -184,6 +184,7 @@ export function createTaskOptimistic(projectId: Id<"projects">) {
       dueDate?: string
       assigneeSubject?: string
       assigneeName?: string
+      sprint?: "backlog" | "current" | "upcoming"
     }
   ) => {
     const tasks = store.getQuery(api.tasks.list, { projectId })
@@ -199,6 +200,9 @@ export function createTaskOptimistic(projectId: Id<"projects">) {
         status: "todo",
         assigneeSubject: args.assigneeSubject,
         assigneeName: args.assigneeName,
+        currentSprintId: undefined,
+        upcomingSprintId: undefined,
+        completedAt: undefined,
         position: now,
         createdAt: now,
         updatedAt: now,
@@ -269,9 +273,7 @@ export function updateTaskOptimistic(projectId: Id<"projects">) {
       store.setQuery(
         api.tasks.list,
         { projectId },
-        tasks.map((task) =>
-          task._id === args.taskId ? applyEdit(task) : task
-        )
+        tasks.map((task) => (task._id === args.taskId ? applyEdit(task) : task))
       )
     }
     patchListAllTasks(store, args.taskId, (task) => applyEdit(task))
@@ -374,7 +376,9 @@ export function changeProjectTaskOptimistic(sourceProjectId: Id<"projects">) {
       // Keep the cross-project Tasks board in sync: update project fields or
       // drop the card if the destination isn't in the names cache yet.
       const names = store.getQuery(api.projects.names, {})
-      const dest = names?.find((project) => project._id === destinationProjectId)
+      const dest = names?.find(
+        (project) => project._id === destinationProjectId
+      )
       patchListAllTasks(store, args.taskId, (task) => ({
         ...task,
         projectId: destinationProjectId,
@@ -408,8 +412,9 @@ export function createProjectOptimistic(
     todoCount: 0,
     inProgressCount: 0,
     doneCount: 0,
-    // The creator is always the owner of their freshly created project.
-    role: "owner",
+    role:
+      store.getQuery(api.organizations.current, {})?.membership.role ??
+      "org:member",
   }
   store.setQuery(api.projects.list, {}, [temp, ...list])
 }
@@ -450,7 +455,9 @@ function removeFromArchivedPages(
   projectId: Id<"projects">
 ): ProjectSummary | undefined {
   let removed: ProjectSummary | undefined
-  for (const { args, value } of store.getAllQueries(api.projects.listArchived)) {
+  for (const { args, value } of store.getAllQueries(
+    api.projects.listArchived
+  )) {
     if (!value) continue
     const found = value.page.find((project) => project._id === projectId)
     if (found) removed = found

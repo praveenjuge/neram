@@ -1,35 +1,19 @@
 /// <reference types="vite/client" />
-import { convexTest } from "convex-test"
 import type { FunctionReturnType } from "convex/server"
 import { expect, test } from "vitest"
 
 import { api } from "./_generated/api"
-import schema from "./schema"
-
-type ArchivedResult = FunctionReturnType<typeof api.projects.listArchived>
+import { organizationFixture } from "../test-utils/organization"
 
 const modules = import.meta.glob("./**/*.ts")
+
+type ArchivedResult = FunctionReturnType<typeof api.projects.listArchived>
 
 // listArchived is paginated; grab a generous first page in tests.
 const firstPage = { paginationOpts: { numItems: 50, cursor: null } }
 
-function setup() {
-  const t = convexTest(schema, modules)
-  const alice = t.withIdentity({
-    name: "Alice",
-    subject: "alice",
-    tokenIdentifier: "alice",
-  })
-  const bob = t.withIdentity({
-    name: "Bob",
-    subject: "bob",
-    tokenIdentifier: "bob",
-  })
-  return { t, alice, bob }
-}
-
 test("archiving hides a project from the active lists and shows it in listArchived", async () => {
-  const { alice } = setup()
+  const { alice } = await organizationFixture(modules)
   const projectId = await alice.mutation(api.projects.create, {
     name: "Roadmap",
   })
@@ -47,7 +31,7 @@ test("archiving hides a project from the active lists and shows it in listArchiv
 })
 
 test("unarchiving restores a project to the active lists", async () => {
-  const { alice } = setup()
+  const { alice } = await organizationFixture(modules)
   const projectId = await alice.mutation(api.projects.create, {
     name: "Roadmap",
   })
@@ -59,31 +43,25 @@ test("unarchiving restores a project to the active lists", async () => {
   expect(archived.page).toHaveLength(0)
 })
 
-test("archived projects disappear from a collaborator's lists too", async () => {
-  const { alice, bob } = setup()
+test("archived projects disappear for every Organization member", async () => {
+  const { alice, bob } = await organizationFixture(modules)
   const projectId = await alice.mutation(api.projects.create, {
     name: "Roadmap",
   })
-  const token = await alice.mutation(api.invites.ensure, { projectId })
-  await bob.mutation(api.invites.accept, { token })
-
   await alice.mutation(api.projects.archive, { projectId })
 
-  // The collaborator no longer sees the archived project on their dashboard,
-  // and it never shows on their Archived page (archiving is owner-scoped).
+  // Members no longer see it on active boards and cannot inspect admin archive.
   expect(await bob.query(api.projects.list, {})).toHaveLength(0)
-  const bobArchived = await bob.query(api.projects.listArchived, firstPage)
-  expect(bobArchived.page).toHaveLength(0)
+  await expect(bob.query(api.projects.listArchived, firstPage)).rejects.toThrow(
+    '"code":"FORBIDDEN"'
+  )
 })
 
-test("only the owner can archive or unarchive", async () => {
-  const { alice, bob } = setup()
+test("only Organization admins can archive or unarchive", async () => {
+  const { alice, bob } = await organizationFixture(modules)
   const projectId = await alice.mutation(api.projects.create, {
     name: "Roadmap",
   })
-  const token = await alice.mutation(api.invites.ensure, { projectId })
-  await bob.mutation(api.invites.accept, { token })
-
   await expect(
     bob.mutation(api.projects.archive, { projectId })
   ).rejects.toThrow()
@@ -93,7 +71,7 @@ test("only the owner can archive or unarchive", async () => {
 })
 
 test("listArchived returns an archived project even behind many newer active projects", async () => {
-  const { alice } = setup()
+  const { alice } = await organizationFixture(modules)
 
   // Archive a project first, so its archivedAt/updatedAt is the oldest.
   const archivedId = await alice.mutation(api.projects.create, {
@@ -115,7 +93,7 @@ test("listArchived returns an archived project even behind many newer active pro
 })
 
 test("listArchived paginates across every archived project", async () => {
-  const { alice } = setup()
+  const { alice } = await organizationFixture(modules)
 
   // Archive several projects so more than one page is needed.
   for (let i = 0; i < 5; i++) {

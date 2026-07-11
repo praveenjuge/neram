@@ -1,7 +1,7 @@
 import { ConvexError, v } from "convex/values"
 
 import { query } from "./_generated/server"
-import { projectCounts } from "./model"
+import { projectCounts, requireOrganization } from "./model"
 import { accessibleProjects } from "./projects"
 
 /**
@@ -18,10 +18,14 @@ export const status = query({
       name: v.optional(v.string()),
       email: v.optional(v.string()),
     }),
+    organization: v.object({
+      organizationId: v.string(),
+      slug: v.string(),
+      name: v.string(),
+      role: v.union(v.literal("org:admin"), v.literal("org:member")),
+    }),
     workspace: v.object({
       projects: v.number(),
-      ownedProjects: v.number(),
-      sharedProjects: v.number(),
       openTasks: v.number(),
     }),
   }),
@@ -33,14 +37,10 @@ export const status = query({
         message: "Sign in required.",
       })
     }
-    // tokenIdentifier is the canonical stable identity key used everywhere else.
-    const projects = await accessibleProjects(ctx, identity.tokenIdentifier)
-    let ownedProjects = 0
-    let sharedProjects = 0
+    const access = await requireOrganization(ctx)
+    const projects = await accessibleProjects(ctx)
     let openTasks = 0
-    for (const { project, role } of projects) {
-      if (role === "owner") ownedProjects += 1
-      else sharedProjects += 1
+    for (const { project } of projects) {
       const counts = projectCounts(project)
       openTasks += counts.todoCount + counts.inProgressCount
     }
@@ -49,10 +49,14 @@ export const status = query({
         name: identity.name,
         email: identity.email,
       },
+      organization: {
+        organizationId: access.organization.organizationId,
+        slug: access.organization.slug,
+        name: access.organization.name,
+        role: access.membership.role,
+      },
       workspace: {
         projects: projects.length,
-        ownedProjects,
-        sharedProjects,
         openTasks,
       },
     }

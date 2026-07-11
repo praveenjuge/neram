@@ -1,7 +1,5 @@
-import { useQuery } from "convex-helpers/react/cache"
+import { useUser } from "@clerk/nextjs"
 
-import { api } from "@neram/convex/api"
-import type { Id } from "@neram/convex/data-model"
 import { Label } from "@/components/ui/label"
 import {
   Select,
@@ -11,25 +9,24 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { UserAvatar } from "@/components/user-avatar"
+import { useOrganizationMembers } from "@/lib/use-organization-members"
 
 // Radix Select items can't use an empty-string value, so the "no one" option
 // gets its own sentinel that the forms translate back to "no assignee".
 export const UNASSIGNED = "unassigned"
 
 /**
- * An optional assignee picker listing everyone on the project (owner + members)
+ * An optional assignee picker listing everyone in the active Organization.
  * plus an "Unassigned" option. `value` is a member subject or `UNASSIGNED`;
  * `onChange` reports the chosen subject and its display name (null when cleared)
  * so the caller can persist both for the optimistic UI.
  */
 export function AssigneeSelect({
-  projectId,
   value,
   onChange,
   id,
   enabled = true,
 }: {
-  projectId: Id<"projects">
   value: string
   onChange: (subject: string, name: string | null) => void
   id: string
@@ -37,10 +34,8 @@ export function AssigneeSelect({
 }) {
   // Only subscribe while the form is open so closed dialogs don't hold a
   // members subscription open.
-  const members = useQuery(
-    api.members.list,
-    enabled ? { projectId } : "skip"
-  )
+  const { members } = useOrganizationMembers(enabled)
+  const { user } = useUser()
 
   return (
     <div className="grid gap-2">
@@ -51,7 +46,7 @@ export function AssigneeSelect({
             onChange(UNASSIGNED, null)
             return
           }
-          const member = members?.find((m) => m.subject === next)
+          const member = members.find((candidate) => candidate.userId === next)
           onChange(next, member?.displayName ?? null)
         }}
         value={value}
@@ -70,15 +65,15 @@ export function AssigneeSelect({
           >
             Unassigned
           </SelectItem>
-          {members?.map((member) => (
+          {members.map((member) => (
             <SelectItem
               data-testid="assignee-option"
-              key={member.subject}
-              value={member.subject}
+              key={member.userId}
+              value={member.userId}
             >
               <UserAvatar className="size-5" name={member.displayName} />
               {member.displayName}
-              {member.isYou ? " (you)" : ""}
+              {member.userId === user?.id ? " (you)" : ""}
             </SelectItem>
           ))}
         </SelectContent>
