@@ -285,16 +285,23 @@ export const scheduled = internalMutation({
   args: { organizationId: v.string(), sprintId: v.id("sprints") },
   returns: v.null(),
   handler: async (ctx, args) => {
+    const now = Date.now()
     const settings = await ctx.db
       .query("organizationSettings")
       .withIndex("by_organization", (q) =>
         q.eq("organizationId", args.organizationId)
       )
       .unique()
-    if (settings?.currentSprintId === args.sprintId) {
+    const sprint = await ctx.db.get(args.sprintId)
+    if (
+      settings?.currentSprintId === args.sprintId &&
+      sprint?.state === "current" &&
+      sprint.endsAt <= now
+    ) {
       await startRollover(ctx, {
         organizationId: args.organizationId,
         early: false,
+        now,
       })
     }
     return null
