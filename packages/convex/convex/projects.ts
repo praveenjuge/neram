@@ -12,6 +12,7 @@ import {
   requireProjectAdmin,
   type ProjectRole,
 } from "./model"
+import { markTaskEntriesRemoved } from "./sprintModel"
 
 // Upper bound for how many projects a single dashboard / switcher load reads.
 // Keeps the query bounded as the table grows instead of an unbounded collect().
@@ -294,7 +295,7 @@ export const remove = mutation({
   args: { projectId: v.id("projects") },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await requireProjectAdmin(ctx, args.projectId)
+    const { actor } = await requireProjectAdmin(ctx, args.projectId)
 
     // Remove the project immediately so it disappears from the dashboard, then
     // delete its tasks in background batches. Batching keeps each transaction
@@ -303,6 +304,7 @@ export const remove = mutation({
     await ctx.db.delete(args.projectId)
     await ctx.scheduler.runAfter(0, internal.projects.purgeProjectData, {
       projectId: args.projectId,
+      actor: { userId: actor.userId, name: actor.name },
     })
     return null
   },
@@ -317,7 +319,10 @@ const PURGE_BATCH = 100
  * within its document limits.
  */
 export const purgeProjectData = internalMutation({
-  args: { projectId: v.id("projects") },
+  args: {
+    projectId: v.id("projects"),
+    actor: v.object({ userId: v.string(), name: v.string() }),
+  },
   returns: v.null(),
   handler: async (ctx, args) => {
     const tasks = await ctx.db
@@ -327,6 +332,7 @@ export const purgeProjectData = internalMutation({
       )
       .take(PURGE_BATCH)
     for (const task of tasks) {
+      await markTaskEntriesRemoved(ctx, task, args.actor, "project_deleted")
       await ctx.db.delete(task._id)
       await ctx.scheduler.runAfter(0, internal.tasks.purgeTaskData, {
         taskId: task._id,

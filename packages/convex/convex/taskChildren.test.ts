@@ -357,6 +357,7 @@ test("project deletion drains task children and stats in scheduled batches", asy
   const taskId = await alice.mutation(api.tasks.create, {
     projectId,
     title: "Ship",
+    sprint: "current",
   })
   await alice.mutation(api.subtasks.create, { taskId, title: "Child" })
   await alice.mutation(api.taskComments.create, {
@@ -365,12 +366,29 @@ test("project deletion drains task children and stats in scheduled batches", asy
     mentions: [],
   })
   await alice.mutation(api.projects.remove, { projectId })
-  await t.mutation(internal.projects.purgeProjectData, { projectId })
+  await t.mutation(internal.projects.purgeProjectData, {
+    projectId,
+    actor: { userId: "user_alice", name: "Alice" },
+  })
   await t.mutation(internal.tasks.purgeTaskData, { taskId })
   const remaining = await t.run(async (ctx) => ({
     subtasks: await ctx.db.query("subtasks").collect(),
     comments: await ctx.db.query("taskComments").collect(),
     stats: await ctx.db.query("taskStats").collect(),
+    sprintEntries: await ctx.db.query("sprintTaskEntries").collect(),
   }))
-  expect(remaining).toEqual({ subtasks: [], comments: [], stats: [] })
+  expect(remaining).toMatchObject({
+    subtasks: [],
+    comments: [],
+    stats: [],
+    sprintEntries: [
+      {
+        taskId,
+        removedByUserId: "user_alice",
+        removedByName: "Alice",
+        removalReason: "project_deleted",
+      },
+    ],
+  })
+  expect(remaining.sprintEntries[0]?.removedAt).toEqual(expect.any(Number))
 })
