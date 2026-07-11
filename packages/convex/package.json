@@ -25,7 +25,6 @@
   },
   "dependencies": {
     "@clerk/backend": "^3.11.3",
-    "@convex-dev/migrations": "^0.3.5",
     "@date-fns/tz": "^1.5.0",
     "convex": "^1.41.0",
     "convex-helpers": "^0.1.120",

@@ -62,48 +62,26 @@ export const organizationActivityType = v.union(
 
 export default defineSchema({
   projects: defineTable({
-    // Widening field for the Organization cutover. It becomes required after
-    // the production backfill and tenant-boundary verifier complete.
-    organizationId: v.optional(v.string()),
-    // Stores the authenticated owner's canonical identity (identity.tokenIdentifier).
-    ownerSubject: v.optional(v.string()),
-    // Denormalized owner display name, set on create. Old rows fall back to
-    // "Owner" in the member list since they predate this field.
-    ownerName: v.optional(v.string()),
+    organizationId: v.string(),
     name: v.string(),
     icon: v.optional(v.string()),
     color: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
-    // When set, the project is archived: it's hidden from every active list
-    // (dashboard + sidebar) and only surfaces on the owner's Archived page,
-    // where it can be unarchived or permanently deleted. Absent = active.
+    // When set, the project is hidden from active lists until restored.
     archivedAt: v.optional(v.number()),
     // Denormalized task counters, kept in sync by the task mutations.
     taskCount: v.number(),
     todoCount: v.number(),
     inProgressCount: v.number(),
     doneCount: v.number(),
-  })
-    .index("by_organization_archived_updated", [
-      "organizationId",
-      "archivedAt",
-      "updatedAt",
-    ])
-    // Partitions an owner's projects by archived state, then orders each
-    // partition by recency. Active projects (archivedAt unset) and archived
-    // projects (archivedAt set) each read from their own slice of the index, so
-    // neither can crowd the other out of a bounded read, and both stay ordered
-    // by updatedAt.
-    .index("by_owner_archived_updated", [
-      "ownerSubject",
-      "archivedAt",
-      "updatedAt",
-    ]),
+  }).index("by_organization_archived_updated", [
+    "organizationId",
+    "archivedAt",
+    "updatedAt",
+  ]),
   tasks: defineTable({
-    // Widening field; required in the narrowed Organization-only schema.
-    organizationId: v.optional(v.string()),
-    ownerSubject: v.optional(v.string()),
+    organizationId: v.string(),
     projectId: v.id("projects"),
     title: v.string(),
     description: v.optional(v.string()),
@@ -135,13 +113,6 @@ export default defineSchema({
       "upcomingSprintId",
       "position",
     ])
-    .index("by_owner_project_position", [
-      "ownerSubject",
-      "projectId",
-      "position",
-    ])
-    // Access/order key keyed only off the project, so a collaborator who does
-    // not know the owner's subject can still read and order the board.
     .index("by_project_position", ["projectId", "position"]),
   subtasks: defineTable({
     taskId: v.id("tasks"),
@@ -178,64 +149,6 @@ export default defineSchema({
   })
     .index("by_task", ["taskId"])
     .index("by_project_and_task", ["projectId", "taskId"]),
-  // Non-owner collaborators on a project. The owner is never stored here; their
-  // membership is implicit via projects.ownerSubject.
-  projectMembers: defineTable({
-    projectId: v.id("projects"),
-    subject: v.string(),
-    role: v.literal("editor"),
-    displayName: v.string(),
-    createdAt: v.number(),
-  })
-    .index("by_project", ["projectId"])
-    .index("by_member", ["subject"])
-    .index("by_project_member", ["projectId", "subject"]),
-  // One reusable, revocable invite link per project. Revoke = delete the row;
-  // regenerate = patch a fresh token (the old link stops resolving).
-  projectInvites: defineTable({
-    projectId: v.id("projects"),
-    token: v.string(),
-    createdBy: v.string(),
-    createdAt: v.number(),
-  })
-    .index("by_token", ["token"])
-    .index("by_project", ["projectId"]),
-  // Per-recipient fan-out feed. One row is written per member for each action,
-  // so each user reads only their own rows via by_subject_created.
-  activity: defineTable({
-    organizationId: v.optional(v.string()),
-    subject: v.string(),
-    actorSubject: v.string(),
-    actorName: v.string(),
-    projectId: v.id("projects"),
-    projectName: v.string(),
-    type: activityType,
-    taskTitle: v.optional(v.string()),
-    taskId: v.optional(v.id("tasks")),
-    commentId: v.optional(v.id("taskComments")),
-    commentExcerpt: v.optional(v.string()),
-    toStatus: v.optional(status),
-    // For task.assigned rows: who the task was assigned to. The feed compares
-    // assigneeSubject against the recipient (subject) to say "to you".
-    assigneeSubject: v.optional(v.string()),
-    assigneeName: v.optional(v.string()),
-    createdAt: v.number(),
-  })
-    .index("by_subject_created", ["subject", "createdAt"])
-    .index("by_organization_and_created_at", ["organizationId", "createdAt"]),
-
-  // Legacy per-user project recency rows still exist in deployed datasets even
-  // though the product no longer reads them. The migration inventories and
-  // purges them explicitly rather than leaving an undeclared orphan table.
-  projectWorkStates: defineTable({
-    organizationId: v.optional(v.string()),
-    subject: v.string(),
-    projectId: v.id("projects"),
-    lastWorkedAt: v.number(),
-  })
-    .index("by_project", ["projectId"])
-    .index("by_organization", ["organizationId"]),
-
   organizations: defineTable({
     organizationId: v.string(),
     slug: v.string(),
@@ -418,67 +331,4 @@ export default defineSchema({
   })
     .index("by_organization", ["organizationId"])
     .index("by_organization_and_status", ["organizationId", "status"]),
-
-  tenancyMigrationRuns: defineTable({
-    key: v.string(),
-    phase: v.union(
-      v.literal("inventoried"),
-      v.literal("provisioning"),
-      v.literal("provisioned"),
-      v.literal("backfilled"),
-      v.literal("verified"),
-      v.literal("canonical")
-    ),
-    expectedProjects: v.number(),
-    expectedTasks: v.number(),
-    expectedActivityRows: v.number(),
-    expectedLegacyMembers: v.number(),
-    expectedLegacyInvites: v.number(),
-    expectedLegacyWorkStates: v.optional(v.number()),
-    expectedSubtasks: v.optional(v.number()),
-    expectedComments: v.optional(v.number()),
-    expectedTaskStats: v.optional(v.number()),
-    expectedOrphanProjectMappings: v.optional(v.number()),
-    expectedCohorts: v.number(),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-    verifiedAt: v.optional(v.number()),
-  }).index("by_key", ["key"]),
-
-  tenancyMigrationCohorts: defineTable({
-    cohortKey: v.string(),
-    ownerSubject: v.string(),
-    ownerUserId: v.string(),
-    ownerDisplayName: v.string(),
-    ordinalForOwner: v.number(),
-    organizationId: v.optional(v.string()),
-    organizationSlug: v.optional(v.string()),
-    organizationName: v.optional(v.string()),
-    provisionedAt: v.optional(v.number()),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_cohort_key", ["cohortKey"])
-    .index("by_owner_user_id", ["ownerUserId"]),
-
-  tenancyMigrationCohortMembers: defineTable({
-    cohortKey: v.string(),
-    subject: v.string(),
-    userId: v.string(),
-    role: organizationRole,
-    displayName: v.string(),
-    createdAt: v.number(),
-  })
-    .index("by_cohort_key", ["cohortKey"])
-    .index("by_user_id", ["userId"]),
-
-  tenancyProjectMappings: defineTable({
-    projectId: v.id("projects"),
-    cohortKey: v.string(),
-    organizationId: v.optional(v.string()),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_project", ["projectId"])
-    .index("by_cohort_key", ["cohortKey"]),
 })

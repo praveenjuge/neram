@@ -100,18 +100,6 @@ export const purgeWorkspace = internalMutation({
         .take(BATCH_SIZE)
       for (const row of rows) await ctx.db.delete(row._id)
       if (rows.length === BATCH_SIZE) return await reschedule(ctx, job._id)
-      await advance(ctx, job._id, "activity")
-      return null
-    }
-    if (job.phase === "activity") {
-      const rows = await ctx.db
-        .query("activity")
-        .withIndex("by_organization_and_created_at", (q) =>
-          q.eq("organizationId", job.organizationId)
-        )
-        .take(BATCH_SIZE)
-      for (const row of rows) await ctx.db.delete(row._id)
-      if (rows.length === BATCH_SIZE) return await reschedule(ctx, job._id)
       await advance(ctx, job._id, "sprintEntries")
       return null
     }
@@ -151,10 +139,7 @@ export const purgeWorkspace = internalMutation({
         ])
         for (const subtask of subtasks) await ctx.db.delete(subtask._id)
         for (const comment of comments) await ctx.db.delete(comment._id)
-        if (
-          subtasks.length === BATCH_SIZE ||
-          comments.length === BATCH_SIZE
-        ) {
+        if (subtasks.length === BATCH_SIZE || comments.length === BATCH_SIZE) {
           return await reschedule(ctx, job._id)
         }
         if (stats) await ctx.db.delete(stats._id)
@@ -171,22 +156,7 @@ export const purgeWorkspace = internalMutation({
           q.eq("organizationId", job.organizationId)
         )
         .take(20)
-      for (const project of rows) {
-        const members = await ctx.db
-          .query("projectMembers")
-          .withIndex("by_project", (q) => q.eq("projectId", project._id))
-          .take(BATCH_SIZE)
-        for (const member of members) await ctx.db.delete(member._id)
-        const invites = await ctx.db
-          .query("projectInvites")
-          .withIndex("by_project", (q) => q.eq("projectId", project._id))
-          .take(BATCH_SIZE)
-        for (const invite of invites) await ctx.db.delete(invite._id)
-        if (members.length === BATCH_SIZE || invites.length === BATCH_SIZE) {
-          return await reschedule(ctx, job._id)
-        }
-        await ctx.db.delete(project._id)
-      }
+      for (const project of rows) await ctx.db.delete(project._id)
       if (rows.length === 20) return await reschedule(ctx, job._id)
       await advance(ctx, job._id, "sprintJobs")
       return null
@@ -223,18 +193,6 @@ export const purgeWorkspace = internalMutation({
         )
         .unique()
       if (row) await ctx.db.delete(row._id)
-      await advance(ctx, job._id, "workStates")
-      return null
-    }
-    if (job.phase === "workStates") {
-      const rows = await ctx.db
-        .query("projectWorkStates")
-        .withIndex("by_organization", (q) =>
-          q.eq("organizationId", job.organizationId)
-        )
-        .take(BATCH_SIZE)
-      for (const row of rows) await ctx.db.delete(row._id)
-      if (rows.length === BATCH_SIZE) return await reschedule(ctx, job._id)
       await advance(ctx, job._id, "members")
       return null
     }
