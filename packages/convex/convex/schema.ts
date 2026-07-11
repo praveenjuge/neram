@@ -113,6 +113,12 @@ export default defineSchema({
       "upcomingSprintId",
       "position",
     ])
+    .index("by_organization_and_backlog", [
+      "organizationId",
+      "currentSprintId",
+      "upcomingSprintId",
+      "position",
+    ])
     .index("by_project_position", ["projectId", "position"]),
   subtasks: defineTable({
     taskId: v.id("tasks"),

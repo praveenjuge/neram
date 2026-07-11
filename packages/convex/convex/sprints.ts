@@ -138,16 +138,8 @@ async function sprintTask(
 
 async function tasksWithProjects(
   ctx: Parameters<typeof requireOrganization>[0],
-  organizationId: string,
-  filter: (taskDoc: Doc<"tasks">) => boolean
+  rows: Array<Doc<"tasks">>
 ) {
-  const rows = await ctx.db
-    .query("tasks")
-    .withIndex("by_organization_and_updated_at", (q) =>
-      q.eq("organizationId", organizationId)
-    )
-    .order("desc")
-    .take(MAX_SPRINT_TASKS + 1)
   if (rows.length > MAX_SPRINT_TASKS) {
     throw new ConvexError({
       code: "TASK_LIMIT",
@@ -157,7 +149,6 @@ async function tasksWithProjects(
   const projects = new Map<string, Doc<"projects">>()
   const result = []
   for (const row of rows) {
-    if (!filter(row)) continue
     let project = projects.get(row.projectId)
     if (!project) {
       project = (await ctx.db.get(row.projectId)) ?? undefined
@@ -168,6 +159,48 @@ async function tasksWithProjects(
     }
   }
   return result
+}
+
+async function currentTasks(
+  ctx: Parameters<typeof requireOrganization>[0],
+  organizationId: string,
+  sprintId: Doc<"sprints">["_id"]
+) {
+  return await ctx.db
+    .query("tasks")
+    .withIndex("by_organization_and_current_sprint", (q) =>
+      q.eq("organizationId", organizationId).eq("currentSprintId", sprintId)
+    )
+    .take(MAX_SPRINT_TASKS + 1)
+}
+
+async function upcomingTasks(
+  ctx: Parameters<typeof requireOrganization>[0],
+  organizationId: string,
+  sprintId: Doc<"sprints">["_id"]
+) {
+  return await ctx.db
+    .query("tasks")
+    .withIndex("by_organization_and_upcoming_sprint", (q) =>
+      q.eq("organizationId", organizationId).eq("upcomingSprintId", sprintId)
+    )
+    .take(MAX_SPRINT_TASKS + 1)
+}
+
+async function backlogTasks(
+  ctx: Parameters<typeof requireOrganization>[0],
+  organizationId: string
+) {
+  const rows = await ctx.db
+    .query("tasks")
+    .withIndex("by_organization_and_backlog", (q) =>
+      q
+        .eq("organizationId", organizationId)
+        .eq("currentSprintId", undefined)
+        .eq("upcomingSprintId", undefined)
+    )
+    .take(MAX_SPRINT_TASKS + 1)
+  return rows
 }
 
 export const current = query({
@@ -186,8 +219,11 @@ export const current = query({
     if (!currentSprint) return null
     const tasks = await tasksWithProjects(
       ctx,
-      access.organization.organizationId,
-      (row) => row.currentSprintId === currentSprint._id
+      await currentTasks(
+        ctx,
+        access.organization.organizationId,
+        currentSprint._id
+      )
     )
     return { sprint: currentSprint, tasks }
   },
@@ -200,9 +236,7 @@ export const backlog = query({
     const access = await requireOrganization(ctx)
     return await tasksWithProjects(
       ctx,
-      access.organization.organizationId,
-      (row) =>
-        row.currentSprintId === undefined && row.upcomingSprintId === undefined
+      await backlogTasks(ctx, access.organization.organizationId)
     )
   },
 })
@@ -223,8 +257,11 @@ export const upcoming = query({
     if (!upcomingSprint) return null
     const tasks = await tasksWithProjects(
       ctx,
-      access.organization.organizationId,
-      (row) => row.upcomingSprintId === upcomingSprint._id
+      await upcomingTasks(
+        ctx,
+        access.organization.organizationId,
+        upcomingSprint._id
+      )
     )
     return { sprint: upcomingSprint, tasks }
   },
