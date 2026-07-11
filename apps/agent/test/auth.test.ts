@@ -1,6 +1,6 @@
 import { expect, test } from "vitest"
 
-import { requireOrganizationClaims } from "../src/auth.js"
+import { requireOrganizationClaims } from "../src/session.js"
 
 function token(payload: Record<string, unknown>) {
   return `header.${Buffer.from(JSON.stringify(payload)).toString("base64url")}.signature`

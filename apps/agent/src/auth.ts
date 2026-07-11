@@ -10,6 +10,9 @@ import * as z from "zod/v3"
 
 import { AgentError, createConvexApi, type NeramApi } from "./agent.js"
 import type { RevocationResult } from "./format.js"
+import { requireOrganizationClaims } from "./session.js"
+
+export { claims, requireOrganizationClaims } from "./session.js"
 
 const appDir = join(homedir(), ".config", "neram")
 const credentialsFile = join(appDir, "credentials.json")
@@ -349,31 +352,4 @@ export async function logout(): Promise<{
   await clearSession()
   // Cached public config (config.json) is intentionally kept for the next login.
   return { revocation, configRetained: true }
-}
-
-export function claims(idToken: string) {
-  const [, payload] = idToken.split(".")
-  if (!payload) throw new AgentError("AUTH_FAILED", "Invalid id_token.")
-  return JSON.parse(
-    Buffer.from(payload, "base64url").toString("utf8")
-  ) as Record<string, unknown>
-}
-
-export function requireOrganizationClaims(idToken: string) {
-  const user = claims(idToken)
-  if (
-    typeof user.org_id !== "string" ||
-    typeof user.org_slug !== "string" ||
-    (user.org_role !== "org:admin" && user.org_role !== "org:member")
-  ) {
-    throw new AgentError(
-      "ORGANIZATION_REQUIRED",
-      "Choose a Neram workspace during authorization."
-    )
-  }
-  return user as Record<string, unknown> & {
-    org_id: string
-    org_slug: string
-    org_role: "org:admin" | "org:member"
-  }
 }

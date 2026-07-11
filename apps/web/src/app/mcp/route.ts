@@ -1,6 +1,6 @@
 import { createConvexApi } from "neram"
-import { requireOrganizationClaims } from "neram/auth"
 import { handleFetchMcp } from "neram/mcp"
+import { requireOrganizationClaims } from "neram/session"
 
 const corsHeaders = {
   "access-control-allow-headers": "authorization, content-type, mcp-session-id",

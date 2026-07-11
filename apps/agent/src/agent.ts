@@ -1,6 +1,5 @@
 import { ConvexHttpClient } from "convex/browser"
 import { anyApi } from "convex/server"
-import { ConvexError } from "convex/values"
 import * as z from "zod/v3"
 
 import {
@@ -8,7 +7,6 @@ import {
   commentSegmentSchema,
   projectRefSchema,
   schemas,
-  statusSchema,
   taskRefSchema,
 } from "./schemas.js"
 import {
@@ -16,6 +14,22 @@ import {
   createPlanningTools,
   type PlanningApi,
 } from "./planning.js"
+import type {
+  Activity,
+  CommentPage,
+  Mention,
+  Project,
+  ProjectMember,
+  Status,
+  Subtask,
+  Task,
+  TaskComment,
+  WorkspaceStatus,
+} from "./agent-types.js"
+import { AgentError } from "./errors.js"
+
+export { AgentError, toAgentError } from "./errors.js"
+export type { WorkspaceStatus } from "./agent-types.js"
 
 export {
   outputSchemas,
@@ -26,107 +40,6 @@ export {
 } from "./schemas.js"
 
 const api = anyApi
-
-type Status = z.infer<typeof statusSchema>
-type Project = {
-  _id: string
-  name: string
-  role: "owner" | "editor"
-  taskCount: number
-  todoCount: number
-  inProgressCount: number
-  doneCount: number
-  updatedAt: number
-}
-type Task = {
-  _id: string
-  projectId: string
-  title: string
-  description?: string
-  dueDate?: string
-  status: Status
-  assigneeSubject?: string
-  assigneeName?: string
-  totalSubtasks: number
-  completedSubtasks: number
-  activeCommentCount: number
-  updatedAt: number
-}
-type ProjectMember = {
-  subject: string
-  displayName: string
-  role: "org:admin" | "org:member"
-}
-type Subtask = {
-  _id: string
-  taskId: string
-  title: string
-  completed: boolean
-  position: number
-  createdAt: number
-  updatedAt: number
-}
-type Mention = { start: number; length: number; subject: string; label: string }
-type TaskComment = {
-  _id: string
-  taskId: string
-  parentCommentId?: string
-  rootCommentId?: string
-  authorSubject: string
-  authorName: string
-  body: string
-  mentions: Mention[]
-  createdAt: number
-  updatedAt: number
-  deletedAt?: number
-}
-type CommentPage = {
-  page: TaskComment[]
-  isDone: boolean
-  continueCursor: string
-}
-type Activity = {
-  actorName: string
-  projectName: string
-  type: string
-  taskTitle?: string
-  taskId?: string
-  commentId?: string
-  commentExcerpt?: string
-  toStatus?: Status
-  createdAt: number
-}
-
-export type WorkspaceStatus = {
-  identity: { name?: string; email?: string }
-  organization: {
-    organizationId: string
-    slug: string
-    name: string
-    role: "org:admin" | "org:member"
-  }
-  workspace: {
-    projects: number
-    ownedProjects: number
-    sharedProjects: number
-    openTasks: number
-  }
-}
-
-export class AgentError extends Error {
-  readonly code: string
-  readonly details?: Record<string, unknown>
-
-  constructor(
-    code: string,
-    message: string,
-    details?: Record<string, unknown>
-  ) {
-    super(message)
-    this.code = code
-    this.details = details
-  }
-}
 
 function iso(value?: number) {
   return value ? new Date(value).toISOString() : undefined
@@ -258,7 +171,9 @@ export type NeramApi = PlanningApi & {
   projectMembers(projectId: string): Promise<ProjectMember[]>
   assignedTasks(): Promise<Array<Task & { projectName: string }>>
   activity(limit: number): Promise<Activity[]>
-  createTask(args: z.input<typeof schemas.capture_task> & { projectId: string }): Promise<string>
+  createTask(
+    args: z.input<typeof schemas.capture_task> & { projectId: string }
+  ): Promise<string>
   updateTask(args: {
     taskId: string
     title?: string
@@ -282,7 +197,10 @@ export type NeramApi = PlanningApi & {
   subtasks(taskId: string, hideCompleted?: boolean): Promise<Subtask[]>
   createSubtask(args: { taskId: string; title: string }): Promise<string>
   renameSubtask(args: { subtaskId: string; title: string }): Promise<void>
-  setSubtaskCompleted(args: { subtaskId: string; completed: boolean }): Promise<void>
+  setSubtaskCompleted(args: {
+    subtaskId: string
+    completed: boolean
+  }): Promise<void>
   reorderSubtask(args: {
     subtaskId: string
     beforeSubtaskId?: string
@@ -295,12 +213,33 @@ export type NeramApi = PlanningApi & {
     cursor: string | null
     pageSize: number
   }): Promise<CommentPage>
-  createComment(args: { taskId: string; body: string; mentions: Mention[] }): Promise<string>
-  replyToComment(args: { commentId: string; body: string; mentions: Mention[] }): Promise<string>
-  editComment(args: { commentId: string; body: string; mentions: Mention[] }): Promise<void>
+  createComment(args: {
+    taskId: string
+    body: string
+    mentions: Mention[]
+  }): Promise<string>
+  replyToComment(args: {
+    commentId: string
+    body: string
+    mentions: Mention[]
+  }): Promise<string>
+  editComment(args: {
+    commentId: string
+    body: string
+    mentions: Mention[]
+  }): Promise<void>
   removeComment(commentId: string): Promise<void>
-  createProject(args: { name: string; icon?: string; color?: string }): Promise<string>
-  updateProject(args: { projectId: string; name?: string; icon?: string; color?: string }): Promise<void>
+  createProject(args: {
+    name: string
+    icon?: string
+    color?: string
+  }): Promise<string>
+  updateProject(args: {
+    projectId: string
+    name?: string
+    icon?: string
+    color?: string
+  }): Promise<void>
   removeProject(projectId: string): Promise<void>
   status(): Promise<WorkspaceStatus>
 }
@@ -308,7 +247,10 @@ export type NeramApi = PlanningApi & {
 /** A ready token string, or a provider resolved fresh on each request. */
 export type TokenProvider = string | (() => Promise<string>)
 
-export function createConvexApi(convexUrl: string, token: TokenProvider): NeramApi {
+export function createConvexApi(
+  convexUrl: string,
+  token: TokenProvider
+): NeramApi {
   const client = new ConvexHttpClient(convexUrl)
   const resolveToken = typeof token === "function" ? token : async () => token
   // Re-authenticate before every call so a long-lived client (the MCP server)
@@ -316,17 +258,29 @@ export function createConvexApi(convexUrl: string, token: TokenProvider): NeramA
   async function auth() {
     client.setAuth(await resolveToken())
   }
-  async function query<T>(fn: unknown, args: Record<string, unknown>): Promise<T> {
+  async function query<T>(
+    fn: unknown,
+    args: Record<string, unknown>
+  ): Promise<T> {
     await auth()
     return client.query(fn as typeof api.projects.list, args) as Promise<T>
   }
-  async function mutation<T>(fn: unknown, args: Record<string, unknown>): Promise<T> {
+  async function mutation<T>(
+    fn: unknown,
+    args: Record<string, unknown>
+  ): Promise<T> {
     await auth()
     return client.mutation(fn as typeof api.tasks.create, args) as Promise<T>
   }
-  async function action<T>(fn: unknown, args: Record<string, unknown>): Promise<T> {
+  async function action<T>(
+    fn: unknown,
+    args: Record<string, unknown>
+  ): Promise<T> {
     await auth()
-    return client.action(fn as typeof api.organizationActions.create, args) as Promise<T>
+    return client.action(
+      fn as typeof api.organizationActions.create,
+      args
+    ) as Promise<T>
   }
   return {
     ...createPlanningApi(api, { query, mutation, action }),
@@ -334,18 +288,21 @@ export function createConvexApi(convexUrl: string, token: TokenProvider): NeramA
     tasks: (projectId) => query<Task[]>(api.tasks.list, { projectId }),
     task: (taskId) => query<Task | null>(api.tasks.get, { taskId }),
     projectMembers: async () =>
-      (await query<
-        Array<{
-          userId: string
-          displayName: string
-          role: "org:admin" | "org:member"
-        }>
-      >(api.organizations.members, {})).map((member) => ({
+      (
+        await query<
+          Array<{
+            userId: string
+            displayName: string
+            role: "org:admin" | "org:member"
+          }>
+        >(api.organizations.members, {})
+      ).map((member) => ({
         subject: member.userId,
         displayName: member.displayName,
         role: member.role,
       })),
-    assignedTasks: () => query<Array<Task & { projectName: string }>>(api.tasks.listAll, {}),
+    assignedTasks: () =>
+      query<Array<Task & { projectName: string }>>(api.tasks.listAll, {}),
     activity: async (limit) => {
       const page = await query<{ page: Activity[] }>(api.activity.list, {
         paginationOpts: { cursor: null, numItems: limit },
@@ -418,10 +375,13 @@ export function createTools(neram: NeramApi) {
       if (!found) throw new AgentError("NOT_FOUND", "Project not found.")
       return found
     }
-    if (!ref.project) throw new AgentError("VALIDATION", "Provide projectId or project.")
+    if (!ref.project)
+      throw new AgentError("VALIDATION", "Provide projectId or project.")
     const needle = ref.project.trim().toLowerCase()
     const exact = list.filter((p) => p.name.toLowerCase() === needle)
-    const matches = exact.length ? exact : list.filter((p) => p.name.toLowerCase().includes(needle))
+    const matches = exact.length
+      ? exact
+      : list.filter((p) => p.name.toLowerCase().includes(needle))
     if (matches.length === 1) return matches[0]
     if (matches.length > 1) {
       throw new AgentError("AMBIGUOUS", "Project name is ambiguous.", {
@@ -433,15 +393,22 @@ export function createTools(neram: NeramApi) {
   async function resolveTask(input: z.infer<typeof taskRefSchema>) {
     if (input.taskId) return input.taskId
     const project = await resolveProject(input)
-    if (!input.taskTitle) throw new AgentError("VALIDATION", "Provide taskId or taskTitle.")
+    if (!input.taskTitle)
+      throw new AgentError("VALIDATION", "Provide taskId or taskTitle.")
     const tasks = await neram.tasks(project._id)
     const needle = input.taskTitle.trim().toLowerCase()
     const exact = tasks.filter((t) => t.title.toLowerCase() === needle)
-    const matches = exact.length ? exact : tasks.filter((t) => t.title.toLowerCase().includes(needle))
+    const matches = exact.length
+      ? exact
+      : tasks.filter((t) => t.title.toLowerCase().includes(needle))
     if (matches.length === 1) return matches[0]._id
     if (matches.length > 1) {
       throw new AgentError("AMBIGUOUS", "Task title is ambiguous.", {
-        matches: matches.map((t) => ({ taskId: t._id, title: t.title, status: t.status })),
+        matches: matches.map((t) => ({
+          taskId: t._id,
+          title: t.title,
+          status: t.status,
+        })),
       })
     }
     throw new AgentError("NOT_FOUND", "Task not found.")
@@ -458,16 +425,28 @@ export function createTools(neram: NeramApi) {
       ])
       const selected = allProjects.slice(0, projectLimit)
       const boards = await Promise.all(selected.map((p) => neram.tasks(p._id)))
-      const openTasks = boards.flat().filter((t) => t.status !== "done").slice(0, 40)
+      const openTasks = boards
+        .flat()
+        .filter((t) => t.status !== "done")
+        .slice(0, 40)
       return {
         projects: allProjects.length,
-        assignedOpenTasks: assigned.filter((t) => t.status !== "done").slice(0, 20).map(compactTask),
+        assignedOpenTasks: assigned
+          .filter((t) => t.status !== "done")
+          .slice(0, 20)
+          .map(compactTask),
         openTasks: openTasks.map(compactTask),
         recentActivity: recent.map(compactActivity),
         suggestedNextActions: openTasks
           .filter((t) => t.status === "inProgress" || t.dueDate)
           .slice(0, 8)
-          .map((t) => ({ taskId: t._id, projectId: t.projectId, title: t.title, status: t.status, dueDate: t.dueDate })),
+          .map((t) => ({
+            taskId: t._id,
+            projectId: t.projectId,
+            title: t.title,
+            status: t.status,
+            dueDate: t.dueDate,
+          })),
       }
     },
     async capture_task(raw: z.input<typeof schemas.capture_task>) {
@@ -537,8 +516,13 @@ export function createTools(neram: NeramApi) {
       const input = schemas.list_tasks.parse(raw)
       const project = await resolveProject(input)
       const tasks = await neram.tasks(project._id)
-      const filtered = input.status ? tasks.filter((t) => t.status === input.status) : tasks
-      return { project: compactProject(project), tasks: filtered.slice(0, 200).map(compactTask) }
+      const filtered = input.status
+        ? tasks.filter((t) => t.status === input.status)
+        : tasks
+      return {
+        project: compactProject(project),
+        tasks: filtered.slice(0, 200).map(compactTask),
+      }
     },
     async get_task(raw: z.input<typeof schemas.get_task>) {
       const { taskId } = schemas.get_task.parse(raw)
@@ -575,12 +559,21 @@ export function createTools(neram: NeramApi) {
       })
       return { taskId, deleted: true as const, ...counts }
     },
-    async move_task_to_project(raw: z.input<typeof schemas.move_task_to_project>) {
+    async move_task_to_project(
+      raw: z.input<typeof schemas.move_task_to_project>
+    ) {
       const input = schemas.move_task_to_project.parse(raw)
       const taskId = await resolveTask(input)
-      const destination = await resolveProject({ projectId: input.toProjectId, project: input.toProject })
+      const destination = await resolveProject({
+        projectId: input.toProjectId,
+        project: input.toProject,
+      })
       await neram.changeTaskProject({ taskId, projectId: destination._id })
-      return { taskId, projectId: destination._id, projectName: destination.name }
+      return {
+        taskId,
+        projectId: destination._id,
+        projectName: destination.name,
+      }
     },
     async list_subtasks(raw: z.input<typeof schemas.list_subtasks>) {
       const input = schemas.list_subtasks.parse(raw)
@@ -666,13 +659,22 @@ export function createTools(neram: NeramApi) {
     },
     async create_project(raw: z.input<typeof schemas.create_project>) {
       const input = schemas.create_project.parse(raw)
-      const projectId = await neram.createProject({ name: input.name, icon: input.icon, color: input.color })
+      const projectId = await neram.createProject({
+        name: input.name,
+        icon: input.icon,
+        color: input.color,
+      })
       return { projectId, name: input.name }
     },
     async update_project(raw: z.input<typeof schemas.update_project>) {
       const input = schemas.update_project.parse(raw)
       const project = await resolveProject(input)
-      await neram.updateProject({ projectId: project._id, name: input.name, icon: input.icon, color: input.color })
+      await neram.updateProject({
+        projectId: project._id,
+        name: input.name,
+        icon: input.icon,
+        color: input.color,
+      })
       return { projectId: project._id }
     },
     async delete_project(raw: z.input<typeof schemas.delete_project>) {
@@ -686,32 +688,4 @@ export function createTools(neram: NeramApi) {
       return { activity: activity.map(compactActivity) }
     },
   }
-}
-
-export function toAgentError(error: unknown) {
-  if (error instanceof AgentError) return error
-  if (error instanceof z.ZodError) {
-    return new AgentError("VALIDATION", error.issues[0]?.message ?? "Invalid input.", {
-      issues: error.issues,
-    })
-  }
-  if (
-    error instanceof ConvexError ||
-    (typeof error === "object" &&
-      error !== null &&
-      "data" in error &&
-      typeof error.data === "object")
-  ) {
-    const data = (error as { data?: unknown }).data
-    if (typeof data === "object" && data && "code" in data && "message" in data) {
-      const { code, message, ...details } = data as Record<string, unknown>
-      return new AgentError(
-        String(code),
-        String(message),
-        Object.keys(details).length > 0 ? details : undefined
-      )
-    }
-  }
-  const message = error instanceof Error ? error.message : "Unexpected error."
-  return new AgentError("INTERNAL", message)
 }
