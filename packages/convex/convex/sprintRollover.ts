@@ -4,11 +4,7 @@ import { internal } from "./_generated/api"
 import type { Doc } from "./_generated/dataModel"
 import { internalMutation } from "./_generated/server"
 import type { MutationCtx } from "./_generated/server"
-import {
-  addTaskToSprint,
-  ensureSprintPair,
-  MAX_SPRINT_TASKS,
-} from "./sprintModel"
+import { addTaskToSprint, ensureSprintPair } from "./sprintModel"
 import { nextSprintBounds } from "./sprintTime"
 
 const BATCH_SIZE = 100
@@ -91,6 +87,7 @@ async function closeCurrentBatch(
     name: job.actorName ?? "Neram",
     organizationId: job.organizationId,
   }
+  let carriedCount = 0
   for (const entry of page.page) {
     if (entry.removedAt !== undefined) continue
     const task = await ctx.db.get(entry.taskId)
@@ -113,8 +110,32 @@ async function closeCurrentBatch(
       now: job.cutoffAt,
     })
     await ctx.db.patch(entry._id, { carriedToSprintId: job.promotedSprintId })
+    carriedCount += 1
   }
+  const baselineCount = page.page.filter(
+    (entry) => entry.origin === "planned" || entry.origin === "carried"
+  ).length
+  const completedCount = page.page.filter(
+    (entry) =>
+      entry.creditedCompletionAt !== undefined &&
+      entry.creditedCompletionAt <= job.cutoffAt
+  ).length
+  const addedCount = page.page.filter(
+    (entry) => entry.origin === "scope_added"
+  ).length
+  const removedCount = page.page.filter(
+    (entry) => entry.removedAt !== undefined
+  ).length
+  const reopenedCount = page.page.filter(
+    (entry) => entry.origin === "reopened"
+  ).length
   await ctx.db.patch(job._id, {
+    baselineCount: job.baselineCount + baselineCount,
+    completedCount: job.completedCount + completedCount,
+    carriedCount: job.carriedCount + carriedCount,
+    addedCount: job.addedCount + addedCount,
+    removedCount: job.removedCount + removedCount,
+    reopenedCount: job.reopenedCount + reopenedCount,
     cursor: page.isDone ? undefined : page.continueCursor,
     phase: page.isDone ? "promote_upcoming" : "close_current",
     updatedAt: Date.now(),
@@ -153,28 +174,6 @@ async function promoteUpcomingBatch(
   return page.isDone
 }
 
-function summarize(entries: Array<Doc<"sprintTaskEntries">>, cutoffAt: number) {
-  return {
-    baselineCount: entries.filter(
-      (entry) => entry.origin === "planned" || entry.origin === "carried"
-    ).length,
-    completedCount: entries.filter(
-      (entry) =>
-        entry.creditedCompletionAt !== undefined &&
-        entry.creditedCompletionAt <= cutoffAt
-    ).length,
-    carriedCount: entries.filter(
-      (entry) => entry.carriedToSprintId !== undefined
-    ).length,
-    addedCount: entries.filter((entry) => entry.origin === "scope_added")
-      .length,
-    removedCount: entries.filter((entry) => entry.removedAt !== undefined)
-      .length,
-    reopenedCount: entries.filter((entry) => entry.origin === "reopened")
-      .length,
-  }
-}
-
 async function finalize(ctx: MutationCtx, job: Doc<"sprintRolloverJobs">) {
   const settings = await ctx.db
     .query("organizationSettings")
@@ -195,13 +194,14 @@ async function finalize(ctx: MutationCtx, job: Doc<"sprintRolloverJobs">) {
     })
     return
   }
-  const entries = await ctx.db
-    .query("sprintTaskEntries")
-    .withIndex("by_sprint_and_added_at", (q) => q.eq("sprintId", closing._id))
-    .take(MAX_SPRINT_TASKS + 1)
-  if (entries.length > MAX_SPRINT_TASKS)
-    throw new Error("Sprint task ceiling exceeded")
-  const counts = summarize(entries, job.cutoffAt)
+  const counts = {
+    baselineCount: job.baselineCount,
+    completedCount: job.completedCount,
+    carriedCount: job.carriedCount,
+    addedCount: job.addedCount,
+    removedCount: job.removedCount,
+    reopenedCount: job.reopenedCount,
+  }
   const now = Date.now()
   await ctx.db.patch(closing._id, {
     state: "closed",

@@ -101,8 +101,10 @@ async function activeEntry(
 async function assertCapacity(ctx: MutationCtx, sprintId: Id<"sprints">) {
   const tasks = await ctx.db
     .query("sprintTaskEntries")
-    .withIndex("by_sprint_and_added_at", (q) => q.eq("sprintId", sprintId))
-    .take(MAX_SPRINT_TASKS + 1)
+    .withIndex("by_sprint_and_removed", (q) =>
+      q.eq("sprintId", sprintId).eq("removedAt", undefined)
+    )
+    .take(MAX_SPRINT_TASKS)
   if (tasks.length >= MAX_SPRINT_TASKS) {
     throw new ConvexError({
       code: "SPRINT_TASK_LIMIT",

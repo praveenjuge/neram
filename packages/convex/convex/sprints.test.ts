@@ -378,7 +378,7 @@ test("delayed rollover uses the scheduled cutoff and repair resumes one job", as
   ).toHaveLength(1)
 })
 
-test("Sprint entry history cannot grow beyond the 1,000-task ceiling", async () => {
+test("capacity counts live work and rollover summarizes a larger audit in batches", async () => {
   const { t, alice } = await setup()
   const projectId = await alice.mutation(api.projects.create, {
     name: "Ceiling",
@@ -389,7 +389,7 @@ test("Sprint entry history cannot grow beyond the 1,000-task ceiling", async () 
   })
   const target = await alice.mutation(api.tasks.create, {
     projectId,
-    title: "One too many",
+    title: "Valid after churn",
   })
   const current = await alice.query(api.sprints.current, {})
   for (let batch = 0; batch < 10; batch += 1) {
@@ -411,6 +411,51 @@ test("Sprint entry history cannot grow beyond the 1,000-task ceiling", async () 
           removedByUserId: "user_alice",
           removedByName: "Alice",
           removalReason: "test_churn",
+        })
+      }
+    })
+  }
+  await alice.mutation(api.sprints.plan, {
+    taskIds: [target],
+    sprint: "current",
+  })
+  await alice.mutation(api.sprints.remove, {
+    taskIds: [target],
+    sprint: "current",
+  })
+  const jobId = await alice.mutation(api.sprints.rollover, {
+    organizationId: "org_alpha",
+    slug: "alpha",
+    confirm: true,
+    reason: "Close high-churn Sprint",
+  })
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const done = await t.run(
+      async (ctx) => (await ctx.db.get(jobId))?.status === "completed"
+    )
+    if (done) break
+    await alice.mutation(internal.sprintRollover.process, { jobId })
+  }
+  expect((await alice.query(api.sprints.history, page)).page[0]).toMatchObject({
+    removedCount: 1001,
+  })
+
+  const nextCurrent = await alice.query(api.sprints.current, {})
+  for (let batch = 0; batch < 10; batch += 1) {
+    await t.run(async (ctx) => {
+      for (let offset = 0; offset < 100; offset += 1) {
+        const index = batch * 100 + offset
+        await ctx.db.insert("sprintTaskEntries", {
+          organizationId: "org_alpha",
+          sprintId: nextCurrent!.sprint._id,
+          taskId: filler,
+          projectId,
+          projectNameSnapshot: "Ceiling",
+          taskTitleSnapshot: "Active filler",
+          origin: "scope_added",
+          actorUserId: "user_alice",
+          actorName: "Alice",
+          addedAt: index,
         })
       }
     })
