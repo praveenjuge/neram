@@ -10,7 +10,6 @@ import {
   requireProjectAccess,
   resolveAssignee,
   statusCountField,
-  type Actor,
   type ProjectCounts,
 } from "./model"
 import { accessibleProjects } from "./projects"
@@ -205,9 +204,9 @@ export const listAll = query({
   },
   returns: v.array(taskWithProject),
   handler: async (ctx, args) => {
-    const { subject, organizationId } = await actor(ctx)
+    const { subject } = await actor(ctx)
     const onlyMine = args.assignedToMe ?? true
-    const projects = await accessibleProjects(ctx, subject, organizationId)
+    const projects = await accessibleProjects(ctx)
     const results: Array<
       Awaited<ReturnType<typeof taskResult>> & {
         projectName: string
@@ -219,17 +218,16 @@ export const listAll = query({
       const [tasks, counts] = await Promise.all([
         ctx.db
           .query("tasks")
-          .withIndex("by_project_position", (q) => q.eq("projectId", project._id))
+          .withIndex("by_project_position", (q) =>
+            q.eq("projectId", project._id)
+          )
           .take(MAX_TASKS),
         projectTaskCounts(ctx, project._id),
       ])
       for (const taskDoc of tasks) {
         if (onlyMine && taskDoc.assigneeSubject !== subject) continue
         results.push({
-          ...publicTask(
-            taskDoc,
-            counts.get(taskDoc._id) ?? taskCounts(null)
-          ),
+          ...publicTask(taskDoc, counts.get(taskDoc._id) ?? taskCounts(null)),
           projectName: project.name,
           projectIcon: project.icon,
           projectColor: project.color,
@@ -264,10 +262,7 @@ export const create = mutation({
       ? await resolveAssignee(ctx, project, args.assigneeSubject)
       : null
     const taskId = await ctx.db.insert("tasks", {
-      organizationId: project.organizationId,
-      // Keep the owner's subject as a consistent key; it's no longer the access
-      // gate (that's the membership check) but stays set for every task.
-      ownerSubject: project.ownerSubject,
+      organizationId: actor.organizationId,
       projectId: args.projectId,
       title,
       description: cleanDescription(args.description),
@@ -281,8 +276,8 @@ export const create = mutation({
       createdAt: now,
       updatedAt: now,
     })
-    if (project.organizationId && args.sprint && args.sprint !== "backlog") {
-      const settings = await ensureSprintPair(ctx, project.organizationId, now)
+    if (args.sprint && args.sprint !== "backlog") {
+      const settings = await ensureSprintPair(ctx, actor.organizationId, now)
       const taskDoc = await ctx.db.get(taskId)
       if (!taskDoc) throw new Error("Created task not found")
       await addTaskToSprint(ctx, {
@@ -380,7 +375,7 @@ export const update = mutation({
     }
     if (args.dueDate !== undefined) patch.dueDate = cleanDueDate(args.dueDate)
 
-    let newlyAssigned: Actor | null = null
+    let newlyAssigned: { subject: string; name: string } | null = null
     if (args.assigneeSubject !== undefined) {
       if (args.assigneeSubject === "") {
         // Empty string clears the assignment (mirrors the field cleaners).
@@ -554,8 +549,6 @@ export const changeProject = mutation({
 
     await ctx.db.patch(args.taskId, {
       projectId: args.projectId,
-      // Keep ownerSubject aligned with the destination owner, mirroring create.
-      ownerSubject: destination.ownerSubject,
       organizationId: destination.organizationId,
       // Append to the end of the destination board; the status is preserved.
       position: now,
@@ -614,10 +607,7 @@ export const remove = mutation({
         .withIndex("by_task_and_created", (q) => q.eq("taskId", current._id))
         .first()
     )
-    if (
-      (counts.totalSubtasks > 0 || hasCommentRows) &&
-      !args.confirmCascade
-    ) {
+    if ((counts.totalSubtasks > 0 || hasCommentRows) && !args.confirmCascade) {
       throw new ConvexError({
         code: "CASCADE_CONFIRMATION_REQUIRED",
         message: "Confirm deletion of this task and its children.",

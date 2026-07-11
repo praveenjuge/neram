@@ -66,7 +66,7 @@ export default defineSchema({
     // the production backfill and tenant-boundary verifier complete.
     organizationId: v.optional(v.string()),
     // Stores the authenticated owner's canonical identity (identity.tokenIdentifier).
-    ownerSubject: v.string(),
+    ownerSubject: v.optional(v.string()),
     // Denormalized owner display name, set on create. Old rows fall back to
     // "Owner" in the member list since they predate this field.
     ownerName: v.optional(v.string()),
@@ -103,7 +103,7 @@ export default defineSchema({
   tasks: defineTable({
     // Widening field; required in the narrowed Organization-only schema.
     organizationId: v.optional(v.string()),
-    ownerSubject: v.string(),
+    ownerSubject: v.optional(v.string()),
     projectId: v.id("projects"),
     title: v.string(),
     description: v.optional(v.string()),

@@ -3,7 +3,7 @@ export type Status = "todo" | "inProgress" | "done"
 export type Project = {
   _id: string
   name: string
-  role: "owner" | "editor"
+  role: "org:admin" | "org:member"
   taskCount: number
   todoCount: number
   inProgressCount: number
@@ -24,12 +24,6 @@ export type Task = {
   completedSubtasks: number
   activeCommentCount: number
   updatedAt: number
-}
-
-export type ProjectMember = {
-  subject: string
-  displayName: string
-  role: "org:admin" | "org:member"
 }
 
 export type Subtask = {
@@ -91,8 +85,6 @@ export type WorkspaceStatus = {
   }
   workspace: {
     projects: number
-    ownedProjects: number
-    sharedProjects: number
     openTasks: number
   }
 }

@@ -8,11 +8,16 @@ import type { Doc } from "./_generated/dataModel"
 import { mutation, query, type MutationCtx } from "./_generated/server"
 import { recordTargetedActivity } from "./model"
 import { mention } from "./schema"
-import { patchTaskStats, requireTaskAccess, taskCounts, taskStats } from "./taskModel"
+import {
+  patchTaskStats,
+  requireTaskAccess,
+  taskCounts,
+  taskStats,
+} from "./taskModel"
 
 const ROOT_PAGE_SIZE = 20
 const REPLY_PAGE_SIZE = 10
-const MAX_MEMBERS = 200
+const MAX_MEMBERS = 500
 const MAX_ANCESTRY_PAGE = 100
 
 const comment = v.object({
@@ -56,13 +61,18 @@ async function validateMentions(
   }
 ) {
   const members = await ctx.db
-    .query("projectMembers")
-    .withIndex("by_project", (q) => q.eq("projectId", args.project._id))
-    .take(MAX_MEMBERS)
-  const subjects = new Set([
-    args.project.ownerSubject,
-    ...members.map((member) => member.subject),
-  ])
+    .query("organizationMembers")
+    .withIndex("by_organization", (q) =>
+      q.eq("organizationId", args.project.organizationId as string)
+    )
+    .take(MAX_MEMBERS + 1)
+  if (members.length > MAX_MEMBERS) {
+    throw new ConvexError({
+      code: "MEMBER_LIMIT",
+      message: "This workspace exceeds the supported member limit.",
+    })
+  }
+  const subjects = new Set(members.map((member) => member.userId))
   const ordered = [...args.mentions].sort((a, b) => a.start - b.start)
   let previousEnd = 0
   for (const item of ordered) {
@@ -84,7 +94,7 @@ async function validateMentions(
     if (!subjects.has(item.subject)) {
       throw new ConvexError({
         code: "INVALID_MENTION_SUBJECT",
-        message: `${item.label} is not a member of this project.`,
+        message: `${item.label} is not a member of this workspace.`,
         subject: item.subject,
       })
     }
@@ -93,10 +103,7 @@ async function validateMentions(
   return ordered
 }
 
-async function touchTask(
-  ctx: MutationCtx,
-  task: Doc<"tasks">
-) {
+async function touchTask(ctx: MutationCtx, task: Doc<"tasks">) {
   const now = Date.now()
   await ctx.db.patch(task._id, { updatedAt: now })
   await ctx.db.patch(task.projectId, { updatedAt: now })
@@ -124,9 +131,7 @@ export const list = query({
     return await ctx.db
       .query("taskComments")
       .withIndex("by_task_and_parent_and_created", (q) =>
-        q
-          .eq("taskId", args.taskId)
-          .eq("parentCommentId", args.parentCommentId)
+        q.eq("taskId", args.taskId).eq("parentCommentId", args.parentCommentId)
       )
       .order("asc")
       .paginate({
@@ -153,14 +158,20 @@ export const getAncestry = query({
   handler: async (ctx, args) => {
     const target = await ctx.db.get(args.commentId)
     if (!target) {
-      throw new ConvexError({ code: "NOT_FOUND", message: "Comment not found." })
+      throw new ConvexError({
+        code: "NOT_FOUND",
+        message: "Comment not found.",
+      })
     }
     await requireTaskAccess(ctx, target.taskId)
     let current = args.startCommentId
       ? await ctx.db.get(args.startCommentId)
       : target
     if (!current || current.taskId !== target.taskId) {
-      throw new ConvexError({ code: "NOT_FOUND", message: "Comment not found." })
+      throw new ConvexError({
+        code: "NOT_FOUND",
+        message: "Comment not found.",
+      })
     }
     const page: Doc<"taskComments">[] = []
     const limit = Math.max(
@@ -207,7 +218,7 @@ async function createComment(
   const commentId = await ctx.db.insert("taskComments", {
     taskId: task._id,
     parentCommentId: parent?._id,
-    rootCommentId: parent ? parent.rootCommentId ?? parent._id : undefined,
+    rootCommentId: parent ? (parent.rootCommentId ?? parent._id) : undefined,
     authorSubject: actor.subject,
     authorName: actor.name,
     body,
@@ -278,7 +289,10 @@ export const reply = mutation({
   handler: async (ctx, args) => {
     const parent = await ctx.db.get(args.commentId)
     if (!parent) {
-      throw new ConvexError({ code: "NOT_FOUND", message: "Comment not found." })
+      throw new ConvexError({
+        code: "NOT_FOUND",
+        message: "Comment not found.",
+      })
     }
     return await createComment(ctx, {
       taskId: parent.taskId,
@@ -299,9 +313,15 @@ export const edit = mutation({
   handler: async (ctx, args) => {
     const current = await ctx.db.get(args.commentId)
     if (!current) {
-      throw new ConvexError({ code: "NOT_FOUND", message: "Comment not found." })
+      throw new ConvexError({
+        code: "NOT_FOUND",
+        message: "Comment not found.",
+      })
     }
-    const { task, project, actor } = await requireTaskAccess(ctx, current.taskId)
+    const { task, project, actor } = await requireTaskAccess(
+      ctx,
+      current.taskId
+    )
     if (current.deletedAt) {
       throw new ConvexError({
         code: "COMMENT_DELETED",
@@ -356,13 +376,20 @@ export const remove = mutation({
   handler: async (ctx, args) => {
     const current = await ctx.db.get(args.commentId)
     if (!current) {
-      throw new ConvexError({ code: "NOT_FOUND", message: "Comment not found." })
+      throw new ConvexError({
+        code: "NOT_FOUND",
+        message: "Comment not found.",
+      })
     }
-    const { task, actor, isOwner } = await requireTaskAccess(ctx, current.taskId)
-    if (current.authorSubject !== actor.subject && !isOwner) {
+    const { task, actor, isAdmin } = await requireTaskAccess(
+      ctx,
+      current.taskId
+    )
+    if (current.authorSubject !== actor.subject && !isAdmin) {
       throw new ConvexError({
         code: "FORBIDDEN_MODERATION",
-        message: "Only the author or project owner can delete this comment.",
+        message:
+          "Only the author or a workspace admin can delete this comment.",
       })
     }
     if (current.deletedAt) return null

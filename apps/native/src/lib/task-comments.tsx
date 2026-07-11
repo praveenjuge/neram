@@ -16,20 +16,20 @@ import {
 } from "@/lib/task-ui"
 
 type Comment = FunctionReturnType<typeof api.taskComments.list>["page"][number]
-type Member = FunctionReturnType<typeof api.members.list>[number]
+type Member = FunctionReturnType<typeof api.organizations.members>[number]
 type Mention = Comment["mentions"][number]
 
 export function NativeTaskComments({
   taskId,
-  projectId,
   targetCommentId,
 }: {
   taskId: Id<"tasks">
-  projectId: Id<"projects">
   targetCommentId?: Id<"taskComments">
 }) {
-  const members = useQuery(api.members.list, { projectId })
-  const current = members?.find((member) => member.isYou)
+  const members = useQuery(api.organizations.members)
+  const context = useQuery(api.organizations.current)
+  const currentSubject = context?.membership.userId
+  const isAdmin = context?.membership.role === "org:admin"
   const create = useMutation(api.taskComments.create)
   return (
     <NativeSection
@@ -46,17 +46,17 @@ export function NativeTaskComments({
       />
       {targetCommentId ? (
         <NativeLinkedThread
-          currentSubject={current?.subject}
-          isOwner={current?.role === "owner"}
+          currentSubject={currentSubject}
+          isAdmin={isAdmin}
           members={members ?? []}
           targetCommentId={targetCommentId}
           taskId={taskId}
         />
       ) : null}
       <NativeCommentBranch
-        currentSubject={current?.subject}
+        currentSubject={currentSubject}
         depth={0}
-        isOwner={current?.role === "owner"}
+        isAdmin={isAdmin}
         members={members ?? []}
         targetCommentId={targetCommentId}
         taskId={taskId}
@@ -71,7 +71,7 @@ function NativeCommentBranch({
   depth,
   members,
   currentSubject,
-  isOwner,
+  isAdmin,
   targetCommentId,
 }: {
   taskId: Id<"tasks">
@@ -79,7 +79,7 @@ function NativeCommentBranch({
   depth: number
   members: Member[]
   currentSubject?: string
-  isOwner: boolean
+  isAdmin: boolean
   targetCommentId?: Id<"taskComments">
 }) {
   const feed = usePaginatedQuery(
@@ -87,8 +87,10 @@ function NativeCommentBranch({
     { taskId, parentCommentId },
     { initialNumItems: parentCommentId ? 10 : 20 }
   )
-  if (feed.status === "LoadingFirstPage") return <InlineMeta>Loading comments…</InlineMeta>
-  if (!parentCommentId && feed.results.length === 0) return <InlineMeta>No comments yet.</InlineMeta>
+  if (feed.status === "LoadingFirstPage")
+    return <InlineMeta>Loading comments…</InlineMeta>
+  if (!parentCommentId && feed.results.length === 0)
+    return <InlineMeta>No comments yet.</InlineMeta>
   return (
     <View style={{ gap: 10 }}>
       {feed.results.map((comment) => (
@@ -96,7 +98,7 @@ function NativeCommentBranch({
           comment={comment}
           currentSubject={currentSubject}
           depth={depth}
-          isOwner={isOwner}
+          isAdmin={isAdmin}
           key={comment._id}
           members={members}
           targetCommentId={targetCommentId}
@@ -118,14 +120,14 @@ function NativeCommentNode({
   depth,
   members,
   currentSubject,
-  isOwner,
+  isAdmin,
   targetCommentId,
 }: {
   comment: Comment
   depth: number
   members: Member[]
   currentSubject?: string
-  isOwner: boolean
+  isAdmin: boolean
   targetCommentId?: Id<"taskComments">
 }) {
   const colors = useTaskColors()
@@ -136,7 +138,7 @@ function NativeCommentNode({
   const edit = useMutation(api.taskComments.edit)
   const remove = useMutation(api.taskComments.remove)
   const canEdit = !comment.deletedAt && currentSubject === comment.authorSubject
-  const canDelete = !comment.deletedAt && (canEdit || isOwner)
+  const canDelete = !comment.deletedAt && (canEdit || isAdmin)
 
   function confirmDelete() {
     Alert.alert("Delete comment?", "Replies will remain in the thread.", [
@@ -144,7 +146,8 @@ function NativeCommentNode({
       {
         text: "Delete",
         style: "destructive",
-        onPress: () => void remove({ commentId: comment._id }).catch(showCommentError),
+        onPress: () =>
+          void remove({ commentId: comment._id }).catch(showCommentError),
       },
     ])
   }
@@ -156,7 +159,8 @@ function NativeCommentNode({
         {
           marginLeft: Math.min(depth, 3) * 12,
           borderLeftWidth: depth ? 2 : 0.5,
-          borderColor: comment._id === targetCommentId ? colors.accent : colors.border,
+          borderColor:
+            comment._id === targetCommentId ? colors.accent : colors.border,
           backgroundColor: colors.surface,
         },
       ]}
@@ -166,7 +170,9 @@ function NativeCommentNode({
           {comment.authorName}
         </Text>
         <InlineMeta>
-          {comment.updatedAt > comment.createdAt && !comment.deletedAt ? "edited" : ""}
+          {comment.updatedAt > comment.createdAt && !comment.deletedAt
+            ? "edited"
+            : ""}
         </InlineMeta>
       </View>
       {editing ? (
@@ -182,15 +188,33 @@ function NativeCommentNode({
           placeholder="Edit comment"
         />
       ) : (
-        <Text style={[taskStyles.body, { color: comment.deletedAt ? colors.muted : colors.text, fontStyle: comment.deletedAt ? "italic" : "normal" }]}>
+        <Text
+          style={[
+            taskStyles.body,
+            {
+              color: comment.deletedAt ? colors.muted : colors.text,
+              fontStyle: comment.deletedAt ? "italic" : "normal",
+            },
+          ]}
+        >
           {comment.deletedAt ? "Comment deleted" : comment.body}
         </Text>
       )}
       <View style={taskStyles.row}>
-        <NativeButton label="Reply" onPress={() => setReplying((value) => !value)} />
-        <NativeButton label={expanded ? "Hide replies" : "Show replies"} onPress={() => setExpanded((value) => !value)} />
-        {canEdit ? <NativeButton label="Edit" onPress={() => setEditing(true)} /> : null}
-        {canDelete ? <NativeButton destructive label="Delete" onPress={confirmDelete} /> : null}
+        <NativeButton
+          label="Reply"
+          onPress={() => setReplying((value) => !value)}
+        />
+        <NativeButton
+          label={expanded ? "Hide replies" : "Show replies"}
+          onPress={() => setExpanded((value) => !value)}
+        />
+        {canEdit ? (
+          <NativeButton label="Edit" onPress={() => setEditing(true)} />
+        ) : null}
+        {canDelete ? (
+          <NativeButton destructive label="Delete" onPress={confirmDelete} />
+        ) : null}
       </View>
       {replying ? (
         <View style={{ gap: 6 }}>
@@ -212,7 +236,7 @@ function NativeCommentNode({
         <NativeCommentBranch
           currentSubject={currentSubject}
           depth={depth + 1}
-          isOwner={isOwner}
+          isAdmin={isAdmin}
           members={members}
           parentCommentId={comment._id}
           targetCommentId={targetCommentId}
@@ -228,27 +252,28 @@ function NativeLinkedThread({
   targetCommentId,
   members,
   currentSubject,
-  isOwner,
+  isAdmin,
 }: {
   taskId: Id<"tasks">
   targetCommentId: Id<"taskComments">
   members: Member[]
   currentSubject?: string
-  isOwner: boolean
+  isAdmin: boolean
 }) {
   const result = useQuery(api.taskComments.getAncestry, {
     commentId: targetCommentId,
     limit: 100,
   })
   if (!result) return <InlineMeta>Loading linked comment…</InlineMeta>
-  if (result.taskId !== taskId) return <InlineMeta>Linked comment unavailable.</InlineMeta>
+  if (result.taskId !== taskId)
+    return <InlineMeta>Linked comment unavailable.</InlineMeta>
   return (
     <View style={{ gap: 8 }}>
       <InlineMeta>Linked thread</InlineMeta>
       {result.nextCommentId ? (
         <NativeOlderAncestry
           currentSubject={currentSubject}
-          isOwner={isOwner}
+          isAdmin={isAdmin}
           members={members}
           startCommentId={result.nextCommentId}
           targetCommentId={targetCommentId}
@@ -259,7 +284,7 @@ function NativeLinkedThread({
           comment={comment}
           currentSubject={currentSubject}
           depth={index}
-          isOwner={isOwner}
+          isAdmin={isAdmin}
           key={comment._id}
           members={members}
           targetCommentId={targetCommentId}
@@ -274,13 +299,13 @@ function NativeOlderAncestry({
   startCommentId,
   members,
   currentSubject,
-  isOwner,
+  isAdmin,
 }: {
   targetCommentId: Id<"taskComments">
   startCommentId: Id<"taskComments">
   members: Member[]
   currentSubject?: string
-  isOwner: boolean
+  isAdmin: boolean
 }) {
   const result = useQuery(api.taskComments.getAncestry, {
     commentId: targetCommentId,
@@ -293,7 +318,7 @@ function NativeOlderAncestry({
       {result.nextCommentId ? (
         <NativeOlderAncestry
           currentSubject={currentSubject}
-          isOwner={isOwner}
+          isAdmin={isAdmin}
           members={members}
           startCommentId={result.nextCommentId}
           targetCommentId={targetCommentId}
@@ -304,7 +329,7 @@ function NativeOlderAncestry({
           comment={comment}
           currentSubject={currentSubject}
           depth={index}
-          isOwner={isOwner}
+          isAdmin={isAdmin}
           key={comment._id}
           members={members}
           targetCommentId={targetCommentId}
@@ -332,21 +357,33 @@ function CommentComposer({
   onCancel?: () => void
 }) {
   const [body, setBody, clearDraft] = useStoredDraft(storageKey, initialBody)
-  const [tokens, setTokens] = useState(() => initialMentions.map(({ subject, label }) => ({ subject, label })))
+  const [tokens, setTokens] = useState(() =>
+    initialMentions.map(({ subject, label }) => ({ subject, label }))
+  )
   const [busy, setBusy] = useState(false)
   const query = /(?:^|\s)@([^\s@]*)$/.exec(body)?.[1].toLowerCase()
   const suggestions = useMemo(
     () =>
       query === undefined
         ? []
-        : members.filter((member) => member.displayName.toLowerCase().includes(query)).slice(0, 6),
+        : members
+            .filter((member) =>
+              member.displayName.toLowerCase().includes(query)
+            )
+            .slice(0, 6),
     [members, query]
   )
 
   function selectMention(member: Member) {
-    const next = body.replace(/(?:^|\s)@[^\s@]*$/, (match) => `${match.startsWith(" ") ? " " : ""}@${member.displayName} `)
+    const next = body.replace(
+      /(?:^|\s)@[^\s@]*$/,
+      (match) => `${match.startsWith(" ") ? " " : ""}@${member.displayName} `
+    )
     setBody(next)
-    setTokens((value) => [...value, { subject: member.subject, label: member.displayName }])
+    setTokens((value) => [
+      ...value,
+      { subject: member.userId, label: member.displayName },
+    ])
   }
 
   async function submit() {
@@ -384,14 +421,28 @@ function CommentComposer({
       {suggestions.length ? (
         <View style={taskStyles.row}>
           {suggestions.map((member) => (
-            <NativeButton key={member.subject} label={`@${member.displayName}`} onPress={() => selectMention(member)} />
+            <NativeButton
+              key={member.userId}
+              label={`@${member.displayName}`}
+              onPress={() => selectMention(member)}
+            />
           ))}
         </View>
       ) : null}
       <View style={taskStyles.row}>
         {onCancel ? <NativeButton label="Cancel" onPress={onCancel} /> : null}
-        {storageKey && body ? <NativeButton label="Discard draft" onPress={() => void clearDraft()} /> : null}
-        <NativeButton active disabled={busy || !body.trim()} label={busy ? "Posting…" : "Post"} onPress={() => void submit()} />
+        {storageKey && body ? (
+          <NativeButton
+            label="Discard draft"
+            onPress={() => void clearDraft()}
+          />
+        ) : null}
+        <NativeButton
+          active
+          disabled={busy || !body.trim()}
+          label={busy ? "Posting…" : "Post"}
+          onPress={() => void submit()}
+        />
       </View>
     </View>
   )
@@ -425,5 +476,8 @@ function draftKey(taskId: Id<"tasks">, parentCommentId?: Id<"taskComments">) {
 }
 
 function showCommentError(error: unknown) {
-  Alert.alert("Could not save comment", error instanceof Error ? error.message : "Try again.")
+  Alert.alert(
+    "Could not save comment",
+    error instanceof Error ? error.message : "Try again."
+  )
 }

@@ -19,7 +19,7 @@
     "deploy": "convex deploy --cmd-url-env-var-name NEXT_PUBLIC_CONVEX_URL --cmd 'turbo run build --filter=neram --filter=@neram/web'",
     "dev": "convex dev",
     "format": "prettier --write \"convex/**/*.ts\"",
-    "lint": "eslint convex",
+    "lint": "eslint convex test-utils",
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p convex/tsconfig.json"
   },

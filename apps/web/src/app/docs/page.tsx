@@ -34,8 +34,6 @@ const whoamiExample = `{
   },
   "workspace": {
     "projects": 8,
-    "ownedProjects": 5,
-    "sharedProjects": 3,
     "openTasks": 12
   }
 }`

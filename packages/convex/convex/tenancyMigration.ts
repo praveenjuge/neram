@@ -102,6 +102,12 @@ async function buildInventory(ctx: ActionCtx) {
     }
   >()
   for (const project of projects) {
+    if (!project.ownerSubject) {
+      throw new ConvexError({
+        code: "MISSING_LEGACY_OWNER",
+        message: `Project ${project._id} has no legacy owner subject.`,
+      })
+    }
     const collaborators = (membersByProject.get(project._id) ?? [])
       .map((member) => member.subject)
       .sort()
@@ -222,11 +228,10 @@ async function buildInventory(ctx: ActionCtx) {
   const unmappableActivity: string[] = []
   for (const row of activity) {
     if (projectIds.has(row.projectId)) continue
-    const candidates = new Set(
-      cohortKeysBySubject.get(row.actorSubject) ?? []
-    )
-    for (const key of
-      cohortKeysByActorLabel.get(row.actorName.trim().toLowerCase()) ?? []) {
+    const candidates = new Set(cohortKeysBySubject.get(row.actorSubject) ?? [])
+    for (const key of cohortKeysByActorLabel.get(
+      row.actorName.trim().toLowerCase()
+    ) ?? []) {
       candidates.add(key)
     }
     if (candidates.size !== 1) {
@@ -556,6 +561,9 @@ export const verify = internalAction({
       if (task.status === "done" && !task.completedAt) {
         failures.push(`task:${task._id}:missing_completed_at`)
       }
+      if (task.assigneeSubject?.includes("|")) {
+        failures.push(`task:${task._id}:legacy_assignee_subject`)
+      }
     }
     for (const subtask of report.subtasks) {
       if (!taskById.has(subtask.taskId)) {
@@ -563,6 +571,12 @@ export const verify = internalAction({
       }
     }
     for (const comment of report.comments) {
+      if (
+        comment.authorSubject.includes("|") ||
+        comment.mentions.some((mention) => mention.subject.includes("|"))
+      ) {
+        failures.push(`comment:${comment._id}:legacy_subject`)
+      }
       if (!taskById.has(comment.taskId)) {
         failures.push(`comment:${comment._id}:orphaned_task`)
       }

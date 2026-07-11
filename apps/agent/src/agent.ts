@@ -19,7 +19,6 @@ import type {
   CommentPage,
   Mention,
   Project,
-  ProjectMember,
   Status,
   Subtask,
   Task,
@@ -168,7 +167,6 @@ export type NeramApi = PlanningApi & {
   projects(): Promise<Project[]>
   tasks(projectId: string): Promise<Task[]>
   task(taskId: string): Promise<Task | null>
-  projectMembers(projectId: string): Promise<ProjectMember[]>
   assignedTasks(): Promise<Array<Task & { projectName: string }>>
   activity(limit: number): Promise<Activity[]>
   createTask(
@@ -287,20 +285,6 @@ export function createConvexApi(
     projects: () => query<Project[]>(api.projects.list, {}),
     tasks: (projectId) => query<Task[]>(api.tasks.list, { projectId }),
     task: (taskId) => query<Task | null>(api.tasks.get, { taskId }),
-    projectMembers: async () =>
-      (
-        await query<
-          Array<{
-            userId: string
-            displayName: string
-            role: "org:admin" | "org:member"
-          }>
-        >(api.organizations.members, {})
-      ).map((member) => ({
-        subject: member.userId,
-        displayName: member.displayName,
-        role: member.role,
-      })),
     assignedTasks: () =>
       query<Array<Task & { projectName: string }>>(api.tasks.listAll, {}),
     activity: async (limit) => {
@@ -529,12 +513,6 @@ export function createTools(neram: NeramApi) {
       const task = await neram.task(taskId)
       if (!task) throw new AgentError("NOT_FOUND", "Task not found.")
       return compactTask(task)
-    },
-    async list_project_members(
-      raw: z.input<typeof schemas.list_project_members>
-    ) {
-      const { projectId } = schemas.list_project_members.parse(raw)
-      return { projectId, members: await neram.projectMembers(projectId) }
     },
     async update_task(raw: z.input<typeof schemas.update_task>) {
       const input = schemas.update_task.parse(raw)

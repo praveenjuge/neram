@@ -25,7 +25,7 @@ import {
 } from "../src/format.js"
 
 const convexUrl = "https://example.convex.cloud"
-const workspace = { projects: 3, ownedProjects: 2, sharedProjects: 1, openTasks: 5 }
+const workspace = { projects: 3, openTasks: 5 }
 const organization = {
   organizationId: "org_1",
   slug: "acme",
@@ -35,7 +35,10 @@ const organization = {
 
 describe("human formatting", () => {
   test("login greets the user and lists next commands", () => {
-    const text = formatLogin({ user: { name: "Ada", email: "ada@example.com" }, convexUrl })
+    const text = formatLogin({
+      user: { name: "Ada", email: "ada@example.com" },
+      convexUrl,
+    })
     expect(text).toContain("You are now logged in as Ada <ada@example.com>.")
     expect(text).toContain(convexUrl)
     expect(text).toContain("neram whoami")
@@ -44,7 +47,9 @@ describe("human formatting", () => {
   })
 
   test("login falls back to a generic label without claims", () => {
-    expect(formatLogin({ user: {}, convexUrl })).toContain("logged in as your account.")
+    expect(formatLogin({ user: {}, convexUrl })).toContain(
+      "logged in as your account."
+    )
   })
 
   test("whoami shows identity, counts, and MCP hints", () => {
@@ -57,7 +62,7 @@ describe("human formatting", () => {
       hasRefreshToken: true,
     })
     expect(text).toContain("Logged in as Ada <ada@example.com>.")
-    expect(text).toContain("Projects:   3 (2 owned, 1 shared)")
+    expect(text).toContain("Projects:   3")
     expect(text).toContain("Open tasks: 5")
     expect(text).toContain(MCP_INFO.hosted)
     expect(text).not.toContain("Heads up")
@@ -77,14 +82,25 @@ describe("human formatting", () => {
   })
 
   test("logout reports each revocation outcome", () => {
-    expect(formatLogout({ revocation: "succeeded", configRetained: true })).toContain("Refresh token revoked.")
-    expect(formatLogout({ revocation: "skipped", configRetained: true })).toContain("revocation skipped")
-    expect(formatLogout({ revocation: "failed", configRetained: true })).toContain("revocation failed")
-    expect(formatLogout({ revocation: "succeeded", configRetained: true })).toContain("Cached workspace config kept")
+    expect(
+      formatLogout({ revocation: "succeeded", configRetained: true })
+    ).toContain("Refresh token revoked.")
+    expect(
+      formatLogout({ revocation: "skipped", configRetained: true })
+    ).toContain("revocation skipped")
+    expect(
+      formatLogout({ revocation: "failed", configRetained: true })
+    ).toContain("revocation failed")
+    expect(
+      formatLogout({ revocation: "succeeded", configRetained: true })
+    ).toContain("Cached workspace config kept")
   })
 
   test("errors are compact with an actionable hint", () => {
-    const text = formatError({ code: "UNAUTHENTICATED", message: "Run `neram login` first." })
+    const text = formatError({
+      code: "UNAUTHENTICATED",
+      message: "Run `neram login` first.",
+    })
     expect(text).toContain("Run `neram login` first.")
     expect(text).toContain("Run `neram login` to sign in.")
     // Unknown codes fall back to just the message.
@@ -95,7 +111,12 @@ describe("human formatting", () => {
 describe("additive JSON payloads", () => {
   test("login preserves ok/user/convexUrl and adds mcp", () => {
     const user = { name: "Ada", email: "ada@example.com" }
-    expect(loginPayload(user, convexUrl)).toEqual({ ok: true, user, convexUrl, mcp: MCP_INFO })
+    expect(loginPayload(user, convexUrl)).toEqual({
+      ok: true,
+      user,
+      convexUrl,
+      mcp: MCP_INFO,
+    })
   })
 
   test("whoami preserves ok/user/convexUrl and adds workspace + mcp", () => {
@@ -111,7 +132,9 @@ describe("additive JSON payloads", () => {
   })
 
   test("logout exposes configRetained and revocation", () => {
-    expect(logoutPayload({ revocation: "failed", configRetained: true })).toEqual({
+    expect(
+      logoutPayload({ revocation: "failed", configRetained: true })
+    ).toEqual({
       ok: true,
       configRetained: true,
       revocation: "failed",
@@ -122,7 +145,7 @@ describe("additive JSON payloads", () => {
 const project = {
   projectId: "pa",
   name: "Agent",
-  role: "owner",
+  role: "org:admin",
   taskCount: 3,
   openTasks: 2,
   updatedAt: "2026-01-02T00:00:00.000Z",
@@ -144,9 +167,17 @@ describe("workspace formatters (non-TTY plain output)", () => {
       assignedOpenTasks: [task],
       openTasks: [task],
       recentActivity: [
-        { type: "task.created", projectName: "Agent", taskTitle: "Ship CLI", actorName: "Ada", createdAt: "2026-01-04T00:00:00.000Z" },
+        {
+          type: "task.created",
+          projectName: "Agent",
+          taskTitle: "Ship CLI",
+          actorName: "Ada",
+          createdAt: "2026-01-04T00:00:00.000Z",
+        },
       ],
-      suggestedNextActions: [{ title: "Ship CLI", status: "inProgress", dueDate: "2026-02-01" }],
+      suggestedNextActions: [
+        { title: "Ship CLI", status: "inProgress", dueDate: "2026-02-01" },
+      ],
     })
     expect(text).toContain("Daily brief")
     expect(text).toContain("Next actions")
@@ -175,13 +206,25 @@ describe("workspace formatters (non-TTY plain output)", () => {
   })
 
   test("project summary shows counts", () => {
-    const text = formatProjectSummary({ project, tasks: [task], counts: { todo: 1, inProgress: 1, done: 1 } })
+    const text = formatProjectSummary({
+      project,
+      tasks: [task],
+      counts: { todo: 1, inProgress: 1, done: 1 },
+    })
     expect(text).toContain("1 todo · 1 in progress · 1 done")
   })
 
   test("activity feed lists actor and project", () => {
     const text = formatActivity({
-      activity: [{ type: "task.moved", projectName: "Agent", taskTitle: "Ship CLI", actorName: "Ada", createdAt: "2026-01-04T00:00:00.000Z" }],
+      activity: [
+        {
+          type: "task.moved",
+          projectName: "Agent",
+          taskTitle: "Ship CLI",
+          actorName: "Ada",
+          createdAt: "2026-01-04T00:00:00.000Z",
+        },
+      ],
     })
     expect(text).toContain("Recent activity (1)")
     expect(text).toContain("Ada")
@@ -189,19 +232,39 @@ describe("workspace formatters (non-TTY plain output)", () => {
   })
 
   test("mutation confirmations are concise", () => {
-    expect(formatCaptureTask({ taskId: "ta", projectName: "Agent", title: "Ship CLI" })).toContain("Created")
+    expect(
+      formatCaptureTask({
+        taskId: "ta",
+        projectName: "Agent",
+        title: "Ship CLI",
+      })
+    ).toContain("Created")
     expect(formatTaskMoved({ taskId: "ta", status: "done" })).toContain("done")
     expect(formatTaskDeleted({ taskId: "ta" })).toContain("Deleted task")
-    expect(formatTaskMovedToProject({ taskId: "ta", projectName: "Agent Ops" })).toContain("Agent Ops")
-    expect(formatProjectCreated({ projectId: "pa", name: "Agent" })).toContain("Created project")
-    expect(formatProjectDeleted({ projectId: "pa" })).toContain("Deleted project")
+    expect(
+      formatTaskMovedToProject({ taskId: "ta", projectName: "Agent Ops" })
+    ).toContain("Agent Ops")
+    expect(formatProjectCreated({ projectId: "pa", name: "Agent" })).toContain(
+      "Created project"
+    )
+    expect(formatProjectDeleted({ projectId: "pa" })).toContain(
+      "Deleted project"
+    )
   })
 
   test("doctor renders an authenticated report", () => {
     const text = formatDoctor({
       ok: true,
-      config: { convexUrl: "https://x.convex.cloud", clerkFrontendApiUrl: "https://clerk.example", oauthClientId: "cid" },
-      token: { issuer: "https://clerk.example", audience: "convex", expiresAt: "2026-01-02T00:00:00.000Z" },
+      config: {
+        convexUrl: "https://x.convex.cloud",
+        clerkFrontendApiUrl: "https://clerk.example",
+        oauthClientId: "cid",
+      },
+      token: {
+        issuer: "https://clerk.example",
+        audience: "convex",
+        expiresAt: "2026-01-02T00:00:00.000Z",
+      },
       convex: { authenticated: true, visibleProjects: 4 },
       mcp: { stdio: MCP_INFO.stdio, hosted: MCP_INFO.hosted },
     })
@@ -213,8 +276,15 @@ describe("workspace formatters (non-TTY plain output)", () => {
   test("doctor renders an auth failure with a hint", () => {
     const text = formatDoctor({
       ok: false,
-      config: { convexUrl: "https://x.convex.cloud", clerkFrontendApiUrl: "https://clerk.example", oauthClientId: "cid" },
-      auth: { authenticated: false, error: { code: "UNAUTHENTICATED", message: "Run `neram login` first." } },
+      config: {
+        convexUrl: "https://x.convex.cloud",
+        clerkFrontendApiUrl: "https://clerk.example",
+        oauthClientId: "cid",
+      },
+      auth: {
+        authenticated: false,
+        error: { code: "UNAUTHENTICATED", message: "Run `neram login` first." },
+      },
       mcp: { stdio: MCP_INFO.stdio, hosted: MCP_INFO.hosted },
     })
     expect(text).toContain("Authenticated: no")
@@ -227,14 +297,14 @@ describe("mcp install instructions", () => {
     const text = formatMcpInstall("cursor")
     expect(text).toContain("Cursor")
     expect(text).toContain("mcpServers")
-    expect(text).toContain("\"neram\"")
+    expect(text).toContain('"neram"')
     expect(text).toContain(MCP_INFO.hosted)
   })
 
   test("vscode uses the servers config key", () => {
     const text = formatMcpInstall("vscode")
     expect(text).toContain("VS Code")
-    expect(text).toContain("\"servers\"")
+    expect(text).toContain('"servers"')
   })
 
   test("claude-code shows the add command", () => {

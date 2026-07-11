@@ -26,8 +26,6 @@ export const status = query({
     }),
     workspace: v.object({
       projects: v.number(),
-      ownedProjects: v.number(),
-      sharedProjects: v.number(),
       openTasks: v.number(),
     }),
   }),
@@ -40,17 +38,9 @@ export const status = query({
       })
     }
     const access = await requireOrganization(ctx)
-    const projects = await accessibleProjects(
-      ctx,
-      identity.tokenIdentifier,
-      access.organization.organizationId
-    )
-    let ownedProjects = 0
-    let sharedProjects = 0
+    const projects = await accessibleProjects(ctx)
     let openTasks = 0
-    for (const { project, role } of projects) {
-      if (role === "owner") ownedProjects += 1
-      else sharedProjects += 1
+    for (const { project } of projects) {
       const counts = projectCounts(project)
       openTasks += counts.todoCount + counts.inProgressCount
     }
@@ -67,8 +57,6 @@ export const status = query({
       },
       workspace: {
         projects: projects.length,
-        ownedProjects,
-        sharedProjects,
         openTasks,
       },
     }

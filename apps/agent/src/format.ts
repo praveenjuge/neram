@@ -76,7 +76,7 @@ export function formatWhoami(input: {
     `Workspace:  ${input.organization.name} (${input.organization.slug})`,
     `Role:       ${input.organization.role}`,
     "",
-    `Projects:   ${w.projects} (${w.ownedProjects} owned, ${w.sharedProjects} shared)`,
+    `Projects:   ${w.projects}`,
     `Open tasks: ${w.openTasks}`,
     "",
     dim(`Convex: ${input.convexUrl}`),
@@ -290,24 +290,6 @@ export function formatTaskDetail(task: CompactTaskLike) {
   const lines = [taskBullet(task), dim(`  Task ${task.taskId}`)]
   if (task.description) lines.push(`  ${task.description}`)
   return lines.join("\n")
-}
-
-export function formatProjectMembers(result: {
-  members: Array<{
-    subject: string
-    displayName: string
-    role: string
-    isYou?: boolean
-  }>
-}) {
-  return section(
-    `Members (${result.members.length})`,
-    result.members.map((member) =>
-      bullet(
-        `${member.displayName}${member.isYou ? " (you)" : ""} ${dim(`(${member.role}) ${member.subject}`)}`
-      )
-    )
-  )
 }
 
 type CompactSubtaskLike = {

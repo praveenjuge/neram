@@ -94,7 +94,7 @@ vi.mock("@clerk/backend", () => ({
   }),
 }))
 
-import { api, components, internal } from "./_generated/api"
+import { components, internal } from "./_generated/api"
 import schema from "./schema"
 
 const modules = import.meta.glob("./**/*.ts")
@@ -129,32 +129,87 @@ beforeEach(() => {
 async function legacyFixture() {
   const t = convexTest(schema, modules)
   migrationsComponent.register(t)
-  const owner = t.withIdentity({
-    subject: "user_owner",
-    tokenIdentifier: "https://clerk.test|user_owner",
-    name: "Owner",
+  await t.run(async (ctx) => {
+    const now = Date.now()
+    const projectId = await ctx.db.insert("projects", {
+      ownerSubject: "https://clerk.test|user_owner",
+      ownerName: "Owner",
+      name: "Legacy Product",
+      createdAt: now,
+      updatedAt: now,
+      taskCount: 1,
+      todoCount: 1,
+      inProgressCount: 0,
+      doneCount: 0,
+    })
+    await ctx.db.insert("projectMembers", {
+      projectId,
+      subject: "https://clerk.test|user_member",
+      displayName: "Member",
+      role: "editor",
+      createdAt: now,
+    })
+    await ctx.db.insert("projectInvites", {
+      projectId,
+      token: "legacy-invite-token",
+      createdBy: "https://clerk.test|user_owner",
+      createdAt: now,
+    })
+    const taskId = await ctx.db.insert("tasks", {
+      ownerSubject: "https://clerk.test|user_owner",
+      projectId,
+      title: "Legacy task",
+      status: "todo",
+      assigneeSubject: "https://clerk.test|user_member",
+      assigneeName: "Member",
+      position: now,
+      createdAt: now,
+      updatedAt: now,
+    })
+    await ctx.db.insert("subtasks", {
+      taskId,
+      title: "Child",
+      completed: false,
+      position: now,
+      createdAt: now,
+      updatedAt: now,
+    })
+    await ctx.db.insert("taskComments", {
+      taskId,
+      authorSubject: "https://clerk.test|user_member",
+      authorName: "Member",
+      body: "History",
+      mentions: [
+        {
+          start: 0,
+          length: 6,
+          subject: "https://clerk.test|user_owner",
+          label: "Owner",
+        },
+      ],
+      createdAt: now,
+      updatedAt: now,
+    })
+    await ctx.db.insert("taskStats", {
+      taskId,
+      projectId,
+      totalSubtasks: 1,
+      completedSubtasks: 0,
+      activeCommentCount: 1,
+    })
+    await ctx.db.insert("activity", {
+      subject: "https://clerk.test|user_owner",
+      actorSubject: "https://clerk.test|user_owner",
+      actorName: "Owner",
+      projectId,
+      projectName: "Legacy Product",
+      type: "task.created",
+      taskTitle: "Legacy task",
+      taskId,
+      createdAt: now,
+    })
   })
-  const member = t.withIdentity({
-    subject: "user_member",
-    tokenIdentifier: "https://clerk.test|user_member",
-    name: "Member",
-  })
-  const projectId = await owner.mutation(api.projects.create, {
-    name: "Legacy Product",
-  })
-  const invite = await owner.mutation(api.invites.ensure, { projectId })
-  await member.mutation(api.invites.accept, { token: invite })
-  const taskId = await owner.mutation(api.tasks.create, {
-    projectId,
-    title: "Legacy task",
-  })
-  await owner.mutation(api.subtasks.create, { taskId, title: "Child" })
-  await owner.mutation(api.taskComments.create, {
-    taskId,
-    body: "History",
-    mentions: [],
-  })
-  return { t, owner }
+  return { t }
 }
 
 test("dry inventory is deterministic and never persists state", async () => {
@@ -181,12 +236,21 @@ test("dry inventory is deterministic and never persists state", async () => {
 })
 
 test("provision resumes after Clerk failure, verifies rows, and narrows cleanly", async () => {
-  const { t, owner } = await legacyFixture()
-  const deletedProjectId = await owner.mutation(api.projects.create, {
-    name: "Deleted legacy project",
-  })
-  await owner.mutation(api.projects.remove, { projectId: deletedProjectId })
+  const { t } = await legacyFixture()
   await t.run(async (ctx) => {
+    const now = Date.now()
+    const deletedProjectId = await ctx.db.insert("projects", {
+      ownerSubject: "https://clerk.test|user_owner",
+      ownerName: "Owner",
+      name: "Deleted legacy project",
+      createdAt: now,
+      updatedAt: now,
+      taskCount: 0,
+      todoCount: 0,
+      inProgressCount: 0,
+      doneCount: 0,
+    })
+    await ctx.db.delete(deletedProjectId)
     await ctx.db.insert("activity", {
       subject: "https://clerk.test|user_owner",
       actorSubject: "https://retired-clerk.test|user_old_owner",
@@ -194,7 +258,7 @@ test("provision resumes after Clerk failure, verifies rows, and narrows cleanly"
       projectId: deletedProjectId,
       projectName: "Deleted legacy project",
       type: "task.deleted",
-      createdAt: Date.now(),
+      createdAt: now,
     })
   })
   clerkState.failMembershipOnce = true
@@ -211,8 +275,10 @@ test("provision resumes after Clerk failure, verifies rows, and narrows cleanly"
     for (const migration of [
       internal.migrations.backfillProjects,
       internal.migrations.backfillTasks,
+      internal.migrations.normalizeTaskAssignees,
       internal.migrations.backfillActivity,
       internal.migrations.backfillWorkStates,
+      internal.migrations.normalizeTaskComments,
       internal.migrations.revokeProjectInvites,
     ]) {
       await runToCompletion(ctx, components.migrations, migration)
@@ -235,6 +301,12 @@ test("provision resumes after Clerk failure, verifies rows, and narrows cleanly"
       internal.migrations.purgeProjectMembers,
       internal.migrations.purgeLegacyActivity,
       internal.migrations.purgeWorkStates,
+      internal.migrations.clearProjectOwners,
+      internal.migrations.clearTaskOwners,
+      internal.migrations.purgeTenancyCohortMembers,
+      internal.migrations.purgeTenancyProjectMappings,
+      internal.migrations.purgeTenancyCohorts,
+      internal.migrations.purgeTenancyRuns,
     ]) {
       await runToCompletion(ctx, components.migrations, migration)
     }
@@ -244,11 +316,19 @@ test("provision resumes after Clerk failure, verifies rows, and narrows cleanly"
     invites: await ctx.db.query("projectInvites").take(10),
     activity: await ctx.db.query("activity").take(10),
     workStates: await ctx.db.query("projectWorkStates").take(10),
+    projects: await ctx.db.query("projects").take(10),
+    tasks: await ctx.db.query("tasks").take(10),
+    migrationRuns: await ctx.db.query("tenancyMigrationRuns").take(10),
   }))
   expect(legacy).toEqual({
     members: [],
     invites: [],
     activity: [],
     workStates: [],
+    projects: [
+      expect.not.objectContaining({ ownerSubject: expect.anything() }),
+    ],
+    tasks: [expect.not.objectContaining({ ownerSubject: expect.anything() })],
+    migrationRuns: [],
   })
 })

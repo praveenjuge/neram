@@ -63,14 +63,7 @@ function describe(item: ActivityItem): string {
         statusLabel[item.toStatus ?? ""] ?? "another column"
       }`
     case "task.assigned": {
-      // The feed is per-recipient, so when the assignee is the viewer we say
-      // "to you"; otherwise name them.
-      const who =
-        "subject" in item &&
-        item.assigneeSubject &&
-        item.assigneeSubject === item.subject
-          ? "you"
-          : (item.assigneeName ?? "someone")
+      const who = item.assigneeName ?? "someone"
       return `assigned ${item.taskTitle ?? "a task"} to ${who}`
     }
     case "task.deleted":
@@ -142,72 +135,80 @@ export function ActivityClient() {
 
   return (
     <section className="mx-auto grid w-full max-w-3xl gap-6 p-5">
-        <h1 className="font-heading text-lg font-medium">Activity</h1>
-        {status === "LoadingFirstPage" ? (
-          <div className="grid min-h-[40vh] place-items-center">
-            <Spinner className="size-6 text-muted-foreground" />
-          </div>
-        ) : results.length === 0 ? (
-          <EmptyState />
-        ) : (
-          <div className="grid gap-2">
-            <ul className="grid gap-2">
-              {results.map((item) => {
-                const Icon = typeIcon[item.type] ?? History
-                const taskId = "taskId" in item ? item.taskId : undefined
-                const commentId =
-                  "commentId" in item ? item.commentId : undefined
-                const commentExcerpt =
-                  "commentExcerpt" in item ? item.commentExcerpt : undefined
-                const card = (
-                  <Card className={taskId ? "transition-colors hover:bg-muted/40" : undefined} size="sm">
-                    <CardContent className="flex items-start gap-3">
-                      <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground">
-                        <Icon className="size-4" />
-                      </span>
-                      <div className="min-w-0 space-y-0.5">
-                        <p className="text-sm">
-                          <span className="font-medium">{item.actorName}</span>{" "}
-                          {describe(item)}
-                        </p>
-                        {commentExcerpt ? (
-                          <p className="line-clamp-1 text-sm text-muted-foreground">
-                            “{commentExcerpt}”
-                          </p>
-                        ) : null}
-                        <p className="truncate text-sm text-muted-foreground">
-                          {activityContext(item)} · {relativeTime(item.createdAt)}
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )
-                return (
-                  <li key={item._id}>
-                    {taskId && item.projectId ? (
-                      <Link href={`${workspaceHref(organizationSlug, `/projects/${item.projectId}`)}?task=${taskId}${commentId ? `&comment=${commentId}` : ""}`}>
-                        {card}
-                      </Link>
-                    ) : card}
-                  </li>
-                )
-              })}
-            </ul>
-            {status === "CanLoadMore" || status === "LoadingMore" ? (
-              <div className="grid place-items-center pt-2">
-                <Button
-                  data-testid="load-more-activity"
-                  disabled={status === "LoadingMore"}
-                  onClick={() => loadMore(30)}
+      <h1 className="font-heading text-lg font-medium">Activity</h1>
+      {status === "LoadingFirstPage" ? (
+        <div className="grid min-h-[40vh] place-items-center">
+          <Spinner className="size-6 text-muted-foreground" />
+        </div>
+      ) : results.length === 0 ? (
+        <EmptyState />
+      ) : (
+        <div className="grid gap-2">
+          <ul className="grid gap-2">
+            {results.map((item) => {
+              const Icon = typeIcon[item.type] ?? History
+              const taskId = "taskId" in item ? item.taskId : undefined
+              const commentId = "commentId" in item ? item.commentId : undefined
+              const commentExcerpt =
+                "commentExcerpt" in item ? item.commentExcerpt : undefined
+              const card = (
+                <Card
+                  className={
+                    taskId ? "transition-colors hover:bg-muted/40" : undefined
+                  }
                   size="sm"
-                  variant="outline"
                 >
-                  {status === "LoadingMore" ? "Loading…" : "Load more"}
-                </Button>
-              </div>
-            ) : null}
-          </div>
-        )}
+                  <CardContent className="flex items-start gap-3">
+                    <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground">
+                      <Icon className="size-4" />
+                    </span>
+                    <div className="min-w-0 space-y-0.5">
+                      <p className="text-sm">
+                        <span className="font-medium">{item.actorName}</span>{" "}
+                        {describe(item)}
+                      </p>
+                      {commentExcerpt ? (
+                        <p className="line-clamp-1 text-sm text-muted-foreground">
+                          “{commentExcerpt}”
+                        </p>
+                      ) : null}
+                      <p className="truncate text-sm text-muted-foreground">
+                        {activityContext(item)} · {relativeTime(item.createdAt)}
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+              return (
+                <li key={item._id}>
+                  {taskId && item.projectId ? (
+                    <Link
+                      href={`${workspaceHref(organizationSlug, `/projects/${item.projectId}`)}?task=${taskId}${commentId ? `&comment=${commentId}` : ""}`}
+                    >
+                      {card}
+                    </Link>
+                  ) : (
+                    card
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+          {status === "CanLoadMore" || status === "LoadingMore" ? (
+            <div className="grid place-items-center pt-2">
+              <Button
+                data-testid="load-more-activity"
+                disabled={status === "LoadingMore"}
+                onClick={() => loadMore(30)}
+                size="sm"
+                variant="outline"
+              >
+                {status === "LoadingMore" ? "Loading…" : "Load more"}
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      )}
     </section>
   )
 }

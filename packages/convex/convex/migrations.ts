@@ -41,6 +41,25 @@ export const backfillTasks = migrations.define({
   },
 })
 
+export const normalizeTaskAssignees = migrations.define({
+  table: "tasks",
+  migrateOne: async (_ctx, task) => {
+    if (!task.assigneeSubject?.includes("|")) return
+    return { assigneeSubject: task.assigneeSubject.split("|").at(-1) }
+  },
+})
+
+export const normalizeTaskComments = migrations.define({
+  table: "taskComments",
+  migrateOne: async (_ctx, comment) => ({
+    authorSubject: comment.authorSubject.split("|").at(-1)!,
+    mentions: comment.mentions.map((item) => ({
+      ...item,
+      subject: item.subject.split("|").at(-1)!,
+    })),
+  }),
+})
+
 export const backfillActivity = migrations.define({
   table: "activity",
   migrateOne: async (ctx, activity) => {
@@ -118,11 +137,46 @@ export const purgeWorkStates = migrations.define({
   migrateOne: async (ctx, state) => await ctx.db.delete(state._id),
 })
 
+export const clearProjectOwners = migrations.define({
+  table: "projects",
+  migrateOne: async () => ({
+    ownerSubject: undefined,
+    ownerName: undefined,
+  }),
+})
+
+export const clearTaskOwners = migrations.define({
+  table: "tasks",
+  migrateOne: async () => ({ ownerSubject: undefined }),
+})
+
+export const purgeTenancyCohortMembers = migrations.define({
+  table: "tenancyMigrationCohortMembers",
+  migrateOne: async (ctx, row) => await ctx.db.delete(row._id),
+})
+
+export const purgeTenancyProjectMappings = migrations.define({
+  table: "tenancyProjectMappings",
+  migrateOne: async (ctx, row) => await ctx.db.delete(row._id),
+})
+
+export const purgeTenancyCohorts = migrations.define({
+  table: "tenancyMigrationCohorts",
+  migrateOne: async (ctx, row) => await ctx.db.delete(row._id),
+})
+
+export const purgeTenancyRuns = migrations.define({
+  table: "tenancyMigrationRuns",
+  migrateOne: async (ctx, row) => await ctx.db.delete(row._id),
+})
+
 export const runBackfill = migrations.runner([
   internal.migrations.backfillProjects,
   internal.migrations.backfillTasks,
+  internal.migrations.normalizeTaskAssignees,
   internal.migrations.backfillActivity,
   internal.migrations.backfillWorkStates,
+  internal.migrations.normalizeTaskComments,
   internal.migrations.revokeProjectInvites,
 ])
 
@@ -130,4 +184,17 @@ export const runNarrowCleanup = migrations.runner([
   internal.migrations.purgeProjectMembers,
   internal.migrations.purgeLegacyActivity,
   internal.migrations.purgeWorkStates,
+])
+
+export const runCanonicalCleanup = migrations.runner([
+  internal.migrations.purgeProjectMembers,
+  internal.migrations.revokeProjectInvites,
+  internal.migrations.purgeLegacyActivity,
+  internal.migrations.purgeWorkStates,
+  internal.migrations.clearProjectOwners,
+  internal.migrations.clearTaskOwners,
+  internal.migrations.purgeTenancyCohortMembers,
+  internal.migrations.purgeTenancyProjectMappings,
+  internal.migrations.purgeTenancyCohorts,
+  internal.migrations.purgeTenancyRuns,
 ])

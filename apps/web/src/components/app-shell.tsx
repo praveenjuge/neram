@@ -111,7 +111,7 @@ function ProjectActions({ project }: { project: SidebarProject }) {
           <DropdownMenuItem onSelect={() => setDialog("edit")}>
             <Pencil /> Edit
           </DropdownMenuItem>
-          {project.role === "owner" ? (
+          {project.role === "org:admin" ? (
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={() => setDialog("archive")}>
@@ -137,7 +137,7 @@ function ProjectActions({ project }: { project: SidebarProject }) {
         open={dialog === "edit"}
         role={project.role}
       />
-      {project.role === "owner" ? (
+      {project.role === "org:admin" ? (
         <ArchiveProjectDialog
           id={project._id}
           name={project.name}
@@ -246,7 +246,9 @@ function AppSidebar() {
               <SidebarMenuItem>
                 <SidebarMenuButton
                   asChild
-                  isActive={pathname === workspaceHref(organizationSlug, "/sprints")}
+                  isActive={
+                    pathname === workspaceHref(organizationSlug, "/sprints")
+                  }
                   tooltip="Sprints"
                 >
                   <Link href={workspaceHref(organizationSlug, "/sprints")}>
@@ -258,7 +260,9 @@ function AppSidebar() {
               <SidebarMenuItem>
                 <SidebarMenuButton
                   asChild
-                  isActive={pathname === workspaceHref(organizationSlug, "/tasks")}
+                  isActive={
+                    pathname === workspaceHref(organizationSlug, "/tasks")
+                  }
                   tooltip="Tasks"
                 >
                   <Link href={workspaceHref(organizationSlug, "/tasks")}>
@@ -270,7 +274,9 @@ function AppSidebar() {
               <SidebarMenuItem>
                 <SidebarMenuButton
                   asChild
-                  isActive={pathname === workspaceHref(organizationSlug, "/activity")}
+                  isActive={
+                    pathname === workspaceHref(organizationSlug, "/activity")
+                  }
                   tooltip="Activity"
                 >
                   <Link href={workspaceHref(organizationSlug, "/activity")}>
@@ -282,7 +288,9 @@ function AppSidebar() {
               <SidebarMenuItem>
                 <SidebarMenuButton
                   asChild
-                  isActive={pathname === workspaceHref(organizationSlug, "/archived")}
+                  isActive={
+                    pathname === workspaceHref(organizationSlug, "/archived")
+                  }
                   tooltip="Archived"
                 >
                   <Link href={workspaceHref(organizationSlug, "/archived")}>

@@ -6,6 +6,7 @@ import type { Actor } from "./model"
 import { initialSprintBounds, nextSprintBounds } from "./sprintTime"
 
 export const MAX_SPRINT_TASKS = 1000
+type SprintActor = Pick<Actor, "userId" | "name">
 
 export function cleanGoal(goal?: string) {
   if (goal === undefined) return undefined
@@ -116,7 +117,7 @@ export async function addTaskToSprint(
     task: Doc<"tasks">
     project: Doc<"projects">
     sprintId: Id<"sprints">
-    actor: Actor
+    actor: SprintActor
     origin: Doc<"sprintTaskEntries">["origin"]
     priorCompletionSprintId?: Id<"sprints">
     now?: number
@@ -159,7 +160,7 @@ export async function removeTaskFromSprint(
   args: {
     task: Doc<"tasks">
     sprintId: Id<"sprints">
-    actor: Actor
+    actor: SprintActor
     reason: string
     now?: number
   }
@@ -269,7 +270,7 @@ export async function applyStatusSprintRules(
 export async function markTaskEntriesRemoved(
   ctx: MutationCtx,
   task: Doc<"tasks">,
-  actor: Actor,
+  actor: SprintActor,
   reason: string
 ) {
   if (task.currentSprintId) {

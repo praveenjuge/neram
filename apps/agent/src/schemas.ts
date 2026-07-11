@@ -84,7 +84,6 @@ export const schemas = {
     limit: z.number().int().min(1).max(50).default(12),
   }),
   get_task: z.object({ taskId: z.string().min(1) }),
-  list_project_members: z.object({ projectId: z.string().min(1) }),
   list_subtasks: z.object({
     taskId: z.string().min(1),
     hideCompleted: z.boolean().optional(),
@@ -232,7 +231,10 @@ export const outputSchemas = {
     userId: z.string(),
     role: organizationRoleSchema,
   }),
-  remove_workspace_member: z.object({ userId: z.string(), removed: z.boolean() }),
+  remove_workspace_member: z.object({
+    userId: z.string(),
+    removed: z.boolean(),
+  }),
   delete_workspace: z.object({ jobId: z.string(), deleting: z.boolean() }),
   plan_sprint_tasks: z.object({
     taskIds: z.array(z.string()),
