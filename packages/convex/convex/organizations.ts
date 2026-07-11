@@ -11,9 +11,60 @@ import { actor, requireOrganization, requireOrganizationAdmin } from "./model"
 import { ensureSprintPair } from "./sprintModel"
 
 const role = v.union(v.literal("org:admin"), v.literal("org:member"))
+const organization = v.object({
+  _id: v.id("organizations"),
+  _creationTime: v.number(),
+  organizationId: v.string(),
+  slug: v.string(),
+  name: v.string(),
+  state: v.union(v.literal("active"), v.literal("deleting")),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  deletingAt: v.optional(v.number()),
+  deletedAt: v.optional(v.number()),
+})
+const member = v.object({
+  _id: v.id("organizationMembers"),
+  _creationTime: v.number(),
+  organizationId: v.string(),
+  membershipId: v.string(),
+  userId: v.string(),
+  role,
+  displayName: v.string(),
+  email: v.optional(v.string()),
+  imageUrl: v.optional(v.string()),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+})
+const settings = v.object({
+  _id: v.id("organizationSettings"),
+  _creationTime: v.number(),
+  organizationId: v.string(),
+  cadenceWeeks: v.number(),
+  startWeekday: v.number(),
+  timezone: v.string(),
+  nextSprintNumber: v.number(),
+  currentSprintId: v.optional(v.id("sprints")),
+  upcomingSprintId: v.optional(v.id("sprints")),
+  rolloverStatus: v.union(v.literal("idle"), v.literal("running")),
+  activeRolloverJobId: v.optional(v.id("sprintRolloverJobs")),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+})
+const tokenContext = v.object({
+  organizationId: v.string(),
+  organizationSlug: v.string(),
+  userId: v.string(),
+  name: v.string(),
+})
 
 export const current = query({
   args: {},
+  returns: v.object({
+    organization,
+    membership: member,
+    settings: v.union(v.null(), settings),
+  }),
   handler: async (ctx) => {
     const access = await requireOrganization(ctx)
     const settings = await ctx.db
@@ -32,6 +83,7 @@ export const current = query({
 
 export const members = query({
   args: {},
+  returns: v.array(member),
   handler: async (ctx) => {
     const access = await requireOrganization(ctx)
     return await ctx.db
@@ -45,6 +97,7 @@ export const members = query({
 
 export const adminContext = internalQuery({
   args: {},
+  returns: tokenContext,
   handler: async (ctx) => {
     const access = await requireOrganizationAdmin(ctx)
     return {
@@ -58,9 +111,10 @@ export const adminContext = internalQuery({
 
 export const activeTokenContext = internalQuery({
   args: {},
+  returns: tokenContext,
   handler: async (ctx) => {
     const who = await actor(ctx)
-    if (!who.organizationId) {
+    if (!who.organizationId || !who.organizationSlug) {
       throw new ConvexError({
         code: "ORGANIZATION_REQUIRED",
         message: "Choose a workspace and sign in again.",

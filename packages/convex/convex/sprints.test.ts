@@ -230,6 +230,251 @@ test("rollover credits cutoff completions, carries unfinished work, and preserve
   )
 })
 
+test("closed summaries preserve baseline truth and later scope changes", async () => {
+  const { alice } = await setup()
+  const projectId = await alice.mutation(api.projects.create, {
+    name: "Planning",
+  })
+  const carried = await alice.mutation(api.tasks.create, {
+    projectId,
+    title: "Carry forward",
+    sprint: "current",
+  })
+  const planned = await alice.mutation(api.tasks.create, {
+    projectId,
+    title: "Opening plan",
+    sprint: "upcoming",
+  })
+  const firstJob = await alice.mutation(api.sprints.rollover, {
+    organizationId: "org_alpha",
+    slug: "alpha",
+    confirm: true,
+    reason: "Open the planned Sprint",
+  })
+  for (let index = 0; index < 10; index += 1) {
+    const done = await alice.run(
+      async (ctx) => (await ctx.db.get(firstJob))?.status === "completed"
+    )
+    if (done) break
+    await alice.mutation(internal.sprintRollover.process, { jobId: firstJob })
+  }
+
+  await alice.mutation(api.sprints.remove, {
+    taskIds: [planned],
+    sprint: "current",
+  })
+  const added = await alice.mutation(api.tasks.create, {
+    projectId,
+    title: "Late discovery",
+  })
+  await alice.mutation(api.tasks.move, { taskId: added, status: "inProgress" })
+  await alice.mutation(api.tasks.move, { taskId: carried, status: "done" })
+
+  const secondJob = await alice.mutation(api.sprints.rollover, {
+    organizationId: "org_alpha",
+    slug: "alpha",
+    confirm: true,
+    reason: "Close with scope truth",
+  })
+  for (let index = 0; index < 10; index += 1) {
+    const done = await alice.run(
+      async (ctx) => (await ctx.db.get(secondJob))?.status === "completed"
+    )
+    if (done) break
+    await alice.mutation(internal.sprintRollover.process, { jobId: secondJob })
+  }
+
+  const history = await alice.query(api.sprints.history, page)
+  expect(history.page[0]).toMatchObject({
+    number: 2,
+    baselineCount: 2,
+    completedCount: 1,
+    carriedCount: 1,
+    addedCount: 1,
+    removedCount: 1,
+  })
+})
+
+test("delayed rollover uses the scheduled cutoff and repair resumes one job", async () => {
+  const { t, alice } = await setup()
+  const projectId = await alice.mutation(api.projects.create, {
+    name: "Cutoff",
+  })
+  const exact = await alice.mutation(api.tasks.create, {
+    projectId,
+    title: "Exact cutoff",
+    sprint: "current",
+  })
+  const late = await alice.mutation(api.tasks.create, {
+    projectId,
+    title: "After cutoff",
+    sprint: "current",
+  })
+  const current = await alice.query(api.sprints.current, {})
+  const cutoffAt = Date.now() - 1_000
+  await t.run(async (ctx) => {
+    await ctx.db.patch(current!.sprint._id, { endsAt: cutoffAt })
+    for (const [taskId, completedAt] of [
+      [exact, cutoffAt],
+      [late, cutoffAt + 1],
+    ] as const) {
+      await ctx.db.patch(taskId, { status: "done", completedAt })
+      const entry = await ctx.db
+        .query("sprintTaskEntries")
+        .withIndex("by_sprint_task_and_removed", (q) =>
+          q
+            .eq("sprintId", current!.sprint._id)
+            .eq("taskId", taskId)
+            .eq("removedAt", undefined)
+        )
+        .unique()
+      await ctx.db.patch(entry!._id, { creditedCompletionAt: completedAt })
+    }
+  })
+
+  await alice.mutation(internal.sprintRollover.scheduled, {
+    organizationId: "org_alpha",
+    sprintId: current!.sprint._id,
+  })
+  const jobId = await t.run(async (ctx) => {
+    const jobs = await ctx.db
+      .query("sprintRolloverJobs")
+      .withIndex("by_closing_sprint", (q) =>
+        q.eq("closingSprintId", current!.sprint._id)
+      )
+      .take(10)
+    expect(jobs).toHaveLength(1)
+    return jobs[0]._id
+  })
+  await alice.mutation(internal.sprintRollover.process, { jobId })
+  await alice.mutation(internal.sprintRollover.repair, {})
+  for (let index = 0; index < 10; index += 1) {
+    const done = await alice.run(
+      async (ctx) => (await ctx.db.get(jobId))?.status === "completed"
+    )
+    if (done) break
+    await alice.mutation(internal.sprintRollover.process, { jobId })
+  }
+
+  const history = await alice.query(api.sprints.history, page)
+  expect(history.page[0]).toMatchObject({
+    closedCutoffAt: cutoffAt,
+    completedCount: 1,
+    carriedCount: 1,
+  })
+  expect((await alice.query(api.sprints.current, {}))?.tasks).toEqual(
+    expect.arrayContaining([expect.objectContaining({ _id: late })])
+  )
+  expect(
+    await t.run(
+      async (ctx) =>
+        await ctx.db
+          .query("sprintRolloverJobs")
+          .withIndex("by_closing_sprint", (q) =>
+            q.eq("closingSprintId", current!.sprint._id)
+          )
+          .take(10)
+    )
+  ).toHaveLength(1)
+})
+
+test("Sprint entry history cannot grow beyond the 1,000-task ceiling", async () => {
+  const { t, alice } = await setup()
+  const projectId = await alice.mutation(api.projects.create, {
+    name: "Ceiling",
+  })
+  const filler = await alice.mutation(api.tasks.create, {
+    projectId,
+    title: "Historical filler",
+  })
+  const target = await alice.mutation(api.tasks.create, {
+    projectId,
+    title: "One too many",
+  })
+  const current = await alice.query(api.sprints.current, {})
+  for (let batch = 0; batch < 10; batch += 1) {
+    await t.run(async (ctx) => {
+      for (let offset = 0; offset < 100; offset += 1) {
+        const index = batch * 100 + offset
+        await ctx.db.insert("sprintTaskEntries", {
+          organizationId: "org_alpha",
+          sprintId: current!.sprint._id,
+          taskId: filler,
+          projectId,
+          projectNameSnapshot: "Ceiling",
+          taskTitleSnapshot: "Historical filler",
+          origin: "scope_added",
+          actorUserId: "user_alice",
+          actorName: "Alice",
+          addedAt: index,
+          removedAt: index + 1,
+          removedByUserId: "user_alice",
+          removedByName: "Alice",
+          removalReason: "test_churn",
+        })
+      }
+    })
+  }
+  await expect(
+    alice.mutation(api.sprints.plan, {
+      taskIds: [target],
+      sprint: "current",
+    })
+  ).rejects.toThrow("at most 1,000 tasks")
+})
+
+test("Sprint API keeps stable validation errors and allows member planning controls", async () => {
+  const { alice, bob, carol } = await setup()
+  const beforeCurrent = await alice.query(api.sprints.current, {})
+  const beforeUpcoming = await alice.query(api.sprints.upcoming, {})
+
+  await bob.mutation(api.sprints.updateGoal, {
+    sprint: "current",
+    goal: "Ship the tenant cutover",
+  })
+  await bob.mutation(api.sprints.updateCadence, {
+    cadenceWeeks: 3,
+    startWeekday: 2,
+    timezone: "Asia/Kolkata",
+  })
+  const afterCurrent = await alice.query(api.sprints.current, {})
+  const afterUpcoming = await alice.query(api.sprints.upcoming, {})
+  expect(afterCurrent?.sprint).toMatchObject({
+    goal: "Ship the tenant cutover",
+    endsAt: beforeCurrent?.sprint.endsAt,
+  })
+  expect(afterUpcoming?.sprint.endsAt).not.toBe(beforeUpcoming?.sprint.endsAt)
+
+  await expect(
+    bob.mutation(api.sprints.updateCadence, {
+      cadenceWeeks: 0,
+      startWeekday: 1,
+      timezone: "UTC",
+    })
+  ).rejects.toThrow('"code":"INVALID_CADENCE"')
+  await expect(
+    bob.mutation(api.sprints.updateGoal, {
+      sprint: "current",
+      goal: "x".repeat(501),
+    })
+  ).rejects.toThrow('"code":"INVALID_GOAL"')
+  await expect(
+    carol.query(api.sprints.audit, {
+      sprintId: beforeCurrent!.sprint._id,
+      ...page,
+    })
+  ).rejects.toThrow('"code":"NOT_FOUND"')
+
+  await expect(
+    bob.mutation(api.sprints.rollover, {
+      organizationId: "org_alpha",
+      slug: "alpha",
+      confirm: true,
+      reason: "Member-triggered close",
+    })
+  ).resolves.toBeDefined()
+})
+
 test("Sprint boundaries retain local midnight across a DST change", () => {
   const bounds = initialSprintBounds(Date.parse("2026-03-03T12:00:00Z"), {
     cadenceWeeks: 2,

@@ -10,6 +10,7 @@
 
 import type * as activity from "../activity.js";
 import type * as agent from "../agent.js";
+import type * as clerkWebhook from "../clerkWebhook.js";
 import type * as crons from "../crons.js";
 import type * as http from "../http.js";
 import type * as invites from "../invites.js";
@@ -42,6 +43,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   activity: typeof activity;
   agent: typeof agent;
+  clerkWebhook: typeof clerkWebhook;
   crons: typeof crons;
   http: typeof http;
   invites: typeof invites;

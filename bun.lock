@@ -5,12 +5,14 @@
     "": {
       "name": "neram",
       "devDependencies": {
+        "prettier": "^3.9.4",
+        "prettier-plugin-tailwindcss": "^0.8.0",
         "turbo": "^2.10.2",
       },
     },
     "apps/agent": {
       "name": "neram",
-      "version": "0.0.5",
+      "version": "0.1.0",
       "bin": {
         "neram": "dist/cli.js",
       },

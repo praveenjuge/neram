@@ -1,4 +1,7 @@
-import { paginationOptsValidator } from "convex/server"
+import {
+  paginationOptsValidator,
+  paginationResultValidator,
+} from "convex/server"
 import { ConvexError, v } from "convex/values"
 
 import { internal } from "./_generated/api"
@@ -76,6 +79,33 @@ const task = v.object({
   totalSubtasks: v.number(),
   completedSubtasks: v.number(),
   activeCommentCount: v.number(),
+})
+
+const sprintEntry = v.object({
+  _id: v.id("sprintTaskEntries"),
+  _creationTime: v.number(),
+  organizationId: v.string(),
+  sprintId: v.id("sprints"),
+  taskId: v.id("tasks"),
+  projectId: v.id("projects"),
+  projectNameSnapshot: v.string(),
+  taskTitleSnapshot: v.string(),
+  origin: v.union(
+    v.literal("planned"),
+    v.literal("carried"),
+    v.literal("scope_added"),
+    v.literal("reopened")
+  ),
+  actorUserId: v.string(),
+  actorName: v.string(),
+  addedAt: v.number(),
+  removedAt: v.optional(v.number()),
+  removedByUserId: v.optional(v.string()),
+  removedByName: v.optional(v.string()),
+  removalReason: v.optional(v.string()),
+  creditedCompletionAt: v.optional(v.number()),
+  carriedToSprintId: v.optional(v.id("sprints")),
+  priorCompletionSprintId: v.optional(v.id("sprints")),
 })
 
 async function sprintTask(
@@ -202,6 +232,7 @@ export const upcoming = query({
 
 export const history = query({
   args: { paginationOpts: paginationOptsValidator },
+  returns: paginationResultValidator(sprint),
   handler: async (ctx, args) => {
     const access = await requireOrganization(ctx)
     return await ctx.db
@@ -218,6 +249,7 @@ export const history = query({
 
 export const audit = query({
   args: { sprintId: v.id("sprints"), paginationOpts: paginationOptsValidator },
+  returns: paginationResultValidator(sprintEntry),
   handler: async (ctx, args) => {
     const access = await requireOrganization(ctx)
     const sprintDoc = await ctx.db.get(args.sprintId)

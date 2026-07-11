@@ -1,14 +1,9 @@
-import { Webhook } from "svix"
-
 import { httpRouter } from "convex/server"
 
 import { internal } from "./_generated/api"
+import { verifyClerkWebhook } from "./clerkWebhook"
+import type { ClerkWebhook } from "./clerkWebhook"
 import { env, httpAction } from "./_generated/server"
-
-type ClerkWebhook = {
-  type: string
-  data: Record<string, unknown>
-}
 
 function text(value: unknown) {
   return typeof value === "string" && value.length > 0 ? value : undefined
@@ -67,10 +62,7 @@ const clerkWebhook = httpAction(async (ctx, request) => {
   }
   let event: ClerkWebhook
   try {
-    event = new Webhook(env.CLERK_WEBHOOK_SIGNING_SECRET).verify(
-      body,
-      headers
-    ) as ClerkWebhook
+    event = verifyClerkWebhook(body, headers, env.CLERK_WEBHOOK_SIGNING_SECRET)
   } catch {
     return new Response("Invalid signature", { status: 400 })
   }

@@ -1,6 +1,8 @@
 # Neram
 
 Neram is a project and task workspace built with Clerk, Convex, Next.js, and Expo.
+Clerk Organizations are the canonical tenant and Sprints provide one recurring
+Current/Upcoming planning cadence across every project in a workspace.
 
 ## Structure
 
@@ -49,6 +51,10 @@ Neram includes a workspace-first agent package at `apps/agent`.
 bun install --frozen-lockfile
 bun --cwd apps/agent run build
 neram login
+neram workspace current --json
+neram workspace switch
+neram sprint current --json
+neram sprint plan --task-id TASK_ID --sprint upcoming --json
 neram doctor --json
 neram daily --json
 neram task add --project "Project name" --title "Follow up" --json
@@ -58,11 +64,11 @@ neram project summary --project "Project name" --json
 neram mcp
 ```
 
-`neram login` uses Clerk OAuth Authorization Code with PKCE. It opens the browser,
-returns to a loopback `127.0.0.1` callback, stores tokens in the OS keychain when
+`neram login` uses Clerk OAuth Authorization Code with PKCE and requires an
+active Organization. It opens the browser, returns to a loopback `127.0.0.1`
+callback, stores the Organization-bound tokens in the OS keychain when
 available, and falls back to `~/.config/neram/credentials.json` with `0600`
-permissions. The CLI sends Clerk OIDC `id_token` values to Convex so agent
-actions run as the signed-in user.
+permissions. Switching workspaces reruns OAuth and requires MCP reconnection.
 
 MCP clients can use the local stdio server:
 

@@ -90,11 +90,11 @@ async function activeEntry(
 ) {
   const entries = await ctx.db
     .query("sprintTaskEntries")
-    .withIndex("by_sprint_and_task", (q) =>
-      q.eq("sprintId", sprintId).eq("taskId", taskId)
+    .withIndex("by_sprint_task_and_removed", (q) =>
+      q.eq("sprintId", sprintId).eq("taskId", taskId).eq("removedAt", undefined)
     )
-    .take(20)
-  return entries.find((entry) => entry.removedAt === undefined)
+    .unique()
+  return entries
 }
 
 async function assertCapacity(ctx: MutationCtx, sprintId: Id<"sprints">) {
@@ -102,11 +102,7 @@ async function assertCapacity(ctx: MutationCtx, sprintId: Id<"sprints">) {
     .query("sprintTaskEntries")
     .withIndex("by_sprint_and_added_at", (q) => q.eq("sprintId", sprintId))
     .take(MAX_SPRINT_TASKS + 1)
-  const active = tasks.reduce(
-    (count, entry) => count + (entry.removedAt === undefined ? 1 : 0),
-    0
-  )
-  if (active >= MAX_SPRINT_TASKS) {
+  if (tasks.length >= MAX_SPRINT_TASKS) {
     throw new ConvexError({
       code: "SPRINT_TASK_LIMIT",
       message: "A Sprint can contain at most 1,000 tasks.",
@@ -193,15 +189,15 @@ export async function removeTaskFromSprint(
 async function latestCreditedSprint(ctx: MutationCtx, task: Doc<"tasks">) {
   const entries = await ctx.db
     .query("sprintTaskEntries")
-    .withIndex("by_organization_and_task", (q) =>
+    .withIndex("by_organization_task_and_completion", (q) =>
       q
         .eq("organizationId", task.organizationId as string)
         .eq("taskId", task._id)
+        .gt("creditedCompletionAt", 0)
     )
     .order("desc")
-    .take(20)
-  return entries.find((entry) => entry.creditedCompletionAt !== undefined)
-    ?.sprintId
+    .first()
+  return entries?.sprintId
 }
 
 export async function applyStatusSprintRules(

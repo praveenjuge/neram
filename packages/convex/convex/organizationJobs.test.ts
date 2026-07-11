@@ -32,12 +32,40 @@ async function setup() {
     org_slug: "acme",
     org_role: "org:admin",
   })
-  return { t, admin }
+  const member = t.withIdentity({
+    subject: "user_member",
+    tokenIdentifier: "https://clerk.test|user_member",
+    name: "Bob",
+    org_id: "org_acme",
+    org_slug: "acme",
+    org_role: "org:member",
+  })
+  return { t, admin, member }
 }
+
+test("workspace deletion requires an admin and exact tenant confirmation", async () => {
+  const { admin, member } = await setup()
+  await expect(
+    member.mutation(api.organizations.beginDeletion, {
+      organizationId: "org_acme",
+      slug: "acme",
+      confirm: true,
+    })
+  ).rejects.toThrow('"code":"FORBIDDEN"')
+  await expect(
+    admin.mutation(api.organizations.beginDeletion, {
+      organizationId: "org_acme",
+      slug: "other",
+      confirm: true,
+    })
+  ).rejects.toThrow('"code":"CONFIRMATION_REQUIRED"')
+})
 
 test("member removal unassigns open work and preserves completed attribution", async () => {
   const { t, admin } = await setup()
-  const projectId = await admin.mutation(api.projects.create, { name: "Product" })
+  const projectId = await admin.mutation(api.projects.create, {
+    name: "Product",
+  })
   const openTask = await admin.mutation(api.tasks.create, {
     projectId,
     title: "Open",
@@ -76,7 +104,9 @@ test("member removal unassigns open work and preserves completed attribution", a
 
 test("coordinated external deletion drains task children before the Organization", async () => {
   const { t, admin } = await setup()
-  const projectId = await admin.mutation(api.projects.create, { name: "Product" })
+  const projectId = await admin.mutation(api.projects.create, {
+    name: "Product",
+  })
   const taskId = await admin.mutation(api.tasks.create, {
     projectId,
     title: "Delete safely",

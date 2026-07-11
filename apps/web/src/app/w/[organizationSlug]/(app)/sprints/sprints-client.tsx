@@ -5,13 +5,23 @@ import { OrganizationProfile } from "@clerk/nextjs"
 import { format } from "date-fns"
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react"
 import type { FunctionReturnType } from "convex/server"
-import { ArrowRight, CalendarClock, Check, RotateCcw, Search, X } from "lucide-react"
+import {
+  ArrowRight,
+  CalendarClock,
+  Check,
+  RotateCcw,
+  Search,
+  X,
+} from "lucide-react"
 import { useMemo, useState } from "react"
 import { toast } from "sonner"
 
 import { api } from "@neram/convex/api"
 import type { Id } from "@neram/convex/data-model"
-import { positionFor, type Status } from "@/components/project-board/board-shared"
+import {
+  positionFor,
+  type Status,
+} from "@/components/project-board/board-shared"
 import { KanbanBoard } from "@/components/project-board/kanban-board"
 import { TaskDialog } from "@/components/project-board/task-dialog"
 import { Badge } from "@/components/ui/badge"
@@ -41,7 +51,9 @@ import { messageFromError } from "@/lib/errors"
 import { cn } from "@/lib/utils"
 
 type SprintTab = "current" | "backlog" | "upcoming" | "history" | "settings"
-type SprintTask = NonNullable<FunctionReturnType<typeof api.sprints.current>>["tasks"][number]
+type SprintTask = NonNullable<
+  FunctionReturnType<typeof api.sprints.current>
+>["tasks"][number]
 
 const tabs: Array<{ id: SprintTab; label: string }> = [
   { id: "current", label: "Current" },
@@ -80,7 +92,9 @@ function SprintHeader({
         <h2 className="font-heading text-base font-medium">
           {state} · Sprint {number}
         </h2>
-        <p className="text-sm text-muted-foreground">{dateRange(startsAt, endsAt)}</p>
+        <p className="text-sm text-muted-foreground">
+          {dateRange(startsAt, endsAt)}
+        </p>
       </div>
       <Badge variant="outline">{state}</Badge>
     </div>
@@ -111,7 +125,11 @@ function GoalEditor({
           onClick={() =>
             void updateGoal({ sprint, goal: goal || undefined })
               .then(() => toast.success("Sprint goal updated."))
-              .catch((error) => toast.error(messageFromError(error, "Could not update the goal.")))
+              .catch((error) =>
+                toast.error(
+                  messageFromError(error, "Could not update the goal.")
+                )
+              )
           }
           variant="outline"
         >
@@ -122,7 +140,13 @@ function GoalEditor({
   )
 }
 
-function RemoveTaskButton({ task, sprint }: { task: SprintTask; sprint: "current" | "upcoming" }) {
+function RemoveTaskButton({
+  task,
+  sprint,
+}: {
+  task: SprintTask
+  sprint: "current" | "upcoming"
+}) {
   const remove = useMutation(api.sprints.remove)
   return (
     <Button
@@ -130,7 +154,9 @@ function RemoveTaskButton({ task, sprint }: { task: SprintTask; sprint: "current
       onClick={() =>
         void remove({ taskIds: [task._id], sprint })
           .then(() => toast.success("Task returned to Backlog."))
-          .catch((error) => toast.error(messageFromError(error, "Could not remove the task.")))
+          .catch((error) =>
+            toast.error(messageFromError(error, "Could not remove the task."))
+          )
       }
       size="icon-sm"
       variant="ghost"
@@ -145,17 +171,32 @@ function CurrentSprint() {
   const moveTask = useMutation(api.tasks.move)
   const [openTaskId, setOpenTaskId] = useState<Id<"tasks"> | null>(null)
   if (current === undefined) return <Loading />
-  if (current === null) return <p className="text-sm text-muted-foreground">Sprint setup is unavailable.</p>
+  if (current === null)
+    return (
+      <p className="text-sm text-muted-foreground">
+        Sprint setup is unavailable.
+      </p>
+    )
   const currentSprint = current
 
-  async function handleDrop(taskId: Id<"tasks">, status: Status, insertIndex: number) {
+  async function handleDrop(
+    taskId: Id<"tasks">,
+    status: Status,
+    insertIndex: number
+  ) {
     const moving = currentSprint.tasks.find((task) => task._id === taskId)
     if (!moving) return
     const destination = currentSprint.tasks
-      .filter((task) => task.status === status && task.projectId === moving.projectId)
+      .filter(
+        (task) => task.status === status && task.projectId === moving.projectId
+      )
       .sort((a, b) => a.position - b.position)
     try {
-      await moveTask({ taskId, status, position: positionFor(destination, insertIndex, taskId) })
+      await moveTask({
+        taskId,
+        status,
+        position: positionFor(destination, insertIndex, taskId),
+      })
     } catch (error) {
       toast.error(messageFromError(error, "Could not move the task."))
     }
@@ -166,13 +207,20 @@ function CurrentSprint() {
       <SprintHeader {...current.sprint} state="Current" />
       <GoalEditor initialGoal={current.sprint.goal} sprint="current" />
       <div className="flex flex-wrap items-center gap-1">
-        <span className="mr-2 text-xs text-muted-foreground">Remove from Sprint:</span>
-        {current.tasks.filter((task) => task.status !== "done").map((task) => (
-          <div className="flex items-center rounded-md border pl-2 text-xs" key={task._id}>
-            <span className="max-w-48 truncate">{task.title}</span>
-            <RemoveTaskButton sprint="current" task={task} />
-          </div>
-        ))}
+        <span className="mr-2 text-xs text-muted-foreground">
+          Remove from Sprint:
+        </span>
+        {current.tasks
+          .filter((task) => task.status !== "done")
+          .map((task) => (
+            <div
+              className="flex items-center rounded-md border pl-2 text-xs"
+              key={task._id}
+            >
+              <span className="max-w-48 truncate">{task.title}</span>
+              <RemoveTaskButton sprint="current" task={task} />
+            </div>
+          ))}
       </div>
       <KanbanBoard
         onDrop={handleDrop}
@@ -206,12 +254,18 @@ function EarlyRollover() {
         <DialogHeader>
           <DialogTitle>Roll over this Sprint early?</DialogTitle>
           <DialogDescription>
-            Unfinished work will carry into Upcoming. This is audited and cannot be undone.
+            Unfinished work will carry into Upcoming. This is audited and cannot
+            be undone.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-2">
           <Label htmlFor="rollover-reason">Reason</Label>
-          <Textarea id="rollover-reason" maxLength={500} onChange={(event) => setReason(event.target.value)} value={reason} />
+          <Textarea
+            id="rollover-reason"
+            maxLength={500}
+            onChange={(event) => setReason(event.target.value)}
+            value={reason}
+          />
         </div>
         <DialogFooter>
           <DialogClose asChild>
@@ -228,7 +282,11 @@ function EarlyRollover() {
                 reason: reason.trim(),
               })
                 .then(() => toast.success("Sprint rollover started."))
-                .catch((error) => toast.error(messageFromError(error, "Could not roll over the Sprint.")))
+                .catch((error) =>
+                  toast.error(
+                    messageFromError(error, "Could not roll over the Sprint.")
+                  )
+                )
             }
             variant="destructive"
           >
@@ -248,12 +306,19 @@ function TaskPicker() {
   const grouped = useMemo(() => {
     const groups = new Map<string, SprintTask[]>()
     for (const task of backlog ?? []) {
-      if (query && !`${task.title} ${task.projectName}`.toLowerCase().includes(query.toLowerCase())) continue
+      if (
+        query &&
+        !`${task.title} ${task.projectName}`
+          .toLowerCase()
+          .includes(query.toLowerCase())
+      )
+        continue
       const tasks = groups.get(task.projectName) ?? []
       tasks.push(task)
       groups.set(task.projectName, tasks)
     }
-    for (const tasks of groups.values()) tasks.sort((a, b) => a.position - b.position)
+    for (const tasks of groups.values())
+      tasks.sort((a, b) => a.position - b.position)
     return [...groups.entries()]
   }, [backlog, query])
   if (backlog === undefined) return <Loading />
@@ -264,9 +329,13 @@ function TaskPicker() {
     void plan({ taskIds, sprint })
       .then(() => {
         setSelected(new Set())
-        toast.success(`Planned ${taskIds.length} task${taskIds.length === 1 ? "" : "s"}.`)
+        toast.success(
+          `Planned ${taskIds.length} task${taskIds.length === 1 ? "" : "s"}.`
+        )
       })
-      .catch((error) => toast.error(messageFromError(error, "Could not plan those tasks.")))
+      .catch((error) =>
+        toast.error(messageFromError(error, "Could not plan those tasks."))
+      )
   }
 
   return (
@@ -274,23 +343,42 @@ function TaskPicker() {
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-56 flex-1">
           <Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-muted-foreground" />
-          <Input className="pl-9" onChange={(event) => setQuery(event.target.value)} placeholder="Search backlog" value={query} />
+          <Input
+            className="pl-9"
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search backlog"
+            value={query}
+          />
         </div>
-        <Button disabled={selected.size === 0} onClick={() => submit("current")} variant="outline">
+        <Button
+          disabled={selected.size === 0}
+          onClick={() => submit("current")}
+          variant="outline"
+        >
           Plan to Current
         </Button>
-        <Button disabled={selected.size === 0} onClick={() => submit("upcoming")}>
+        <Button
+          disabled={selected.size === 0}
+          onClick={() => submit("upcoming")}
+        >
           Plan to Upcoming <ArrowRight />
         </Button>
       </div>
       {grouped.length === 0 ? (
-        <p className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">No matching Backlog tasks.</p>
+        <p className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+          No matching Backlog tasks.
+        </p>
       ) : (
         grouped.map(([project, tasks]) => (
           <section className="grid gap-1" key={project}>
-            <h2 className="px-2 text-xs font-medium text-muted-foreground">{project}</h2>
+            <h2 className="px-2 text-xs font-medium text-muted-foreground">
+              {project}
+            </h2>
             {tasks.map((task) => (
-              <label className="flex cursor-pointer items-center gap-3 rounded-md border px-3 py-2 hover:bg-muted/50" key={task._id}>
+              <label
+                className="flex cursor-pointer items-center gap-3 rounded-md border px-3 py-2 hover:bg-muted/50"
+                key={task._id}
+              >
                 <input
                   checked={selected.has(task._id)}
                   onChange={(event) =>
@@ -303,7 +391,9 @@ function TaskPicker() {
                   }
                   type="checkbox"
                 />
-                <span className="min-w-0 flex-1 truncate text-sm">{task.title}</span>
+                <span className="min-w-0 flex-1 truncate text-sm">
+                  {task.title}
+                </span>
                 <Badge variant="secondary">{task.status}</Badge>
               </label>
             ))}
@@ -317,18 +407,27 @@ function TaskPicker() {
 function UpcomingSprint() {
   const upcoming = useQuery(api.sprints.upcoming)
   if (upcoming === undefined) return <Loading />
-  if (upcoming === null) return <p className="text-sm text-muted-foreground">Upcoming Sprint is unavailable.</p>
+  if (upcoming === null)
+    return (
+      <p className="text-sm text-muted-foreground">
+        Upcoming Sprint is unavailable.
+      </p>
+    )
   return (
     <div className="grid gap-5">
       <SprintHeader {...upcoming.sprint} state="Upcoming" />
       <GoalEditor initialGoal={upcoming.sprint.goal} sprint="upcoming" />
       <div className="grid divide-y rounded-lg border">
         {upcoming.tasks.length === 0 ? (
-          <p className="p-8 text-center text-sm text-muted-foreground">Plan Backlog tasks to build the next baseline.</p>
+          <p className="p-8 text-center text-sm text-muted-foreground">
+            Plan Backlog tasks to build the next baseline.
+          </p>
         ) : (
           upcoming.tasks.map((task) => (
             <div className="flex items-center gap-3 px-3 py-2" key={task._id}>
-              <span className="min-w-0 flex-1 truncate text-sm">{task.title}</span>
+              <span className="min-w-0 flex-1 truncate text-sm">
+                {task.title}
+              </span>
               <Badge variant="outline">{task.projectName}</Badge>
               <RemoveTaskButton sprint="upcoming" task={task} />
             </div>
@@ -340,24 +439,39 @@ function UpcomingSprint() {
 }
 
 function SprintHistory() {
-  const { results, status, loadMore } = usePaginatedQuery(api.sprints.history, {}, { initialNumItems: 10 })
-  const [selectedSprintId, setSelectedSprintId] = useState<Id<"sprints"> | null>(null)
+  const { results, status, loadMore } = usePaginatedQuery(
+    api.sprints.history,
+    {},
+    { initialNumItems: 10 }
+  )
+  const [selectedSprintId, setSelectedSprintId] =
+    useState<Id<"sprints"> | null>(null)
   const audit = useQuery(
     api.sprints.audit,
-    selectedSprintId ? { sprintId: selectedSprintId, paginationOpts: { numItems: 100, cursor: null } } : "skip"
+    selectedSprintId
+      ? {
+          sprintId: selectedSprintId,
+          paginationOpts: { numItems: 100, cursor: null },
+        }
+      : "skip"
   )
   return (
     <div className="grid gap-4">
       {results.map((sprint) => (
         <button
-          className={cn("grid gap-2 rounded-lg border p-3 text-left hover:bg-muted/50", selectedSprintId === sprint._id && "border-primary")}
+          className={cn(
+            "grid gap-2 rounded-lg border p-3 text-left hover:bg-muted/50",
+            selectedSprintId === sprint._id && "border-primary"
+          )}
           key={sprint._id}
           onClick={() => setSelectedSprintId(sprint._id)}
           type="button"
         >
           <span className="flex items-center justify-between gap-2">
             <span className="font-medium">Sprint {sprint.number}</span>
-            <span className="text-xs text-muted-foreground">{dateRange(sprint.startsAt, sprint.endsAt)}</span>
+            <span className="text-xs text-muted-foreground">
+              {dateRange(sprint.startsAt, sprint.endsAt)}
+            </span>
           </span>
           <span className="flex flex-wrap gap-2 text-xs text-muted-foreground">
             <span>{sprint.baselineCount ?? 0} baseline</span>
@@ -369,74 +483,150 @@ function SprintHistory() {
         </button>
       ))}
       {status === "CanLoadMore" ? (
-        <Button className="w-fit" onClick={() => loadMore(10)} variant="outline">Load more</Button>
+        <Button
+          className="w-fit"
+          onClick={() => loadMore(10)}
+          variant="outline"
+        >
+          Load more
+        </Button>
       ) : null}
       {selectedSprintId ? (
         <section className="grid gap-2 border-t pt-4">
           <h2 className="font-medium">Scope audit</h2>
-          {audit === undefined ? <Spinner /> : audit.page.map((entry) => (
-            <div className="flex flex-wrap items-center gap-2 text-sm" key={entry._id}>
-              <Badge variant="outline">{entry.origin.replace("_", " ")}</Badge>
-              <span>{entry.taskTitleSnapshot}</span>
-              <span className="text-xs text-muted-foreground">{entry.projectNameSnapshot}</span>
-              {entry.removedAt ? <Badge variant="secondary">removed</Badge> : null}
-            </div>
-          ))}
+          {audit === undefined ? (
+            <Spinner />
+          ) : (
+            audit.page.map((entry) => (
+              <div
+                className="flex flex-wrap items-center gap-2 text-sm"
+                key={entry._id}
+              >
+                <Badge variant="outline">
+                  {entry.origin.replace("_", " ")}
+                </Badge>
+                <span>{entry.taskTitleSnapshot}</span>
+                <span className="text-xs text-muted-foreground">
+                  {entry.projectNameSnapshot}
+                </span>
+                {entry.removedAt ? (
+                  <Badge variant="secondary">removed</Badge>
+                ) : null}
+              </div>
+            ))
+          )}
         </section>
       ) : null}
     </div>
   )
 }
 
+type CadenceSettingsValue = NonNullable<
+  FunctionReturnType<typeof api.organizations.current>["settings"]
+>
+
+function CadenceSettings({
+  settings,
+}: {
+  settings: CadenceSettingsValue | null
+}) {
+  const updateCadence = useMutation(api.sprints.updateCadence)
+  const [cadenceWeeks, setCadenceWeeks] = useState(
+    String(settings?.cadenceWeeks ?? 2)
+  )
+  const [startWeekday, setStartWeekday] = useState(
+    String(settings?.startWeekday ?? 1)
+  )
+  const [timezone, setTimezone] = useState(
+    settings?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone
+  )
+  return (
+    <section className="grid max-w-xl gap-4">
+      <div>
+        <h2 className="font-medium">Cadence</h2>
+        <p className="text-sm text-muted-foreground">
+          Changes apply to Upcoming, never the active Sprint dates.
+        </p>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-2">
+          <Label htmlFor="cadence-weeks">Weeks</Label>
+          <Input
+            id="cadence-weeks"
+            max={8}
+            min={1}
+            onChange={(event) => setCadenceWeeks(event.target.value)}
+            type="number"
+            value={cadenceWeeks}
+          />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="start-weekday">Start day</Label>
+          <Select onValueChange={setStartWeekday} value={startWeekday}>
+            <SelectTrigger id="start-weekday">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {[
+                "Sunday",
+                "Monday",
+                "Tuesday",
+                "Wednesday",
+                "Thursday",
+                "Friday",
+                "Saturday",
+              ].map((day, index) => (
+                <SelectItem key={day} value={String(index)}>
+                  {day}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="sprint-timezone">IANA timezone</Label>
+          <Input
+            id="sprint-timezone"
+            onChange={(event) => setTimezone(event.target.value)}
+            value={timezone}
+          />
+        </div>
+      </div>
+      <Button
+        className="w-fit"
+        onClick={() =>
+          void updateCadence({
+            cadenceWeeks: Number(cadenceWeeks),
+            startWeekday: Number(startWeekday),
+            timezone,
+          })
+            .then(() => toast.success("Sprint cadence updated."))
+            .catch((error) =>
+              toast.error(messageFromError(error, "Could not update cadence."))
+            )
+        }
+      >
+        <CalendarClock /> Update cadence
+      </Button>
+    </section>
+  )
+}
+
 function SprintSettings() {
   const context = useQuery(api.organizations.current)
-  const updateCadence = useMutation(api.sprints.updateCadence)
-  const [cadenceWeeks, setCadenceWeeks] = useState("2")
-  const [startWeekday, setStartWeekday] = useState("1")
-  const [timezone, setTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone)
   if (context === undefined) return <Loading />
-  const settings = context.settings
   return (
     <div className="grid gap-8">
-      <section className="grid max-w-xl gap-4">
-        <div>
-          <h2 className="font-medium">Cadence</h2>
-          <p className="text-sm text-muted-foreground">Changes apply to Upcoming, never the active Sprint dates.</p>
-        </div>
-        <div className="grid gap-4 sm:grid-cols-3">
-          <div className="grid gap-2">
-            <Label htmlFor="cadence-weeks">Weeks</Label>
-            <Input id="cadence-weeks" max={8} min={1} onChange={(event) => setCadenceWeeks(event.target.value)} type="number" value={cadenceWeeks || String(settings?.cadenceWeeks ?? 2)} />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="start-weekday">Start day</Label>
-            <Select onValueChange={setStartWeekday} value={startWeekday}>
-              <SelectTrigger id="start-weekday"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map((day, index) => <SelectItem key={day} value={String(index)}>{day}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="sprint-timezone">IANA timezone</Label>
-            <Input id="sprint-timezone" onChange={(event) => setTimezone(event.target.value)} value={timezone} />
-          </div>
-        </div>
-        <Button
-          className="w-fit"
-          onClick={() =>
-            void updateCadence({ cadenceWeeks: Number(cadenceWeeks), startWeekday: Number(startWeekday), timezone })
-              .then(() => toast.success("Sprint cadence updated."))
-              .catch((error) => toast.error(messageFromError(error, "Could not update cadence.")))
-          }
-        >
-          <CalendarClock /> Update cadence
-        </Button>
-      </section>
+      <CadenceSettings
+        key={`${context.organization.organizationId}:${context.settings?.updatedAt ?? "default"}`}
+        settings={context.settings}
+      />
       <section className="grid gap-3 border-t pt-6">
         <div>
           <h2 className="font-medium">Workspace members</h2>
-          <p className="text-sm text-muted-foreground">Invite people and manage roles through Clerk.</p>
+          <p className="text-sm text-muted-foreground">
+            Invite people and manage roles through Clerk.
+          </p>
         </div>
         <OrganizationProfile routing="hash" />
       </section>
@@ -452,7 +642,12 @@ export function SprintsClient() {
         <h1 className="font-heading text-lg font-medium">Sprints</h1>
         <nav aria-label="Sprint views" className="flex flex-wrap gap-1">
           {tabs.map((item) => (
-            <Button key={item.id} onClick={() => setTab(item.id)} size="sm" variant={tab === item.id ? "default" : "ghost"}>
+            <Button
+              key={item.id}
+              onClick={() => setTab(item.id)}
+              size="sm"
+              variant={tab === item.id ? "default" : "ghost"}
+            >
               {item.label}
             </Button>
           ))}

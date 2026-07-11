@@ -331,7 +331,13 @@ export default defineSchema({
   })
     .index("by_sprint_and_added_at", ["sprintId", "addedAt"])
     .index("by_sprint_and_task", ["sprintId", "taskId"])
-    .index("by_organization_and_task", ["organizationId", "taskId"]),
+    .index("by_sprint_task_and_removed", ["sprintId", "taskId", "removedAt"])
+    .index("by_organization_and_task", ["organizationId", "taskId"])
+    .index("by_organization_task_and_completion", [
+      "organizationId",
+      "taskId",
+      "creditedCompletionAt",
+    ]),
 
   sprintRolloverJobs: defineTable({
     organizationId: v.string(),
