@@ -210,7 +210,7 @@ function AppSidebar() {
                   elements: {
                     rootBox: "min-w-0 flex-1",
                     organizationSwitcherTrigger:
-                      "w-full max-w-full justify-start overflow-hidden",
+                      "w-full max-w-full !justify-start overflow-hidden",
                     organizationPreview: "min-w-0",
                     organizationPreviewTextContainer: "min-w-0",
                     organizationPreviewMainIdentifier: "truncate",
