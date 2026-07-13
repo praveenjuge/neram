@@ -1,20 +1,22 @@
 "use client"
 
 import { useMutation, useQuery } from "convex/react"
-import { ArrowRight, Search } from "lucide-react"
+import { Search } from "lucide-react"
 import { useMemo, useState } from "react"
 
 import { api } from "@neram/convex/api"
 import type { Id } from "@neram/convex/data-model"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { groupBacklogTasks } from "@/lib/sprint-planning"
 
-import { InfoHint, Loading, runToast } from "./shared"
+import { PlanTargetDialog } from "./plan-dialog"
+import { InfoHint, Loading, runToast, type SprintTarget } from "./shared"
 
 const BACKLOG_HINT =
-  "Tasks not yet in a Sprint. Select any, then add them to Current or Upcoming."
+  "Tasks not yet in a Sprint. Select any, then plan them into Current or a scheduled Sprint."
 
 export function BacklogPicker() {
   const backlog = useQuery(api.sprints.backlog)
@@ -27,14 +29,23 @@ export function BacklogPicker() {
   )
   if (backlog === undefined) return <Loading />
 
-  function submit(sprint: "current" | "upcoming") {
+  function submit(target: SprintTarget) {
     const taskIds = [...selected]
     if (taskIds.length === 0) return
-    runToast(plan({ taskIds, sprint }), {
+    runToast(plan({ taskIds, sprint: target }), {
       success: `Planned ${taskIds.length} task${taskIds.length === 1 ? "" : "s"}.`,
       error: "Could not plan those tasks.",
     })
     setSelected(new Set())
+  }
+
+  function toggle(taskId: Id<"tasks">, checked: boolean) {
+    setSelected((current) => {
+      const next = new Set(current)
+      if (checked) next.add(taskId)
+      else next.delete(taskId)
+      return next
+    })
   }
 
   return (
@@ -50,16 +61,17 @@ export function BacklogPicker() {
           />
         </div>
         <InfoHint text={BACKLOG_HINT} />
-        <Button
-          disabled={selected.size === 0}
-          onClick={() => submit("current")}
-          variant="outline"
-        >
-          Plan to Current
-        </Button>
-        <Button disabled={selected.size === 0} onClick={() => submit("upcoming")}>
-          Plan to Upcoming <ArrowRight />
-        </Button>
+        <PlanTargetDialog
+          count={selected.size}
+          onConfirm={submit}
+          trigger={
+            <Button disabled={selected.size === 0}>
+              {selected.size === 0
+                ? "Plan tasks"
+                : `Plan ${selected.size} ${selected.size === 1 ? "task" : "tasks"}`}
+            </Button>
+          }
+        />
       </div>
       {grouped.length === 0 ? (
         <p className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
@@ -76,17 +88,11 @@ export function BacklogPicker() {
                 className="flex cursor-pointer items-center gap-3 rounded-md border px-3 py-2 hover:bg-muted/50"
                 key={task._id}
               >
-                <input
+                <Checkbox
                   checked={selected.has(task._id)}
-                  onChange={(event) =>
-                    setSelected((current) => {
-                      const next = new Set(current)
-                      if (event.target.checked) next.add(task._id)
-                      else next.delete(task._id)
-                      return next
-                    })
+                  onCheckedChange={(checked) =>
+                    toggle(task._id, checked === true)
                   }
-                  type="checkbox"
                 />
                 <span className="min-w-0 flex-1 truncate text-sm">
                   {task.title}

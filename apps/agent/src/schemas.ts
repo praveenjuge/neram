@@ -149,6 +149,7 @@ export const schemas = {
   list_sprint_tasks: z.object({
     sprint: sprintPlacementSchema.default("current"),
   }),
+  list_upcoming_sprints: z.object({}),
   sprint_history: z.object({
     cursor: z.string().nullable().optional(),
     pageSize: z.number().int().min(1).max(50).default(20),
@@ -156,20 +157,36 @@ export const schemas = {
   }),
   plan_sprint_tasks: z.object({
     taskIds: z.array(z.string().min(1)).min(1).max(1000),
-    sprint: sprintPlacementSchema,
+    sprint: sprintPlacementSchema.default("backlog"),
+    // Target a specific scheduled Sprint by id; overrides `sprint` when set.
+    sprintId: z.string().min(1).optional(),
   }),
   remove_sprint_tasks: z.object({
     taskIds: z.array(z.string().min(1)).min(1).max(1000),
-    sprint: sprintRefSchema,
+    sprint: sprintRefSchema.default("current"),
+    sprintId: z.string().min(1).optional(),
   }),
   update_sprint_goal: z.object({
-    sprint: sprintRefSchema,
+    sprint: sprintRefSchema.default("current"),
+    sprintId: z.string().min(1).optional(),
     goal: z.string().max(500).optional(),
   }),
   update_sprint_cadence: z.object({
     cadenceWeeks: z.number().int().min(1).max(8),
     startWeekday: z.number().int().min(0).max(6),
     timezone: z.string().min(1).max(100),
+  }),
+  schedule_sprint: z.object({
+    name: z.string().max(80).optional(),
+    goal: z.string().max(500).optional(),
+  }),
+  rename_sprint: z.object({
+    sprint: sprintRefSchema.default("current"),
+    sprintId: z.string().min(1).optional(),
+    name: z.string().max(80).optional(),
+  }),
+  unschedule_sprint: z.object({
+    sprintId: z.string().min(1),
   }),
   rollover_sprint: organizationConfirmation.extend({
     reason: z.string().trim().min(1).max(500),
@@ -238,17 +255,21 @@ export const outputSchemas = {
   delete_workspace: z.object({ jobId: z.string(), deleting: z.boolean() }),
   plan_sprint_tasks: z.object({
     taskIds: z.array(z.string()),
-    sprint: sprintPlacementSchema,
+    // Resolved target: "current" or a scheduled Sprint id.
+    sprint: z.string(),
   }),
   remove_sprint_tasks: z.object({
     taskIds: z.array(z.string()),
-    sprint: sprintRefSchema,
+    sprint: z.string(),
   }),
-  update_sprint_goal: z.object({ sprint: sprintRefSchema }),
+  update_sprint_goal: z.object({ sprint: z.string() }),
   update_sprint_cadence: z.object({
     cadenceWeeks: z.number(),
     startWeekday: z.number(),
     timezone: z.string(),
   }),
+  schedule_sprint: z.object({ sprintId: z.string(), scheduled: z.boolean() }),
+  rename_sprint: z.object({ sprint: z.string() }),
+  unschedule_sprint: z.object({ sprintId: z.string(), removed: z.boolean() }),
   rollover_sprint: z.object({ jobId: z.string(), started: z.boolean() }),
 }

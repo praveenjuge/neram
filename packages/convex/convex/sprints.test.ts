@@ -78,6 +78,19 @@ async function setup() {
   }
 }
 
+type Member = Awaited<ReturnType<typeof setup>>["alice"]
+
+// Workspaces start with no Sprints. Members create the active Sprint plus any
+// scheduled Sprints explicitly; the first created becomes Current and the rest
+// are Upcoming. Returns [currentId, ...upcomingIds].
+async function seedSprints(who: Member, upcomingCount = 1) {
+  const ids = [await who.mutation(api.sprints.scheduleSprint, {})]
+  for (let index = 0; index < upcomingCount; index += 1) {
+    ids.push(await who.mutation(api.sprints.scheduleSprint, {}))
+  }
+  return ids
+}
+
 test("Organization projection enforces tenant isolation and stale-member denial", async () => {
   const { t, alice, bob, carol } = await setup()
   const projectId = await alice.mutation(api.projects.create, {
@@ -97,8 +110,67 @@ test("Organization projection enforces tenant isolation and stale-member denial"
   await expect(bob.query(api.projects.list, {})).rejects.toThrow()
 })
 
+test("a new workspace has no Sprints until one is created", async () => {
+  const { alice } = await setup()
+  expect(await alice.query(api.sprints.current, {})).toBeNull()
+  expect(await alice.query(api.sprints.upcoming, {})).toBeNull()
+  expect(await alice.query(api.sprints.upcomingList, {})).toEqual([])
+
+  const firstId = await alice.mutation(api.sprints.scheduleSprint, {
+    name: "Kickoff",
+  })
+  const current = await alice.query(api.sprints.current, {})
+  expect(current?.sprint._id).toBe(firstId)
+  expect(current?.sprint.name).toBe("Kickoff")
+  // A second creation schedules an Upcoming Sprint rather than a second Current.
+  const secondId = await alice.mutation(api.sprints.scheduleSprint, {})
+  const list = await alice.query(api.sprints.upcomingList, {})
+  expect(list.map((entry) => entry.sprint._id)).toEqual([secondId])
+})
+
+test("moving a task with no active Sprint only changes status", async () => {
+  const { alice } = await setup()
+  const projectId = await alice.mutation(api.projects.create, {
+    name: "Product",
+  })
+  const taskId = await alice.mutation(api.tasks.create, {
+    projectId,
+    title: "Do the thing",
+  })
+  await alice.mutation(api.tasks.move, { taskId, status: "inProgress" })
+  // With no Sprint, the task stays in the Backlog and just changes status.
+  expect(await alice.query(api.sprints.current, {})).toBeNull()
+  const backlog = await alice.query(api.sprints.backlog, {})
+  expect(backlog.find((task) => task._id === taskId)?.status).toBe("inProgress")
+})
+
+test("any upcoming Sprint can be unscheduled and returns work to the Backlog", async () => {
+  const { alice } = await setup()
+  const projectId = await alice.mutation(api.projects.create, {
+    name: "Product",
+  })
+  const [, secondId] = await seedSprints(alice, 2)
+  const taskId = await alice.mutation(api.tasks.create, {
+    projectId,
+    title: "Planned work",
+  })
+  await alice.mutation(api.sprints.plan, {
+    taskIds: [taskId],
+    sprint: secondId,
+  })
+  // Removing the earliest upcoming (not just the last) is allowed now.
+  await alice.mutation(api.sprints.unscheduleSprint, { sprintId: secondId })
+  const remaining = await alice.query(api.sprints.upcomingList, {})
+  expect(remaining.map((entry) => entry.sprint._id)).not.toContain(secondId)
+  expect(remaining).toHaveLength(1)
+  expect(
+    (await alice.query(api.sprints.backlog, {})).map((task) => task._id)
+  ).toContain(taskId)
+})
+
 test("members plan work and status movement applies Current and early-start rules", async () => {
   const { alice, bob } = await setup()
+  await seedSprints(alice)
   const projectId = await alice.mutation(api.projects.create, {
     name: "Product",
   })
@@ -163,6 +235,7 @@ test("members plan work and status movement applies Current and early-start rule
 
 test("rollover credits cutoff completions, carries unfinished work, and preserves reopening history", async () => {
   const { alice } = await setup()
+  await seedSprints(alice)
   const projectId = await alice.mutation(api.projects.create, {
     name: "Product",
   })
@@ -233,6 +306,7 @@ test("rollover credits cutoff completions, carries unfinished work, and preserve
 
 test("closed summaries preserve baseline truth and later scope changes", async () => {
   const { alice } = await setup()
+  await seedSprints(alice)
   const projectId = await alice.mutation(api.projects.create, {
     name: "Planning",
   })
@@ -259,6 +333,9 @@ test("closed summaries preserve baseline truth and later scope changes", async (
     if (done) break
     await alice.mutation(internal.sprintRollover.process, { jobId: firstJob })
   }
+
+  // Schedule the next Sprint so unfinished work has somewhere to carry into.
+  await alice.mutation(api.sprints.scheduleSprint, {})
 
   await alice.mutation(api.sprints.remove, {
     taskIds: [planned],
@@ -298,6 +375,7 @@ test("closed summaries preserve baseline truth and later scope changes", async (
 
 test("delayed rollover uses the scheduled cutoff and repair resumes one job", async () => {
   const { t, alice } = await setup()
+  await seedSprints(alice)
   const projectId = await alice.mutation(api.projects.create, {
     name: "Cutoff",
   })
@@ -381,6 +459,7 @@ test("delayed rollover uses the scheduled cutoff and repair resumes one job", as
 
 test("capacity counts live work and rollover summarizes a larger audit in batches", async () => {
   const { t, alice } = await setup()
+  await seedSprints(alice)
   const projectId = await alice.mutation(api.projects.create, {
     name: "Ceiling",
   })
@@ -471,6 +550,7 @@ test("capacity counts live work and rollover summarizes a larger audit in batche
 
 test("rollover capacity fails before writes and recovers after replanning", async () => {
   const { t, alice } = await setup()
+  await seedSprints(alice)
   const projectId = await alice.mutation(api.projects.create, {
     name: "Rollover ceiling",
   })
@@ -586,6 +666,7 @@ test("rollover capacity fails before writes and recovers after replanning", asyn
 
 test("Sprint API keeps stable validation errors and allows member planning controls", async () => {
   const { alice, bob, carol } = await setup()
+  await seedSprints(alice)
   const beforeCurrent = await alice.query(api.sprints.current, {})
   const beforeUpcoming = await alice.query(api.sprints.upcoming, {})
 

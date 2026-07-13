@@ -211,6 +211,15 @@ export function createNeramMcpServer(client: NeramApi) {
     (input) => tools.list_sprint_tasks(schemas.list_sprint_tasks.parse(input))
   )
   register(
+    "list_upcoming_sprints",
+    "List Upcoming Sprints",
+    "List every scheduled future Sprint (soonest first) with dates, goal, task count, and planned tasks. Use a returned sprintId to plan into a specific Sprint.",
+    schemas.list_upcoming_sprints,
+    readOnly,
+    (input) =>
+      tools.list_upcoming_sprints(schemas.list_upcoming_sprints.parse(input))
+  )
+  register(
     "sprint_history",
     "Sprint History",
     "Page closed Sprints or inspect the append-only task audit for an explicit Sprint id.",
@@ -440,7 +449,7 @@ export function createNeramMcpServer(client: NeramApi) {
   register(
     "plan_sprint_tasks",
     "Plan Sprint Tasks",
-    "Move one or more tasks into Backlog, Current, or Upcoming while preserving Sprint audit truth.",
+    "Move tasks into Backlog, Current, Upcoming, or a specific scheduled Sprint (pass sprintId) while preserving Sprint audit truth.",
     schemas.plan_sprint_tasks,
     idempotent,
     (input) => tools.plan_sprint_tasks(schemas.plan_sprint_tasks.parse(input)),
@@ -449,7 +458,7 @@ export function createNeramMcpServer(client: NeramApi) {
   register(
     "remove_sprint_tasks",
     "Remove Sprint Tasks",
-    "Return Current or Upcoming tasks to Backlog; active work also returns to Todo.",
+    "Return Current, Upcoming, or a specific scheduled Sprint's tasks (pass sprintId) to Backlog; active work also returns to Todo.",
     schemas.remove_sprint_tasks,
     idempotent,
     (input) =>
@@ -459,7 +468,7 @@ export function createNeramMcpServer(client: NeramApi) {
   register(
     "update_sprint_goal",
     "Update Sprint Goal",
-    "Set or clear the Current or Upcoming Sprint goal.",
+    "Set or clear the goal of the Current, Upcoming, or a specific scheduled Sprint (pass sprintId).",
     schemas.update_sprint_goal,
     idempotent,
     (input) =>
@@ -469,12 +478,39 @@ export function createNeramMcpServer(client: NeramApi) {
   register(
     "update_sprint_cadence",
     "Update Sprint Cadence",
-    "Set 1-8 week cadence, start weekday, and IANA timezone for the following Sprint.",
+    "Set 1-8 week cadence, start weekday, and IANA timezone. Re-flows every scheduled Sprint's dates; never changes the active Sprint.",
     schemas.update_sprint_cadence,
     idempotent,
     (input) =>
       tools.update_sprint_cadence(schemas.update_sprint_cadence.parse(input)),
     outputSchemas.update_sprint_cadence
+  )
+  register(
+    "schedule_sprint",
+    "Schedule Sprint",
+    "Create a Sprint (optionally named). With no active Sprint it becomes Current and starts now; otherwise it is scheduled after the last one using the active cadence.",
+    schemas.schedule_sprint,
+    creates,
+    (input) => tools.schedule_sprint(schemas.schedule_sprint.parse(input)),
+    outputSchemas.schedule_sprint
+  )
+  register(
+    "rename_sprint",
+    "Rename Sprint",
+    "Rename the Current, Upcoming, or a specific scheduled Sprint (pass sprintId). Clearing the name restores the default 'Sprint {number}' label.",
+    schemas.rename_sprint,
+    idempotent,
+    (input) => tools.rename_sprint(schemas.rename_sprint.parse(input)),
+    outputSchemas.rename_sprint
+  )
+  register(
+    "unschedule_sprint",
+    "Unschedule Sprint",
+    "Remove a scheduled (upcoming) Sprint and return its planned work to the Backlog. The active Sprint cannot be removed.",
+    schemas.unschedule_sprint,
+    destructive,
+    (input) => tools.unschedule_sprint(schemas.unschedule_sprint.parse(input)),
+    outputSchemas.unschedule_sprint
   )
   register(
     "rollover_sprint",

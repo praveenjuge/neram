@@ -8,7 +8,7 @@ import type { ReactNode } from "react"
 import { toast } from "sonner"
 
 import { api } from "@neram/convex/api"
-import { Badge } from "@/components/ui/badge"
+import type { Id } from "@neram/convex/data-model"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import {
@@ -21,6 +21,10 @@ import { messageFromError } from "@/lib/errors"
 export type SprintTask = NonNullable<
   FunctionReturnType<typeof api.sprints.current>
 >["tasks"][number]
+
+// Where a planning action applies: the active Sprint, the soonest scheduled
+// Sprint, or a specific scheduled Sprint addressed by id.
+export type SprintTarget = "current" | "upcoming" | Id<"sprints">
 
 /**
  * Run a mutation and surface the outcome as a toast. Centralizes the
@@ -37,6 +41,11 @@ export function runToast(
 
 export function dateRange(startsAt: number, endsAt: number) {
   return `${format(startsAt, "MMM d")} – ${format(endsAt, "MMM d, yyyy")}`
+}
+
+/** Display name for a Sprint, falling back to "Sprint {number}" when unnamed. */
+export function sprintLabel(sprint: { name?: string; number: number }) {
+  return sprint.name?.trim() || `Sprint ${sprint.number}`
 }
 
 export function Loading() {
@@ -65,6 +74,7 @@ export function InfoHint({ text }: { text: string }) {
 
 export function SprintHeader({
   number,
+  name,
   startsAt,
   endsAt,
   state,
@@ -72,6 +82,7 @@ export function SprintHeader({
   action,
 }: {
   number: number
+  name?: string
   startsAt: number
   endsAt: number
   state: "Current" | "Upcoming"
@@ -82,17 +93,14 @@ export function SprintHeader({
     <div className="flex flex-wrap items-center justify-between gap-2">
       <div>
         <h2 className="flex items-center gap-1.5 font-heading text-base font-medium">
-          {state} · Sprint {number}
+          {state} · {sprintLabel({ name, number })}
           <InfoHint text={hint} />
         </h2>
         <p className="text-sm text-muted-foreground">
           {dateRange(startsAt, endsAt)}
         </p>
       </div>
-      <div className="flex items-center gap-2">
-        {action}
-        <Badge variant="outline">{state}</Badge>
-      </div>
+      {action ? <div className="flex items-center gap-2">{action}</div> : null}
     </div>
   )
 }
@@ -102,12 +110,12 @@ export function RemoveTaskButton({
   sprint,
 }: {
   task: SprintTask
-  sprint: "current" | "upcoming"
+  sprint: SprintTarget
 }) {
   const remove = useMutation(api.sprints.remove)
   return (
     <Button
-      aria-label={`Remove ${task.title} from ${sprint}`}
+      aria-label={`Remove ${task.title} from this Sprint`}
       onClick={() =>
         runToast(remove({ taskIds: [task._id], sprint }), {
           success: "Task returned to Backlog.",

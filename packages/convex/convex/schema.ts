@@ -204,6 +204,9 @@ export default defineSchema({
   sprints: defineTable({
     organizationId: v.string(),
     number: v.number(),
+    // Optional display name. Falls back to "Sprint {number}" when unset so
+    // existing rows and auto-created Sprints still read sensibly.
+    name: v.optional(v.string()),
     goal: v.optional(v.string()),
     state: sprintState,
     startsAt: v.number(),
@@ -262,7 +265,9 @@ export default defineSchema({
   sprintRolloverJobs: defineTable({
     organizationId: v.string(),
     closingSprintId: v.id("sprints"),
-    promotedSprintId: v.id("sprints"),
+    // Unset when the active Sprint ends with nothing scheduled after it: the
+    // Sprint simply closes and the workspace has no active Sprint.
+    promotedSprintId: v.optional(v.id("sprints")),
     status: v.union(
       v.literal("running"),
       v.literal("completed"),

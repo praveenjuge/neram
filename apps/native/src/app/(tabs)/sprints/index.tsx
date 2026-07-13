@@ -26,13 +26,20 @@ const views = [
 
 type View = (typeof views)[number][0]
 
+// The active Sprint, the soonest scheduled one, or a specific scheduled Sprint.
+type SprintTarget = "current" | "upcoming" | Id<"sprints">
+
+function sprintName(sprint: { name?: string; number: number }) {
+  return sprint.name?.trim() || `Sprint ${sprint.number}`
+}
+
 export default function SprintsScreen() {
   const [view, setView] = useState<View>("current")
   const [selectedSprintId, setSelectedSprintId] =
     useState<Id<"sprints"> | null>(null)
   const current = useQuery(api.sprints.current)
   const backlog = useQuery(api.sprints.backlog)
-  const upcoming = useQuery(api.sprints.upcoming)
+  const upcomingList = useQuery(api.sprints.upcomingList)
   const context = useQuery(api.organizations.current)
   const history = usePaginatedQuery(
     api.sprints.history,
@@ -53,8 +60,11 @@ export default function SprintsScreen() {
   const updateGoal = useMutation(api.sprints.updateGoal)
   const updateCadence = useMutation(api.sprints.updateCadence)
   const rollover = useMutation(api.sprints.rollover)
+  const schedule = useMutation(api.sprints.scheduleSprint)
+  const unschedule = useMutation(api.sprints.unscheduleSprint)
+  const renameSprintMutation = useMutation(api.sprints.renameSprint)
 
-  const editGoal = (sprint: "current" | "upcoming", initial?: string) => {
+  const editGoal = (sprint: SprintTarget, initial?: string) => {
     Alert.prompt(
       "Sprint goal",
       "Optional outcome for this Sprint.",
@@ -70,17 +80,70 @@ export default function SprintsScreen() {
   }
 
   const planTask = (taskId: Id<"tasks">) => {
-    Alert.alert("Plan task", "Choose a Sprint.", [
+    const actions: {
+      text: string
+      style?: "cancel" | "destructive"
+      onPress?: () => void
+    }[] = [
       { text: "Cancel", style: "cancel" },
       {
         text: "Current",
         onPress: () =>
           void plan({ taskIds: [taskId], sprint: "current" }).catch(showError),
       },
-      {
-        text: "Upcoming",
+    ]
+    for (const entry of upcomingList ?? []) {
+      actions.push({
+        text: `Sprint ${entry.sprint.number}`,
         onPress: () =>
-          void plan({ taskIds: [taskId], sprint: "upcoming" }).catch(showError),
+          void plan({ taskIds: [taskId], sprint: entry.sprint._id }).catch(
+            showError
+          ),
+      })
+    }
+    Alert.alert("Plan task", "Choose a Sprint.", actions)
+  }
+
+  const scheduleSprint = () => {
+    const list = upcomingList ?? []
+    const nextNumber =
+      list.length > 0 ? list[list.length - 1].sprint.number + 1 : 1
+    const fallback = `Sprint ${nextNumber}`
+    Alert.prompt(
+      "New Sprint",
+      "Name your Sprint.",
+      (value?: string) => {
+        void schedule({ name: (value ?? "").trim() || fallback }).catch(
+          showError
+        )
+      },
+      "plain-text",
+      fallback
+    )
+  }
+
+  const renameSprint = (sprint: SprintTarget, initial: string) => {
+    Alert.prompt(
+      "Rename Sprint",
+      "Update this Sprint's name.",
+      (value?: string) => {
+        void renameSprintMutation({
+          sprint,
+          name: (value ?? "").trim() || undefined,
+        }).catch(showError)
+      },
+      "plain-text",
+      initial
+    )
+  }
+
+  const unscheduleSprint = (sprintId: Id<"sprints">) => {
+    Alert.alert("Remove Sprint", "Planned work returns to the Backlog.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: () => void unschedule({ sprintId }).catch(showError),
       },
     ])
   }
@@ -92,7 +155,7 @@ export default function SprintsScreen() {
       title: string
       status: string
     },
-    sprint: "current" | "upcoming"
+    sprint: SprintTarget
   ) => {
     const actions = [
       { text: "Cancel", style: "cancel" as const },
@@ -182,16 +245,31 @@ export default function SprintsScreen() {
         />
       </Section>
       {view === "current" ? (
-        <Section
-          title={current ? `Sprint ${current.sprint.number}` : "Current"}
-        >
+        <Section title={current ? sprintName(current.sprint) : "Current"}>
           {current === undefined ? (
             <Text>Loading Current...</Text>
           ) : current === null ? (
-            <Empty title="Current unavailable" />
+            <>
+              <Empty
+                title="No active Sprint"
+                detail="Create one to start planning."
+              />
+              <Button
+                label="New Sprint"
+                systemImage="calendar.badge.plus"
+                onPress={scheduleSprint}
+              />
+            </>
           ) : (
             <>
               <Text>{current.sprint.goal || "No Sprint goal"}</Text>
+              <Button
+                label="Rename Sprint"
+                systemImage="square.and.pencil"
+                onPress={() =>
+                  renameSprint("current", sprintName(current.sprint))
+                }
+              />
               <Button
                 label="Edit goal"
                 systemImage="pencil"
@@ -242,32 +320,53 @@ export default function SprintsScreen() {
         </Section>
       ) : null}
       {view === "upcoming" ? (
-        <Section
-          title={upcoming ? `Sprint ${upcoming.sprint.number}` : "Upcoming"}
-        >
-          {upcoming === undefined ? (
-            <Text>Loading Upcoming...</Text>
-          ) : upcoming === null ? (
-            <Empty title="Upcoming unavailable" />
-          ) : (
-            <>
-              <Text>{upcoming.sprint.goal || "No Sprint goal"}</Text>
+        <>
+          <Section title="Upcoming">
+            <Button
+              label="Schedule Sprint"
+              systemImage="calendar.badge.plus"
+              onPress={scheduleSprint}
+            />
+            {upcomingList === undefined ? (
+              <Text>Loading Upcoming...</Text>
+            ) : upcomingList.length === 0 ? (
+              <Empty
+                title="No upcoming Sprints"
+                detail="Schedule one to plan ahead."
+              />
+            ) : null}
+          </Section>
+          {(upcomingList ?? []).map((entry) => (
+            <Section key={entry.sprint._id} title={sprintName(entry.sprint)}>
+              <Text>{entry.sprint.goal || "No Sprint goal"}</Text>
+              <Button
+                label="Rename Sprint"
+                systemImage="square.and.pencil"
+                onPress={() =>
+                  renameSprint(entry.sprint._id, sprintName(entry.sprint))
+                }
+              />
               <Button
                 label="Edit goal"
                 systemImage="pencil"
-                onPress={() => editGoal("upcoming", upcoming.sprint.goal)}
+                onPress={() => editGoal(entry.sprint._id, entry.sprint.goal)}
               />
-              {upcoming.tasks.map((task) => (
+              {entry.tasks.map((task) => (
                 <Row
                   key={task._id}
                   label={`${task.title} - ${task.projectName}`}
                   systemImage="calendar"
-                  onPress={() => manageTask(task, "upcoming")}
+                  onPress={() => manageTask(task, entry.sprint._id)}
                 />
               ))}
-            </>
-          )}
-        </Section>
+              <Button
+                label="Remove this Sprint"
+                systemImage="trash"
+                onPress={() => unscheduleSprint(entry.sprint._id)}
+              />
+            </Section>
+          ))}
+        </>
       ) : null}
       {view === "history" ? (
         <Section title="History">

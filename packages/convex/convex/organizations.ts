@@ -14,7 +14,6 @@ import {
 } from "./_generated/server"
 import type { MutationCtx } from "./_generated/server"
 import { actor, requireOrganization, requireOrganizationAdmin } from "./model"
-import { ensureSprintPair } from "./sprintModel"
 
 const role = v.union(v.literal("org:admin"), v.literal("org:member"))
 const memberFields = {
@@ -161,24 +160,14 @@ export const upsertOrganization = internalMutation({
         updatedAt: now,
       })
     } else {
+      // Workspaces start with no Sprints. Members create the first Sprint
+      // explicitly from the Sprints view; nothing is auto-seeded here.
       await ctx.db.insert("organizations", {
         ...args,
         state: "active",
         createdAt: now,
         updatedAt: now,
       })
-      const settings = await ensureSprintPair(ctx, args.organizationId, now)
-      const currentSprint = await ctx.db.get(settings.currentSprintId!)
-      if (currentSprint) {
-        await ctx.scheduler.runAt(
-          currentSprint.endsAt,
-          internal.sprintRollover.scheduled,
-          {
-            organizationId: args.organizationId,
-            sprintId: currentSprint._id,
-          }
-        )
-      }
     }
     return null
   },
