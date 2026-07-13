@@ -45,6 +45,7 @@ const CURRENT_HINT =
 
 export function CurrentSprint() {
   const current = useQuery(api.sprints.current)
+  const context = useQuery(api.organizations.current)
   const moveTask = useMutation(api.tasks.move)
   const renameSprint = useMutation(api.sprints.renameSprint)
   const createSprint = useMutation(api.sprints.scheduleSprint)
@@ -58,7 +59,7 @@ export function CurrentSprint() {
           No active Sprint. Create one to start planning.
         </p>
         <SprintNameDialog
-          defaultName="Sprint 1"
+          defaultName={`Sprint ${context?.settings?.nextSprintNumber ?? 1}`}
           description="Name your first Sprint. It becomes the active Sprint and starts today."
           onSubmit={(name) =>
             runToast(createSprint({ name }), {

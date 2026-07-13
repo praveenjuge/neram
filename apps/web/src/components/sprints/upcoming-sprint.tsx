@@ -23,13 +23,16 @@ const UPCOMING_HINT =
 
 export function UpcomingSprint() {
   const upcoming = useQuery(api.sprints.upcomingList)
+  const context = useQuery(api.organizations.current)
   const schedule = useMutation(api.sprints.scheduleSprint)
   const unschedule = useMutation(api.sprints.unscheduleSprint)
   const rename = useMutation(api.sprints.renameSprint)
   if (upcoming === undefined) return <Loading />
 
-  const nextNumber =
-    upcoming.length > 0 ? upcoming[upcoming.length - 1].sprint.number + 1 : 1
+  // Match the number the backend will assign (settings.nextSprintNumber) so the
+  // default name never duplicates an existing Sprint — e.g. an active
+  // "Sprint 1" with nothing scheduled suggests "Sprint 2", not "Sprint 1".
+  const nextNumber = context?.settings?.nextSprintNumber ?? 1
 
   return (
     <div className="grid gap-4">

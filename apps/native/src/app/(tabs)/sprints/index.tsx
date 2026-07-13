@@ -105,10 +105,9 @@ export default function SprintsScreen() {
   }
 
   const scheduleSprint = () => {
-    const list = upcomingList ?? []
-    const nextNumber =
-      list.length > 0 ? list[list.length - 1].sprint.number + 1 : 1
-    const fallback = `Sprint ${nextNumber}`
+    // Match the number the backend will assign so the default name never
+    // duplicates an existing Sprint (e.g. active "Sprint 1" -> next "Sprint 2").
+    const fallback = `Sprint ${context?.settings?.nextSprintNumber ?? 1}`
     Alert.prompt(
       "New Sprint",
       "Name your Sprint.",
