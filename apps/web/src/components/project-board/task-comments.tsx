@@ -10,7 +10,7 @@ import {
   Send,
   Trash2,
 } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 
 import { api } from "@neram/convex/api"
@@ -18,7 +18,9 @@ import type { Id } from "@neram/convex/data-model"
 import { cn } from "@/lib/utils"
 import { messageFromError } from "@/lib/errors"
 import { Button } from "@/components/ui/button"
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover"
 import { Textarea } from "@/components/ui/textarea"
+import { UserAvatar } from "@/components/user-avatar"
 import { useOrganizationMembers } from "@/lib/use-organization-members"
 
 type Comment = FunctionReturnType<typeof api.taskComments.list>["page"][number]
@@ -42,7 +44,6 @@ export function TaskComments({
 
   return (
     <section className="grid gap-3" data-testid="task-comments">
-      <h2 className="font-heading text-sm font-medium">Comments</h2>
       <CommentComposer
         members={members}
         onSubmit={async (payload) => {
@@ -93,14 +94,19 @@ function CommentBranch({
     { taskId, parentCommentId },
     { initialNumItems: parentCommentId ? 10 : 20 }
   )
+  const isRoot = !parentCommentId
   if (status === "LoadingFirstPage") {
-    return <p className="text-sm text-muted-foreground">Loading comments…</p>
+    return isRoot ? (
+      <p className="text-sm text-muted-foreground">Loading comments…</p>
+    ) : null
   }
-  if (results.length === 0 && !parentCommentId) {
-    return <p className="text-sm text-muted-foreground">No comments yet.</p>
+  if (results.length === 0) {
+    return isRoot ? (
+      <p className="text-sm text-muted-foreground">No comments yet.</p>
+    ) : null
   }
   return (
-    <div className={cn("grid gap-2", depth > 0 && "border-l pl-3")}>
+    <div className={cn("grid gap-2", depth > 0 && "mt-2 border-l pl-3")}>
       {results.map((comment) => (
         <CommentNode
           comment={comment}
@@ -134,6 +140,7 @@ function CommentNode({
   currentSubject,
   isAdmin,
   targetCommentId,
+  renderReplies = true,
 }: {
   comment: Comment
   depth: number
@@ -141,8 +148,8 @@ function CommentNode({
   currentSubject?: string
   isAdmin: boolean
   targetCommentId: Id<"taskComments"> | null
+  renderReplies?: boolean
 }) {
-  const [showReplies, setShowReplies] = useState(false)
   const [replying, setReplying] = useState(false)
   const [editing, setEditing] = useState(false)
   const reply = useMutation(api.taskComments.reply)
@@ -162,14 +169,15 @@ function CommentNode({
       style={{ marginLeft: `${Math.min(depth, 3) * 12}px` }}
     >
       <header className="flex items-center justify-between gap-2">
-        <p className="text-sm text-muted-foreground">
-          <span className="font-medium text-foreground">
+        <div className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
+          <UserAvatar className="size-6" name={comment.authorName} />
+          <span className="truncate font-medium text-foreground">
             {comment.authorName}
           </span>
-          {comment.updatedAt > comment.createdAt && !comment.deletedAt
-            ? " · edited"
-            : ""}
-        </p>
+          {comment.updatedAt > comment.createdAt && !comment.deletedAt ? (
+            <span className="shrink-0">· edited</span>
+          ) : null}
+        </div>
         {!comment.deletedAt ? (
           <div className="flex gap-1 opacity-0 transition-opacity group-focus-within/comment:opacity-100 group-hover/comment:opacity-100 max-md:opacity-100">
             {canEdit ? (
@@ -219,17 +227,10 @@ function CommentNode({
       <div className="mt-1 flex gap-1">
         <Button
           onClick={() => setReplying((value) => !value)}
-          size="xs"
-          variant="ghost"
+          size="sm"
+          variant="outline"
         >
           <MessageSquareReply /> Reply
-        </Button>
-        <Button
-          onClick={() => setShowReplies((value) => !value)}
-          size="xs"
-          variant="ghost"
-        >
-          <ChevronDown /> {showReplies ? "Hide replies" : "Show replies"}
         </Button>
       </div>
       {replying ? (
@@ -241,24 +242,21 @@ function CommentNode({
             onSubmit={async (payload) => {
               await reply({ commentId: comment._id, ...payload })
               setReplying(false)
-              setShowReplies(true)
             }}
             placeholder={`Reply to ${comment.authorName}…`}
           />
         </div>
       ) : null}
-      {showReplies ? (
-        <div className="mt-2">
-          <CommentBranch
-            currentSubject={currentSubject}
-            depth={depth + 1}
-            isAdmin={isAdmin}
-            members={members}
-            parentCommentId={comment._id}
-            targetCommentId={targetCommentId}
-            taskId={comment.taskId}
-          />
-        </div>
+      {renderReplies ? (
+        <CommentBranch
+          currentSubject={currentSubject}
+          depth={depth + 1}
+          isAdmin={isAdmin}
+          members={members}
+          parentCommentId={comment._id}
+          targetCommentId={targetCommentId}
+          taskId={comment.taskId}
+        />
       ) : null}
     </article>
   )
@@ -303,8 +301,8 @@ function LinkedThread({
     )
   }
   return (
-    <aside className="grid gap-2 rounded-2xl bg-muted/40 p-3">
-      <p className="text-xs font-medium text-muted-foreground">Linked thread</p>
+    <aside className="grid gap-2 rounded-lg bg-muted/40 p-3">
+      <p className="text-sm font-medium text-muted-foreground">Linked thread</p>
       {result.nextCommentId ? (
         <OlderAncestry
           currentSubject={currentSubject}
@@ -322,6 +320,7 @@ function LinkedThread({
           isAdmin={isAdmin}
           key={comment._id}
           members={members}
+          renderReplies={comment._id === targetCommentId}
           targetCommentId={targetCommentId}
         />
       ))}
@@ -349,7 +348,7 @@ function OlderAncestry({
   })
   if (!result)
     return (
-      <p className="text-xs text-muted-foreground">Loading older ancestry…</p>
+      <p className="text-sm text-muted-foreground">Loading older ancestry…</p>
     )
   return (
     <>
@@ -370,11 +369,29 @@ function OlderAncestry({
           isAdmin={isAdmin}
           key={comment._id}
           members={members}
+          renderReplies={comment._id === targetCommentId}
           targetCommentId={targetCommentId}
         />
       ))}
     </>
   )
+}
+
+function mentionQueryAt(value: string, caret: number) {
+  let index = caret - 1
+  while (index >= 0) {
+    const char = value[index]
+    if (char === "@") {
+      const preceding = value[index - 1]
+      if (index === 0 || preceding === " " || preceding === "\n") {
+        return { query: value.slice(index + 1, caret), start: index }
+      }
+      return null
+    }
+    if (char === " " || char === "\n") return null
+    index -= 1
+  }
+  return null
 }
 
 function CommentComposer({
@@ -394,19 +411,48 @@ function CommentComposer({
   onCancel?: () => void
   autoFocus?: boolean
 }) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [body, setBody] = useState(initialBody)
   const [tokens, setTokens] = useState(() =>
     initialMentions.map(({ subject, label }) => ({ subject, label }))
   )
   const [busy, setBusy] = useState(false)
+  const [mention, setMention] = useState<{
+    query: string
+    start: number
+  } | null>(null)
+  const [activeIndex, setActiveIndex] = useState(0)
 
-  function addMention(member: Member) {
-    const prefix = body && !body.endsWith(" ") ? " " : ""
-    setBody((value) => `${value}${prefix}@${member.displayName} `)
+  const matches = mention
+    ? members
+        .filter((member) =>
+          member.displayName.toLowerCase().includes(mention.query.toLowerCase())
+        )
+        .slice(0, 8)
+    : []
+  const open = matches.length > 0
+
+  function syncMention(value: string, caret: number) {
+    setMention(mentionQueryAt(value, caret))
+    setActiveIndex(0)
+  }
+
+  function insertMention(member: Member) {
+    const element = textareaRef.current
+    const caret = element?.selectionStart ?? body.length
+    const start = mention ? mention.start : caret
+    const insert = `@${member.displayName} `
+    setBody(body.slice(0, start) + insert + body.slice(caret))
     setTokens((value) => [
       ...value,
       { subject: member.userId, label: member.displayName },
     ])
+    setMention(null)
+    const cursor = start + insert.length
+    requestAnimationFrame(() => {
+      element?.focus()
+      element?.setSelectionRange(cursor, cursor)
+    })
   }
 
   async function submit() {
@@ -425,6 +471,7 @@ function CommentComposer({
       await onSubmit({ body, mentions })
       setBody("")
       setTokens([])
+      setMention(null)
     } catch (error) {
       toast.error(messageFromError(error, "Could not save the comment."))
     } finally {
@@ -433,50 +480,114 @@ function CommentComposer({
   }
 
   return (
-    <div className="grid gap-2">
-      <Textarea
-        autoFocus={autoFocus}
-        maxLength={5000}
-        onChange={(event) => setBody(event.target.value)}
-        onKeyDown={(event) => {
-          if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-            event.preventDefault()
-            void submit()
-          }
-        }}
-        placeholder={placeholder}
-        value={body}
-      />
-      {members.length ? (
-        <div className="flex flex-wrap gap-1">
-          {members.map((member) => (
+    <Popover
+      onOpenChange={(next) => {
+        if (!next) setMention(null)
+      }}
+      open={open}
+    >
+      <PopoverAnchor asChild>
+        <div className="relative">
+          <Textarea
+            autoFocus={autoFocus}
+            className="min-h-20 pb-10"
+            maxLength={5000}
+            onChange={(event) => {
+              setBody(event.target.value)
+              syncMention(
+                event.target.value,
+                event.target.selectionStart ?? event.target.value.length
+              )
+            }}
+            onClick={(event) =>
+              syncMention(
+                event.currentTarget.value,
+                event.currentTarget.selectionStart ?? 0
+              )
+            }
+            onKeyDown={(event) => {
+              if (open) {
+                if (event.key === "ArrowDown") {
+                  event.preventDefault()
+                  setActiveIndex((index) => (index + 1) % matches.length)
+                  return
+                }
+                if (event.key === "ArrowUp") {
+                  event.preventDefault()
+                  setActiveIndex(
+                    (index) => (index - 1 + matches.length) % matches.length
+                  )
+                  return
+                }
+                if (event.key === "Enter" || event.key === "Tab") {
+                  const picked = matches[activeIndex]
+                  if (picked) {
+                    event.preventDefault()
+                    insertMention(picked)
+                    return
+                  }
+                }
+                if (event.key === "Escape") {
+                  event.preventDefault()
+                  setMention(null)
+                  return
+                }
+              }
+              if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                event.preventDefault()
+                void submit()
+              }
+            }}
+            placeholder={placeholder}
+            ref={textareaRef}
+            value={body}
+          />
+          <div className="absolute right-2 bottom-2 flex gap-1.5">
+            {onCancel ? (
+              <Button
+                onClick={onCancel}
+                size="sm"
+                type="button"
+                variant="ghost"
+              >
+                Cancel
+              </Button>
+            ) : null}
             <Button
-              key={member.userId}
-              onClick={() => addMention(member)}
-              size="xs"
+              disabled={busy || !body.trim()}
+              onClick={() => void submit()}
+              size="sm"
               type="button"
-              variant="secondary"
             >
-              @{member.displayName}
+              <Send /> {busy ? "Saving…" : "Post"}
             </Button>
-          ))}
+          </div>
         </div>
-      ) : null}
-      <div className="flex justify-end gap-2">
-        {onCancel ? (
-          <Button onClick={onCancel} size="sm" type="button" variant="ghost">
-            Cancel
+      </PopoverAnchor>
+      <PopoverContent
+        align="start"
+        className="max-h-56 w-(--radix-popover-trigger-width) gap-0.5 overflow-y-auto p-1"
+        onCloseAutoFocus={(event) => event.preventDefault()}
+        onOpenAutoFocus={(event) => event.preventDefault()}
+        sideOffset={4}
+      >
+        {matches.map((member, index) => (
+          <Button
+            className="w-full justify-start data-[active=true]:bg-muted"
+            data-active={index === activeIndex ? "true" : undefined}
+            key={member.userId}
+            onMouseDown={(event) => {
+              event.preventDefault()
+              insertMention(member)
+            }}
+            size="sm"
+            type="button"
+            variant="ghost"
+          >
+            @{member.displayName}
           </Button>
-        ) : null}
-        <Button
-          disabled={busy || !body.trim()}
-          onClick={() => void submit()}
-          size="sm"
-          type="button"
-        >
-          <Send /> {busy ? "Saving…" : "Post"}
-        </Button>
-      </div>
-    </div>
+        ))}
+      </PopoverContent>
+    </Popover>
   )
 }

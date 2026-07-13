@@ -4,7 +4,7 @@ import { useQuery } from "convex-helpers/react/cache"
 import { useMutation } from "convex/react"
 import type { FunctionReturnType } from "convex/server"
 import { format } from "date-fns"
-import { CalendarClock, MoreHorizontal, Trash2 } from "lucide-react"
+import { Trash2 } from "lucide-react"
 import { useRef, useState } from "react"
 import { toast } from "sonner"
 
@@ -17,12 +17,6 @@ import { TaskComments } from "@/components/project-board/task-comments"
 import { TaskSubtasks } from "@/components/project-board/task-subtasks"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -53,7 +47,7 @@ export function TaskDialog({
   return (
     <Dialog onOpenChange={(open) => !open && onClose()} open={taskId !== null}>
       <DialogContent
-        className="max-h-[calc(100vh-2rem)] max-w-6xl gap-0 overflow-y-auto p-0 sm:max-w-6xl"
+        className="max-h-[calc(100vh-2rem)] max-w-4xl gap-0 overflow-y-auto p-0 sm:max-w-4xl"
         data-testid="task-dialog"
       >
         <DialogTitle className="sr-only">Task details</DialogTitle>
@@ -107,7 +101,7 @@ function TaskView({
   }
   return (
     <div className="grid lg:grid-cols-[minmax(0,3fr)_minmax(15rem,1fr)]">
-      <main className="grid content-start gap-5 p-5">
+      <main className="grid content-start gap-4 p-4 text-sm">
         <InlineFields task={task} />
         <Separator />
         <TaskSubtasks taskId={task._id} />
@@ -184,7 +178,7 @@ function InlineFields({ task }: { task: TaskDetail }) {
   function conflictActions(field: "title" | "description") {
     if (conflict?.field !== field) return null
     return (
-      <div className="flex flex-wrap items-center gap-2 rounded-xl bg-amber-500/10 p-2 text-xs">
+      <div className="flex flex-wrap items-center gap-2 rounded-lg bg-amber-500/10 p-2 text-sm">
         <span className="mr-auto">This field changed elsewhere.</span>
         <Button
           onClick={() => {
@@ -192,7 +186,7 @@ function InlineFields({ task }: { task: TaskDetail }) {
             else setDescription(conflict.latestValue)
             setConflict(null)
           }}
-          size="xs"
+          size="sm"
           variant="ghost"
         >
           Use latest
@@ -203,7 +197,7 @@ function InlineFields({ task }: { task: TaskDetail }) {
               ? saveTitle(conflict.latestValue)
               : saveDescription(conflict.latestValue || null))
           }
-          size="xs"
+          size="sm"
           variant="outline"
         >
           Keep mine
@@ -213,10 +207,10 @@ function InlineFields({ task }: { task: TaskDetail }) {
   }
 
   return (
-    <section className="grid gap-3">
+    <section className="grid gap-2">
       <Input
         aria-label="Task title"
-        className="h-auto border-0 px-0 font-heading text-xl font-medium shadow-none focus-visible:ring-0"
+        className="font-heading font-medium"
         maxLength={120}
         onBlur={() => {
           setEditingTitle(false)
@@ -241,7 +235,7 @@ function InlineFields({ task }: { task: TaskDetail }) {
       {conflictActions("title")}
       <Textarea
         aria-label="Task description"
-        className="min-h-16 resize-y border-0 bg-muted/35 px-3 py-2 shadow-none focus-visible:ring-1"
+        className="min-h-24"
         maxLength={2000}
         onBlur={() => {
           setEditingDescription(false)
@@ -325,35 +319,15 @@ function TaskMetadata({
   }
 
   return (
-    <aside className="border-t bg-muted/25 p-5 lg:border-t-0 lg:border-l">
-      <div className="grid gap-4 lg:sticky lg:top-0">
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-            Task details
-          </p>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button aria-label="Task actions" size="icon-sm" variant="ghost">
-                <MoreHorizontal />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                variant="destructive"
-                onSelect={() => setConfirmDelete(true)}
-              >
-                <Trash2 /> Delete task
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+    <aside className="border-t bg-muted/25 p-4 text-sm lg:border-t-0 lg:border-l">
+      <div className="grid gap-3 lg:sticky lg:top-0">
         <div className="grid gap-2">
           <Label>Status</Label>
           <Select
             onValueChange={(value) => void changeStatus(value as Status)}
             value={task.status}
           >
-            <SelectTrigger data-testid="task-status-select">
+            <SelectTrigger className="w-full" data-testid="task-status-select">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -388,15 +362,12 @@ function TaskMetadata({
           }
           value={task.assigneeSubject ?? UNASSIGNED}
         />
-        <div className="grid gap-1.5 rounded-xl border bg-background/60 p-3 text-sm text-muted-foreground">
-          <span className="flex items-center gap-2">
-            <CalendarClock className="size-3.5" />
-            Updated {format(task.updatedAt, "MMM d, yyyy")}
-          </span>
+        <div className="grid gap-1 text-sm text-muted-foreground">
+          <span>Updated {format(task.updatedAt, "MMM d, yyyy")}</span>
           <span>Created {format(task.createdAt, "MMM d, yyyy")}</span>
         </div>
         {confirmDelete ? (
-          <div className="grid gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-3">
+          <div className="grid gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
             <p className="text-sm">
               Delete this task, {task.totalSubtasks} subtasks, and{" "}
               {task.activeCommentCount} active comments?
@@ -430,7 +401,15 @@ function TaskMetadata({
               </Button>
             </div>
           </div>
-        ) : null}
+        ) : (
+          <Button
+            className="w-full"
+            onClick={() => setConfirmDelete(true)}
+            variant="destructive"
+          >
+            <Trash2 /> Delete task
+          </Button>
+        )}
       </div>
     </aside>
   )
