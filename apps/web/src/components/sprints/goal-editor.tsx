@@ -8,7 +8,7 @@ import { api } from "@neram/convex/api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 
-import { InfoHint, runToast } from "./shared"
+import { InfoHint, runToast, type SprintTarget } from "./shared"
 
 const GOAL_HINT =
   "A short outcome this Sprint should achieve. Keep it to one sentence."
@@ -18,7 +18,7 @@ export function GoalEditor({
   sprint,
 }: {
   initialGoal?: string
-  sprint: "current" | "upcoming"
+  sprint: SprintTarget
 }) {
   const updateGoal = useMutation(api.sprints.updateGoal)
   const [editing, setEditing] = useState(false)
@@ -74,7 +74,12 @@ export function GoalEditor({
         placeholder="What outcome should this Sprint achieve?"
         value={goal}
       />
-      <Button aria-label="Save goal" onClick={save} size="icon" variant="outline">
+      <Button
+        aria-label="Save goal"
+        onClick={save}
+        size="icon"
+        variant="outline"
+      >
         <Check />
       </Button>
       <Button

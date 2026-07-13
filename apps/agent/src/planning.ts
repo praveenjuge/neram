@@ -38,6 +38,7 @@ export type WorkspaceContext = {
 export type Sprint = {
   _id: string
   number: number
+  name?: string
   goal?: string
   state: "current" | "upcoming" | "closed"
   startsAt: number
@@ -116,6 +117,7 @@ export type PlanningApi = {
   }): Promise<string>
   currentSprint(): Promise<SprintView | null>
   upcomingSprint(): Promise<SprintView | null>
+  upcomingSprints(): Promise<SprintView[]>
   backlogTasks(): Promise<SprintTask[]>
   sprintHistory(args: {
     cursor: string | null
@@ -126,20 +128,19 @@ export type PlanningApi = {
     cursor: string | null
     pageSize: number
   }): Promise<Page<SprintEntry>>
-  planSprintTasks(args: {
-    taskIds: string[]
-    sprint: SprintPlacement
-  }): Promise<void>
-  removeSprintTasks(args: {
-    taskIds: string[]
-    sprint: SprintRef
-  }): Promise<void>
-  updateSprintGoal(args: { sprint: SprintRef; goal?: string }): Promise<void>
+  // `sprint` is a placement alias ("backlog"/"current"/"upcoming") or a
+  // scheduled Sprint id; the backend validates it either way.
+  planSprintTasks(args: { taskIds: string[]; sprint: string }): Promise<void>
+  removeSprintTasks(args: { taskIds: string[]; sprint: string }): Promise<void>
+  updateSprintGoal(args: { sprint: string; goal?: string }): Promise<void>
   updateSprintCadence(args: {
     cadenceWeeks: number
     startWeekday: number
     timezone: string
   }): Promise<void>
+  scheduleSprint(args: { name?: string; goal?: string }): Promise<string>
+  renameSprint(args: { sprint: string; name?: string }): Promise<void>
+  unscheduleSprint(args: { sprintId: string }): Promise<void>
   rolloverSprint(args: {
     organizationId: string
     organizationSlug: string
@@ -189,6 +190,7 @@ export function createPlanningApi(
       }),
     currentSprint: () => calls.query(api.sprints.current, {}),
     upcomingSprint: () => calls.query(api.sprints.upcoming, {}),
+    upcomingSprints: () => calls.query(api.sprints.upcomingList, {}),
     backlogTasks: () => calls.query(api.sprints.backlog, {}),
     sprintHistory: ({ cursor, pageSize }) =>
       calls.query(api.sprints.history, {
@@ -211,6 +213,13 @@ export function createPlanningApi(
     updateSprintCadence: async (args) => {
       await calls.mutation(api.sprints.updateCadence, args)
     },
+    scheduleSprint: (args) => calls.mutation(api.sprints.scheduleSprint, args),
+    renameSprint: async (args) => {
+      await calls.mutation(api.sprints.renameSprint, args)
+    },
+    unscheduleSprint: async (args) => {
+      await calls.mutation(api.sprints.unscheduleSprint, args)
+    },
     rolloverSprint: ({ organizationSlug, ...args }) =>
       calls.mutation(api.sprints.rollover, {
         ...args,
@@ -227,6 +236,7 @@ function compactSprint(sprint: Sprint) {
   return {
     sprintId: sprint._id,
     number: sprint.number,
+    name: sprint.name,
     goal: sprint.goal,
     state: sprint.state,
     startsAt: iso(sprint.startsAt),
@@ -364,22 +374,38 @@ export function createPlanningTools(neram: PlanningApi) {
         cursor: result.isDone ? null : result.continueCursor,
       }
     },
+    async list_upcoming_sprints(
+      raw?: z.input<typeof schemas.list_upcoming_sprints>
+    ) {
+      schemas.list_upcoming_sprints.parse(raw ?? {})
+      const views = await neram.upcomingSprints()
+      return {
+        sprints: views.map((view) => ({
+          ...compactSprint(view.sprint),
+          taskCount: view.tasks.length,
+          tasks: view.tasks.map(compactSprintTask),
+        })),
+      }
+    },
     async plan_sprint_tasks(raw: z.input<typeof schemas.plan_sprint_tasks>) {
       const input = schemas.plan_sprint_tasks.parse(raw)
-      await neram.planSprintTasks(input)
-      return input
+      const sprint = input.sprintId ?? input.sprint
+      await neram.planSprintTasks({ taskIds: input.taskIds, sprint })
+      return { taskIds: input.taskIds, sprint }
     },
     async remove_sprint_tasks(
       raw: z.input<typeof schemas.remove_sprint_tasks>
     ) {
       const input = schemas.remove_sprint_tasks.parse(raw)
-      await neram.removeSprintTasks(input)
-      return input
+      const sprint = input.sprintId ?? input.sprint
+      await neram.removeSprintTasks({ taskIds: input.taskIds, sprint })
+      return { taskIds: input.taskIds, sprint }
     },
     async update_sprint_goal(raw: z.input<typeof schemas.update_sprint_goal>) {
       const input = schemas.update_sprint_goal.parse(raw)
-      await neram.updateSprintGoal(input)
-      return { sprint: input.sprint }
+      const sprint = input.sprintId ?? input.sprint
+      await neram.updateSprintGoal({ sprint, goal: input.goal })
+      return { sprint }
     },
     async update_sprint_cadence(
       raw: z.input<typeof schemas.update_sprint_cadence>
@@ -387,6 +413,22 @@ export function createPlanningTools(neram: PlanningApi) {
       const input = schemas.update_sprint_cadence.parse(raw)
       await neram.updateSprintCadence(input)
       return input
+    },
+    async schedule_sprint(raw?: z.input<typeof schemas.schedule_sprint>) {
+      const input = schemas.schedule_sprint.parse(raw ?? {})
+      const sprintId = await neram.scheduleSprint(input)
+      return { sprintId, scheduled: true as const }
+    },
+    async rename_sprint(raw: z.input<typeof schemas.rename_sprint>) {
+      const input = schemas.rename_sprint.parse(raw)
+      const sprint = input.sprintId ?? input.sprint
+      await neram.renameSprint({ sprint, name: input.name })
+      return { sprint }
+    },
+    async unschedule_sprint(raw: z.input<typeof schemas.unschedule_sprint>) {
+      const input = schemas.unschedule_sprint.parse(raw)
+      await neram.unscheduleSprint(input)
+      return { sprintId: input.sprintId, removed: true as const }
     },
     async rollover_sprint(raw: z.input<typeof schemas.rollover_sprint>) {
       const input = schemas.rollover_sprint.parse(raw)

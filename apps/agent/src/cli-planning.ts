@@ -33,13 +33,27 @@ function memberLines(
 
 function sprintLines(result: Awaited<ReturnType<Tools["list_sprint_tasks"]>>) {
   const heading = result.details
-    ? `Sprint ${result.details.number} · ${result.sprint} · ${result.tasks.length} tasks`
+    ? `${result.details.name ?? `Sprint ${result.details.number}`} · ${result.sprint} · ${result.tasks.length} tasks`
     : `${result.sprint} · ${result.tasks.length} tasks`
   const tasks = result.tasks.map(
     (task) =>
       `  ${task.taskId}  ${task.title} · ${task.projectName} · ${task.status}`
   )
   return [heading, ...tasks].join("\n")
+}
+
+function upcomingLines(
+  result: Awaited<ReturnType<Tools["list_upcoming_sprints"]>>
+) {
+  if (result.sprints.length === 0) return "No upcoming Sprints scheduled."
+  return result.sprints
+    .map(
+      (sprint) =>
+        `${sprint.sprintId}  ${sprint.name ?? `Sprint ${sprint.number}`} · ${sprint.taskCount} task(s)${
+          sprint.goal ? ` · ${sprint.goal}` : ""
+        }`
+    )
+    .join("\n")
 }
 
 export function registerPlanningCommands(program: Command, runtime: Runtime) {
@@ -209,10 +223,79 @@ export function registerPlanningCommands(program: Command, runtime: Runtime) {
     )
 
   sprint
+    .command("list")
+    .description("List every scheduled upcoming Sprint with its id")
+    .option("--json")
+    .action((opts) =>
+      wrap(opts, async () => {
+        const result = await (await tools()).list_upcoming_sprints({})
+        emit(opts, upcomingLines(result), result)
+      })
+    )
+
+  sprint
+    .command("schedule")
+    .description(
+      "Create a Sprint (the first becomes active, later ones are scheduled)"
+    )
+    .option("--name <name>")
+    .option("--goal <goal>")
+    .option("--json")
+    .action((opts) =>
+      wrap(opts, async () => {
+        const result = await (
+          await tools()
+        ).schedule_sprint({ name: opts.name, goal: opts.goal })
+        emit(opts, `Scheduled Sprint ${result.sprintId}.`, result)
+      })
+    )
+
+  sprint
+    .command("rename")
+    .description("Rename the Current, Upcoming, or a scheduled Sprint")
+    .option("--sprint <current|upcoming>", "Target Sprint", "current")
+    .option("--sprint-id <id>", "Target a specific scheduled Sprint")
+    .option("--name <name>")
+    .option("--clear", "Clear the name (restore the default label)")
+    .option("--json")
+    .action((opts) =>
+      wrap(opts, async () => {
+        if (opts.name === undefined && !opts.clear) {
+          throw new AgentError("VALIDATION", "Provide --name or --clear.")
+        }
+        const result = await (
+          await tools()
+        ).rename_sprint({
+          sprint: opts.sprint,
+          sprintId: opts.sprintId,
+          name: opts.clear ? undefined : opts.name,
+        })
+        emit(opts, `Renamed the ${result.sprint} Sprint.`, result)
+      })
+    )
+
+  sprint
+    .command("unschedule")
+    .description("Remove a scheduled Sprint; its work returns to Backlog")
+    .requiredOption("--sprint-id <id>")
+    .option("--json")
+    .action((opts) =>
+      wrap(opts, async () => {
+        const result = await (
+          await tools()
+        ).unschedule_sprint({ sprintId: opts.sprintId })
+        emit(opts, `Removed scheduled Sprint ${result.sprintId}.`, result)
+      })
+    )
+
+  sprint
     .command("plan")
-    .description("Plan tasks into Backlog, Current, or Upcoming")
+    .description(
+      "Plan tasks into Backlog, Current, Upcoming, or a scheduled Sprint"
+    )
     .requiredOption("--task-id <ids...>")
-    .requiredOption("--sprint <backlog|current|upcoming>")
+    .option("--sprint <backlog|current|upcoming>", "Target Sprint", "backlog")
+    .option("--sprint-id <id>", "Target a specific scheduled Sprint")
     .option("--json")
     .action((opts) =>
       wrap(opts, async () => {
@@ -221,6 +304,7 @@ export function registerPlanningCommands(program: Command, runtime: Runtime) {
         ).plan_sprint_tasks({
           taskIds: opts.taskId,
           sprint: opts.sprint,
+          sprintId: opts.sprintId,
         })
         emit(
           opts,
@@ -232,9 +316,12 @@ export function registerPlanningCommands(program: Command, runtime: Runtime) {
 
   sprint
     .command("remove")
-    .description("Return Current or Upcoming tasks to Backlog")
+    .description(
+      "Return Current, Upcoming, or a scheduled Sprint's tasks to Backlog"
+    )
     .requiredOption("--task-id <ids...>")
-    .requiredOption("--sprint <current|upcoming>")
+    .option("--sprint <current|upcoming>", "Source Sprint", "current")
+    .option("--sprint-id <id>", "Target a specific scheduled Sprint")
     .option("--json")
     .action((opts) =>
       wrap(opts, async () => {
@@ -243,6 +330,7 @@ export function registerPlanningCommands(program: Command, runtime: Runtime) {
         ).remove_sprint_tasks({
           taskIds: opts.taskId,
           sprint: opts.sprint,
+          sprintId: opts.sprintId,
         })
         emit(
           opts,
@@ -255,7 +343,8 @@ export function registerPlanningCommands(program: Command, runtime: Runtime) {
   sprint
     .command("goal")
     .description("Set or clear a Sprint goal")
-    .requiredOption("--sprint <current|upcoming>")
+    .option("--sprint <current|upcoming>", "Target Sprint", "current")
+    .option("--sprint-id <id>", "Target a specific scheduled Sprint")
     .option("--goal <goal>")
     .option("--clear", "Clear the goal")
     .option("--json")
@@ -268,6 +357,7 @@ export function registerPlanningCommands(program: Command, runtime: Runtime) {
           await tools()
         ).update_sprint_goal({
           sprint: opts.sprint,
+          sprintId: opts.sprintId,
           goal: opts.clear ? undefined : opts.goal,
         })
         emit(opts, `Updated the ${result.sprint} Sprint goal.`, result)

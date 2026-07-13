@@ -1,15 +1,15 @@
 import { ConvexError, v } from "convex/values"
 
 import { internal } from "./_generated/api"
-import type { Doc } from "./_generated/dataModel"
+import type { Doc, Id } from "./_generated/dataModel"
 import { internalMutation } from "./_generated/server"
 import type { MutationCtx } from "./_generated/server"
 import {
   addTaskToSprint,
-  ensureSprintPair,
+  ensureSettings,
   MAX_SPRINT_TASKS,
+  upcomingSprints,
 } from "./sprintModel"
-import { nextSprintBounds } from "./sprintTime"
 
 const BATCH_SIZE = 100
 
@@ -27,15 +27,19 @@ async function assertRolloverCapacity(
   args: {
     organizationId: string
     closingSprintId: Doc<"sprints">["_id"]
-    promotedSprintId: Doc<"sprints">["_id"]
+    promotedSprintId?: Doc<"sprints">["_id"]
     cutoffAt: number
   }
 ) {
+  // With nothing scheduled after the active Sprint, unfinished work returns to
+  // the Backlog, so there is no target to overflow.
+  if (!args.promotedSprintId) return
+  const promotedSprintId = args.promotedSprintId
   const [planned, current] = await Promise.all([
     ctx.db
       .query("sprintTaskEntries")
       .withIndex("by_sprint_and_removed", (q) =>
-        q.eq("sprintId", args.promotedSprintId).eq("removedAt", undefined)
+        q.eq("sprintId", promotedSprintId).eq("removedAt", undefined)
       )
       .take(MAX_SPRINT_TASKS + 1),
     ctx.db
@@ -61,16 +65,21 @@ async function assertRolloverCapacity(
 
 export async function startRollover(ctx: MutationCtx, args: StartRolloverArgs) {
   const now = args.now ?? Date.now()
-  const settings = await ensureSprintPair(ctx, args.organizationId, now)
+  const settings = await ensureSettings(ctx, args.organizationId, now)
   if (settings.rolloverStatus === "running" && settings.activeRolloverJobId) {
     await ctx.scheduler.runAfter(0, internal.sprintRollover.process, {
       jobId: settings.activeRolloverJobId,
     })
     return settings.activeRolloverJobId
   }
-  const closing = await ctx.db.get(settings.currentSprintId!)
-  const promoted = await ctx.db.get(settings.upcomingSprintId!)
-  if (!closing || !promoted) {
+  if (!settings.currentSprintId) {
+    throw new ConvexError({
+      code: "SPRINT_STATE_INVALID",
+      message: "No active Sprint to roll over.",
+    })
+  }
+  const closing = await ctx.db.get(settings.currentSprintId)
+  if (!closing || closing.state !== "current") {
     throw new ConvexError({
       code: "SPRINT_STATE_INVALID",
       message: "Sprint state needs repair.",
@@ -83,16 +92,19 @@ export async function startRollover(ctx: MutationCtx, args: StartRolloverArgs) {
     })
   }
   const cutoffAt = args.early ? now : closing.endsAt
+  // Promote the soonest scheduled Sprint, if any; otherwise the Sprint just
+  // closes and the workspace is left with no active Sprint.
+  const promoted = (await upcomingSprints(ctx, args.organizationId))[0]
   await assertRolloverCapacity(ctx, {
     organizationId: args.organizationId,
     closingSprintId: closing._id,
-    promotedSprintId: promoted._id,
+    promotedSprintId: promoted?._id,
     cutoffAt,
   })
   const jobId = await ctx.db.insert("sprintRolloverJobs", {
     organizationId: args.organizationId,
     closingSprintId: closing._id,
-    promotedSprintId: promoted._id,
+    promotedSprintId: promoted?._id,
     status: "running",
     phase: "close_current",
     cutoffAt,
@@ -146,6 +158,12 @@ async function closeCurrentBatch(
       await ctx.db.patch(task._id, { currentSprintId: undefined })
       continue
     }
+    // Unfinished work carries into the promoted Sprint, or returns to the
+    // Backlog when nothing is scheduled next.
+    if (!job.promotedSprintId) {
+      await ctx.db.patch(task._id, { currentSprintId: undefined })
+      continue
+    }
     const project = await ctx.db.get(task.projectId)
     if (!project) continue
     await addTaskToSprint(ctx, {
@@ -194,10 +212,20 @@ async function promoteUpcomingBatch(
   ctx: MutationCtx,
   job: Doc<"sprintRolloverJobs">
 ) {
+  // Nothing scheduled to promote: skip straight to finalize.
+  if (!job.promotedSprintId) {
+    await ctx.db.patch(job._id, {
+      cursor: undefined,
+      phase: "finalize",
+      updatedAt: Date.now(),
+    })
+    return true
+  }
+  const promotedSprintId = job.promotedSprintId
   const page = await ctx.db
     .query("sprintTaskEntries")
     .withIndex("by_sprint_and_added_at", (q) =>
-      q.eq("sprintId", job.promotedSprintId)
+      q.eq("sprintId", promotedSprintId)
     )
     .paginate({ numItems: BATCH_SIZE, cursor: job.cursor ?? null })
   for (const entry of page.page) {
@@ -205,7 +233,7 @@ async function promoteUpcomingBatch(
     const task = await ctx.db.get(entry.taskId)
     if (!task || task.organizationId !== job.organizationId) continue
     const patch: Partial<Doc<"tasks">> = {
-      currentSprintId: job.promotedSprintId,
+      currentSprintId: promotedSprintId,
       upcomingSprintId: undefined,
     }
     if (task.completedAt !== undefined && task.completedAt > job.cutoffAt) {
@@ -229,11 +257,11 @@ async function finalize(ctx: MutationCtx, job: Doc<"sprintRolloverJobs">) {
     )
     .unique()
   const closing = await ctx.db.get(job.closingSprintId)
-  const promoted = await ctx.db.get(job.promotedSprintId)
-  if (!settings || !closing || !promoted) {
+  if (!settings || !closing) {
     throw new Error("Sprint rollover references are missing")
   }
-  if (closing.state === "closed" && settings.currentSprintId === promoted._id) {
+  if (closing.state === "closed") {
+    // Already finalized (idempotent replay).
     await ctx.db.patch(job._id, {
       status: "completed",
       completedAt: Date.now(),
@@ -241,6 +269,9 @@ async function finalize(ctx: MutationCtx, job: Doc<"sprintRolloverJobs">) {
     })
     return
   }
+  const promoted = job.promotedSprintId
+    ? await ctx.db.get(job.promotedSprintId)
+    : null
   const counts = {
     baselineCount: job.baselineCount,
     completedCount: job.completedCount,
@@ -260,24 +291,22 @@ async function finalize(ctx: MutationCtx, job: Doc<"sprintRolloverJobs">) {
     ...counts,
     updatedAt: now,
   })
-  await ctx.db.patch(promoted._id, {
-    state: "current",
-    startsAt: job.cutoffAt,
-    updatedAt: now,
-  })
-  const bounds = nextSprintBounds(promoted.endsAt, settings)
-  const upcomingSprintId = await ctx.db.insert("sprints", {
-    organizationId: job.organizationId,
-    number: settings.nextSprintNumber,
-    state: "upcoming",
-    ...bounds,
-    createdAt: now,
-    updatedAt: now,
-  })
+  let currentSprintId: Id<"sprints"> | undefined
+  let upcomingSprintId: Id<"sprints"> | undefined
+  if (promoted) {
+    await ctx.db.patch(promoted._id, {
+      state: "current",
+      startsAt: job.cutoffAt,
+      updatedAt: now,
+    })
+    currentSprintId = promoted._id
+    // The next-soonest scheduled Sprint becomes the new Upcoming pointer.
+    const remaining = await upcomingSprints(ctx, job.organizationId)
+    upcomingSprintId = remaining[0]?._id
+  }
   await ctx.db.patch(settings._id, {
-    currentSprintId: promoted._id,
+    currentSprintId,
     upcomingSprintId,
-    nextSprintNumber: settings.nextSprintNumber + 1,
     rolloverStatus: "idle",
     activeRolloverJobId: undefined,
     updatedAt: now,
@@ -298,14 +327,16 @@ async function finalize(ctx: MutationCtx, job: Doc<"sprintRolloverJobs">) {
     detail: job.reason,
     createdAt: now,
   })
-  await ctx.scheduler.runAt(
-    promoted.endsAt,
-    internal.sprintRollover.scheduled,
-    {
-      organizationId: job.organizationId,
-      sprintId: promoted._id,
-    }
-  )
+  if (promoted) {
+    await ctx.scheduler.runAt(
+      promoted.endsAt,
+      internal.sprintRollover.scheduled,
+      {
+        organizationId: job.organizationId,
+        sprintId: promoted._id,
+      }
+    )
+  }
 }
 
 export const process = internalMutation({

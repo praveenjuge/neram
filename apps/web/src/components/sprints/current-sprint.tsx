@@ -2,7 +2,7 @@
 
 import { useOrganization } from "@clerk/nextjs"
 import { useMutation, useQuery } from "convex/react"
-import { RotateCcw } from "lucide-react"
+import { CalendarPlus, Pencil, RotateCcw } from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"
 
@@ -30,22 +30,52 @@ import { Textarea } from "@/components/ui/textarea"
 import { messageFromError } from "@/lib/errors"
 
 import { GoalEditor } from "./goal-editor"
-import { InfoHint, Loading, RemoveTaskButton, runToast, SprintHeader } from "./shared"
+import {
+  InfoHint,
+  Loading,
+  RemoveTaskButton,
+  runToast,
+  SprintHeader,
+  sprintLabel,
+} from "./shared"
+import { SprintNameDialog } from "./sprint-name-dialog"
 
 const CURRENT_HINT =
   "The active Sprint. Its dates are locked — drag tasks across the board to update status."
 
 export function CurrentSprint() {
   const current = useQuery(api.sprints.current)
+  const context = useQuery(api.organizations.current)
   const moveTask = useMutation(api.tasks.move)
+  const renameSprint = useMutation(api.sprints.renameSprint)
+  const createSprint = useMutation(api.sprints.scheduleSprint)
   const [openTaskId, setOpenTaskId] = useState<Id<"tasks"> | null>(null)
 
   if (current === undefined) return <Loading />
   if (current === null)
     return (
-      <p className="text-sm text-muted-foreground">
-        Sprint setup is unavailable.
-      </p>
+      <div className="grid place-items-center gap-3 rounded-lg border border-dashed p-10 text-center">
+        <p className="text-sm text-muted-foreground">
+          No active Sprint. Create one to start planning.
+        </p>
+        <SprintNameDialog
+          defaultName={`Sprint ${context?.settings?.nextSprintNumber ?? 1}`}
+          description="Name your first Sprint. It becomes the active Sprint and starts today."
+          onSubmit={(name) =>
+            runToast(createSprint({ name }), {
+              success: "Started a new Sprint.",
+              error: "Could not create the Sprint.",
+            })
+          }
+          submitLabel="Create Sprint"
+          title="New Sprint"
+          trigger={
+            <Button>
+              <CalendarPlus /> New Sprint
+            </Button>
+          }
+        />
+      </div>
     )
   const currentSprint = current
 
@@ -78,7 +108,32 @@ export function CurrentSprint() {
     <div className="grid gap-5">
       <SprintHeader
         {...current.sprint}
-        action={<EarlyRollover />}
+        action={
+          <>
+            <SprintNameDialog
+              defaultName={sprintLabel(current.sprint)}
+              description="Update this Sprint's name."
+              onSubmit={(name) =>
+                runToast(renameSprint({ sprint: "current", name }), {
+                  success: "Renamed the Sprint.",
+                  error: "Could not rename the Sprint.",
+                })
+              }
+              submitLabel="Save"
+              title="Rename Sprint"
+              trigger={
+                <Button
+                  aria-label="Rename Sprint"
+                  size="icon-sm"
+                  variant="ghost"
+                >
+                  <Pencil />
+                </Button>
+              }
+            />
+            <EarlyRollover />
+          </>
+        }
         hint={CURRENT_HINT}
         state="Current"
       />

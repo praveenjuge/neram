@@ -5,24 +5,44 @@ import {
 import { ConvexError, v } from "convex/values"
 
 import { internal } from "./_generated/api"
-import type { Doc } from "./_generated/dataModel"
+import type { Doc, Id } from "./_generated/dataModel"
 import { mutation, query } from "./_generated/server"
 import { projectCounts, requireOrganization, statusCountField } from "./model"
 import {
+  activeSprintId,
   addTaskToSprint,
   cleanGoal,
-  ensureSprintPair,
+  cleanName,
+  ensureSettings,
+  MAX_SCHEDULED_SPRINTS,
   MAX_SPRINT_TASKS,
   removeTaskFromSprint,
+  upcomingSprints,
 } from "./sprintModel"
 import { startRollover } from "./sprintRollover"
-import { nextSprintBounds, validateCadence } from "./sprintTime"
+import {
+  initialSprintBounds,
+  nextSprintBounds,
+  validateCadence,
+} from "./sprintTime"
 import { taskCounts, taskStats } from "./taskModel"
 
+// Where planned work can land. "current"/"upcoming" are convenience aliases for
+// the active Sprint and the soonest scheduled Sprint; a concrete Sprint id
+// targets any specific future Sprint when several are scheduled ahead.
 const placement = v.union(
   v.literal("backlog"),
   v.literal("current"),
-  v.literal("upcoming")
+  v.literal("upcoming"),
+  v.id("sprints")
+)
+
+// A live Sprint that already holds work: the active Sprint, the soonest
+// scheduled one, or a specific scheduled Sprint addressed by id.
+const sprintTarget = v.union(
+  v.literal("current"),
+  v.literal("upcoming"),
+  v.id("sprints")
 )
 
 const sprint = v.object({
@@ -30,6 +50,7 @@ const sprint = v.object({
   _creationTime: v.number(),
   organizationId: v.string(),
   number: v.number(),
+  name: v.optional(v.string()),
   goal: v.optional(v.string()),
   state: v.union(
     v.literal("current"),
@@ -203,6 +224,55 @@ async function backlogTasks(
   return rows
 }
 
+type SprintCtx = Parameters<typeof requireOrganization>[0]
+
+async function organizationSettings(ctx: SprintCtx, organizationId: string) {
+  return await ctx.db
+    .query("organizationSettings")
+    .withIndex("by_organization", (q) => q.eq("organizationId", organizationId))
+    .unique()
+}
+
+/**
+ * Resolve a placement union to a concrete Sprint id, or null for the Backlog.
+ * "current"/"upcoming" read the denormalized pointers (upcoming = soonest
+ * scheduled Sprint); a concrete id is validated to belong to this Organization
+ * and to still be open so closed history can never be targeted.
+ */
+async function resolveSprintTarget(
+  ctx: SprintCtx,
+  organizationId: string,
+  settings: Pick<
+    Doc<"organizationSettings">,
+    "currentSprintId" | "upcomingSprintId"
+  >,
+  target: "backlog" | "current" | "upcoming" | Id<"sprints">
+): Promise<Id<"sprints"> | null> {
+  if (target === "backlog") return null
+  if (target === "current" || target === "upcoming") {
+    const pointer =
+      target === "current"
+        ? settings.currentSprintId
+        : settings.upcomingSprintId
+    if (!pointer) {
+      throw new ConvexError({
+        code: "SPRINT_STATE_INVALID",
+        message: `The ${target} Sprint is unavailable.`,
+      })
+    }
+    return pointer
+  }
+  const sprintDoc = await ctx.db.get(target)
+  if (
+    !sprintDoc ||
+    sprintDoc.organizationId !== organizationId ||
+    sprintDoc.state === "closed"
+  ) {
+    throw new ConvexError({ code: "NOT_FOUND", message: "Sprint not found." })
+  }
+  return sprintDoc._id
+}
+
 export const current = query({
   args: {},
   returns: v.union(v.null(), v.object({ sprint, tasks: v.array(task) })),
@@ -267,6 +337,36 @@ export const upcoming = query({
   },
 })
 
+// Every scheduled future Sprint (soonest first) with its planned tasks. Powers
+// the Upcoming tab where several Sprints can be scheduled and planned ahead.
+export const upcomingList = query({
+  args: {},
+  returns: v.array(v.object({ sprint, tasks: v.array(task) })),
+  handler: async (ctx) => {
+    const access = await requireOrganization(ctx)
+    const sprints = await upcomingSprints(
+      ctx,
+      access.organization.organizationId
+    )
+    const result: Array<{
+      sprint: Doc<"sprints">
+      tasks: Awaited<ReturnType<typeof tasksWithProjects>>
+    }> = []
+    for (const upcomingSprint of sprints) {
+      const tasks = await tasksWithProjects(
+        ctx,
+        await upcomingTasks(
+          ctx,
+          access.organization.organizationId,
+          upcomingSprint._id
+        )
+      )
+      result.push({ sprint: upcomingSprint, tasks })
+    }
+    return result
+  },
+})
+
 export const history = query({
   args: { paginationOpts: paginationOptsValidator },
   returns: paginationResultValidator(sprint),
@@ -309,30 +409,6 @@ export const audit = query({
   },
 })
 
-export const initialize = mutation({
-  args: {},
-  returns: v.null(),
-  handler: async (ctx) => {
-    const access = await requireOrganization(ctx)
-    const settings = await ensureSprintPair(
-      ctx,
-      access.organization.organizationId
-    )
-    const currentSprint = await ctx.db.get(settings.currentSprintId!)
-    if (currentSprint) {
-      await ctx.scheduler.runAt(
-        currentSprint.endsAt,
-        internal.sprintRollover.scheduled,
-        {
-          organizationId: access.organization.organizationId,
-          sprintId: currentSprint._id,
-        }
-      )
-    }
-    return null
-  },
-})
-
 export const plan = mutation({
   args: { taskIds: v.array(v.id("tasks")), sprint: placement },
   returns: v.null(),
@@ -344,10 +420,22 @@ export const plan = mutation({
       })
     }
     const access = await requireOrganization(ctx)
-    const settings = await ensureSprintPair(
+    const settings = await ensureSettings(
       ctx,
       access.organization.organizationId
     )
+    const targetSprintId = await resolveSprintTarget(
+      ctx,
+      access.organization.organizationId,
+      settings,
+      args.sprint
+    )
+    // Adding to the active Sprint mid-flight is scope growth; planning into any
+    // scheduled future Sprint is baseline planning.
+    const targetSprint = targetSprintId
+      ? await ctx.db.get(targetSprintId)
+      : null
+    const origin = targetSprint?.state === "current" ? "scope_added" : "planned"
     for (const taskId of new Set(args.taskIds)) {
       const taskDoc = await ctx.db.get(taskId)
       if (
@@ -371,17 +459,11 @@ export const plan = mutation({
           message: "Reopen a completed task before planning it.",
         })
       }
-      const targetSprintId =
-        args.sprint === "current"
-          ? settings.currentSprintId
-          : args.sprint === "upcoming"
-            ? settings.upcomingSprintId
-            : undefined
       if (
-        (args.sprint === "backlog" &&
+        (targetSprintId === null &&
           !taskDoc.currentSprintId &&
           !taskDoc.upcomingSprintId) ||
-        (targetSprintId !== undefined &&
+        (targetSprintId !== null &&
           (taskDoc.currentSprintId === targetSprintId ||
             taskDoc.upcomingSprintId === targetSprintId))
       ) {
@@ -403,7 +485,7 @@ export const plan = mutation({
           reason: "replanned",
         })
       }
-      if (args.sprint !== "backlog") {
+      if (targetSprintId !== null) {
         await addTaskToSprint(ctx, {
           task: {
             ...taskDoc,
@@ -411,12 +493,9 @@ export const plan = mutation({
             upcomingSprintId: undefined,
           },
           project,
-          sprintId:
-            args.sprint === "current"
-              ? settings.currentSprintId!
-              : settings.upcomingSprintId!,
+          sprintId: targetSprintId,
           actor: access.actor,
-          origin: args.sprint === "current" ? "scope_added" : "planned",
+          origin,
         })
       }
     }
@@ -427,7 +506,7 @@ export const plan = mutation({
 export const remove = mutation({
   args: {
     taskIds: v.array(v.id("tasks")),
-    sprint: v.union(v.literal("current"), v.literal("upcoming")),
+    sprint: sprintTarget,
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -438,6 +517,10 @@ export const remove = mutation({
       })
     }
     const access = await requireOrganization(ctx)
+    const settings = await organizationSettings(
+      ctx,
+      access.organization.organizationId
+    )
     for (const taskId of new Set(args.taskIds)) {
       const taskDoc = await ctx.db.get(taskId)
       if (
@@ -452,9 +535,17 @@ export const remove = mutation({
       const sprintId =
         args.sprint === "current"
           ? taskDoc.currentSprintId
-          : taskDoc.upcomingSprintId
+          : args.sprint === "upcoming"
+            ? taskDoc.upcomingSprintId
+            : taskDoc.currentSprintId === args.sprint ||
+                taskDoc.upcomingSprintId === args.sprint
+              ? args.sprint
+              : undefined
       if (!sprintId) continue
-      if (args.sprint === "current" && taskDoc.status === "done") {
+      // Completion and in-progress rules only apply to the active Sprint,
+      // whichever alias or id was used to address it.
+      const removingFromCurrent = sprintId === settings?.currentSprintId
+      if (removingFromCurrent && taskDoc.status === "done") {
         throw new ConvexError({
           code: "TASK_COMPLETED",
           message: "Completed Current work cannot be removed.",
@@ -466,7 +557,7 @@ export const remove = mutation({
         actor: access.actor,
         reason: "removed",
       })
-      if (args.sprint === "current" && taskDoc.status === "inProgress") {
+      if (removingFromCurrent && taskDoc.status === "inProgress") {
         const project = await ctx.db.get(taskDoc.projectId)
         await ctx.db.patch(taskDoc._id, {
           status: "todo",
@@ -491,24 +582,198 @@ export const remove = mutation({
 
 export const updateGoal = mutation({
   args: {
-    sprint: v.union(v.literal("current"), v.literal("upcoming")),
+    sprint: sprintTarget,
     goal: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
     const access = await requireOrganization(ctx)
-    const settings = await ensureSprintPair(
+    const settings = await ensureSettings(
       ctx,
       access.organization.organizationId
     )
-    const sprintId =
-      args.sprint === "current"
-        ? settings.currentSprintId!
-        : settings.upcomingSprintId!
+    const sprintId = await resolveSprintTarget(
+      ctx,
+      access.organization.organizationId,
+      settings,
+      args.sprint
+    )
+    if (!sprintId) {
+      throw new ConvexError({
+        code: "SPRINT_STATE_INVALID",
+        message: "Choose a Sprint to update.",
+      })
+    }
     await ctx.db.patch(sprintId, {
       goal: cleanGoal(args.goal),
       updatedAt: Date.now(),
     })
+    return null
+  },
+})
+
+// Create a Sprint. With no active Sprint, the new one becomes Current and
+// starts now; otherwise it is appended to the scheduled queue with dates
+// chained contiguously from the last one using the active cadence.
+export const scheduleSprint = mutation({
+  args: { name: v.optional(v.string()), goal: v.optional(v.string()) },
+  returns: v.id("sprints"),
+  handler: async (ctx, args) => {
+    const access = await requireOrganization(ctx)
+    const organizationId = access.organization.organizationId
+    const settings = await ensureSettings(ctx, organizationId)
+    const now = Date.now()
+    const currentId = await activeSprintId(ctx, settings)
+
+    // The first Sprint (or the first after everything has closed) becomes the
+    // active Sprint and starts immediately.
+    if (!currentId) {
+      const bounds = initialSprintBounds(now, settings)
+      const sprintId = await ctx.db.insert("sprints", {
+        organizationId,
+        number: settings.nextSprintNumber,
+        name: cleanName(args.name),
+        goal: cleanGoal(args.goal),
+        state: "current",
+        ...bounds,
+        createdAt: now,
+        updatedAt: now,
+      })
+      await ctx.db.patch(settings._id, {
+        currentSprintId: sprintId,
+        nextSprintNumber: settings.nextSprintNumber + 1,
+        rolloverStatus: "idle",
+        updatedAt: now,
+      })
+      await ctx.scheduler.runAt(
+        bounds.endsAt,
+        internal.sprintRollover.scheduled,
+        { organizationId, sprintId }
+      )
+      return sprintId
+    }
+
+    const scheduled = await upcomingSprints(ctx, organizationId)
+    if (scheduled.length >= MAX_SCHEDULED_SPRINTS) {
+      throw new ConvexError({
+        code: "SPRINT_SCHEDULE_LIMIT",
+        message: `You can schedule at most ${MAX_SCHEDULED_SPRINTS} Sprints ahead.`,
+      })
+    }
+    // Chain from the last scheduled Sprint, or the active Sprint when the queue
+    // is empty.
+    const anchor = scheduled.at(-1) ?? (await ctx.db.get(currentId))!
+    const bounds = nextSprintBounds(anchor.endsAt, settings)
+    const sprintId = await ctx.db.insert("sprints", {
+      organizationId,
+      number: settings.nextSprintNumber,
+      name: cleanName(args.name),
+      goal: cleanGoal(args.goal),
+      state: "upcoming",
+      ...bounds,
+      createdAt: now,
+      updatedAt: now,
+    })
+    await ctx.db.patch(settings._id, {
+      nextSprintNumber: settings.nextSprintNumber + 1,
+      // The first scheduled Sprint becomes the Upcoming pointer for rollover.
+      ...(scheduled.length === 0 ? { upcomingSprintId: sprintId } : {}),
+      updatedAt: now,
+    })
+    return sprintId
+  },
+})
+
+// Rename any live Sprint (active or scheduled). Clearing the name falls back to
+// the "Sprint {number}" display label.
+export const renameSprint = mutation({
+  args: { sprint: sprintTarget, name: v.optional(v.string()) },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const access = await requireOrganization(ctx)
+    const settings = await ensureSettings(
+      ctx,
+      access.organization.organizationId
+    )
+    const sprintId = await resolveSprintTarget(
+      ctx,
+      access.organization.organizationId,
+      settings,
+      args.sprint
+    )
+    if (!sprintId) {
+      throw new ConvexError({
+        code: "SPRINT_STATE_INVALID",
+        message: "Choose a Sprint to rename.",
+      })
+    }
+    await ctx.db.patch(sprintId, {
+      name: cleanName(args.name),
+      updatedAt: Date.now(),
+    })
+    return null
+  },
+})
+
+// Remove a scheduled (upcoming) Sprint and return its planned work to the
+// Backlog. Any upcoming Sprint can be removed; the active Sprint cannot.
+export const unscheduleSprint = mutation({
+  args: { sprintId: v.id("sprints") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const access = await requireOrganization(ctx)
+    const organizationId = access.organization.organizationId
+    const settings = await ensureSettings(ctx, organizationId)
+    if (settings.rolloverStatus === "running") {
+      throw new ConvexError({
+        code: "SPRINT_ROLLOVER_RUNNING",
+        message: "Sprint planning is paused while rollover completes.",
+      })
+    }
+    const target = await ctx.db.get(args.sprintId)
+    if (!target || target.organizationId !== organizationId) {
+      throw new ConvexError({ code: "NOT_FOUND", message: "Sprint not found." })
+    }
+    if (target.state !== "upcoming") {
+      throw new ConvexError({
+        code: "SPRINT_NOT_UPCOMING",
+        message: "Only a scheduled Sprint can be removed.",
+      })
+    }
+    const now = Date.now()
+    // Return planned tasks to the Backlog by clearing their placement ref.
+    const planned = await ctx.db
+      .query("tasks")
+      .withIndex("by_organization_and_upcoming_sprint", (q) =>
+        q
+          .eq("organizationId", organizationId)
+          .eq("upcomingSprintId", target._id)
+      )
+      .take(MAX_SPRINT_TASKS + 1)
+    for (const taskDoc of planned) {
+      await ctx.db.patch(taskDoc._id, {
+        upcomingSprintId: undefined,
+        updatedAt: now,
+      })
+    }
+    // The Sprint never started, so its append-only entries carry no closed
+    // history; delete them with the Sprint to avoid orphaned audit rows.
+    const entries = await ctx.db
+      .query("sprintTaskEntries")
+      .withIndex("by_sprint_and_added_at", (q) => q.eq("sprintId", target._id))
+      .take(MAX_SPRINT_TASKS + 1)
+    for (const entry of entries) {
+      await ctx.db.delete(entry._id)
+    }
+    await ctx.db.delete(target._id)
+    // Keep the Upcoming pointer aimed at the soonest remaining scheduled Sprint.
+    if (settings.upcomingSprintId === target._id) {
+      const remaining = await upcomingSprints(ctx, organizationId)
+      await ctx.db.patch(settings._id, {
+        upcomingSprintId: remaining[0]?._id,
+        updatedAt: now,
+      })
+    }
     return null
   },
 })
@@ -523,30 +788,37 @@ export const updateCadence = mutation({
   handler: async (ctx, args) => {
     validateCadence(args)
     const access = await requireOrganization(ctx)
-    const settings = await ensureSprintPair(
+    const settings = await ensureSettings(
       ctx,
       access.organization.organizationId
     )
-    const upcomingSprint = await ctx.db.get(settings.upcomingSprintId!)
-    if (!upcomingSprint)
-      throw new ConvexError({
-        code: "SPRINT_STATE_INVALID",
-        message: "Upcoming Sprint is missing.",
-      })
-    const now = Date.now()
-    const bounds = nextSprintBounds(upcomingSprint.startsAt, args)
     if (
       settings.cadenceWeeks === args.cadenceWeeks &&
       settings.startWeekday === args.startWeekday &&
-      settings.timezone === args.timezone &&
-      upcomingSprint.endsAt === bounds.endsAt
+      settings.timezone === args.timezone
     ) {
       return null
     }
-    await ctx.db.patch(upcomingSprint._id, {
-      endsAt: bounds.endsAt,
-      updatedAt: now,
-    })
+    const now = Date.now()
+    const currentSprint = settings.currentSprintId
+      ? await ctx.db.get(settings.currentSprintId)
+      : null
+    // Never touch the active Sprint's locked dates; re-flow every scheduled
+    // Sprint contiguously from where it ends, or from now when none is active.
+    const scheduled = await upcomingSprints(
+      ctx,
+      access.organization.organizationId
+    )
+    let anchor = currentSprint?.endsAt ?? now
+    for (const upcomingSprint of scheduled) {
+      const bounds = nextSprintBounds(anchor, args)
+      await ctx.db.patch(upcomingSprint._id, {
+        startsAt: bounds.startsAt,
+        endsAt: bounds.endsAt,
+        updatedAt: now,
+      })
+      anchor = bounds.endsAt
+    }
     await ctx.db.patch(settings._id, { ...args, updatedAt: now })
     await ctx.db.insert("organizationActivity", {
       organizationId: access.organization.organizationId,

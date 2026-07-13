@@ -1,12 +1,33 @@
 import { ConvexError } from "convex/values"
 
 import type { Doc, Id } from "./_generated/dataModel"
-import type { MutationCtx } from "./_generated/server"
+import type { MutationCtx, QueryCtx } from "./_generated/server"
 import type { Actor } from "./model"
-import { initialSprintBounds, nextSprintBounds } from "./sprintTime"
 
 export const MAX_SPRINT_TASKS = 1000
+// Upper bound on how many future Sprints can be scheduled ahead of the active
+// one. Keeps the planning list and every "re-flow all upcoming" loop bounded.
+export const MAX_SCHEDULED_SPRINTS = 12
 type SprintActor = Pick<Actor, "userId" | "name">
+
+/**
+ * All future ("upcoming") Sprints for an Organization, ordered soonest-first.
+ * Sprint numbers are contiguous and increasing, so number order is also
+ * chronological order. Bounded by MAX_SCHEDULED_SPRINTS so callers can safely
+ * iterate the whole list inside a single query or mutation.
+ */
+export async function upcomingSprints(
+  ctx: QueryCtx | MutationCtx,
+  organizationId: string
+) {
+  const rows = await ctx.db
+    .query("sprints")
+    .withIndex("by_organization_and_state", (q) =>
+      q.eq("organizationId", organizationId).eq("state", "upcoming")
+    )
+    .take(MAX_SCHEDULED_SPRINTS + 2)
+  return rows.sort((a, b) => a.number - b.number)
+}
 
 export function cleanGoal(goal?: string) {
   if (goal === undefined) return undefined
@@ -21,7 +42,25 @@ export function cleanGoal(goal?: string) {
   return value
 }
 
-export async function ensureSprintPair(
+export function cleanName(name?: string) {
+  if (name === undefined) return undefined
+  const value = name.trim()
+  if (!value) return undefined
+  if (value.length > 80) {
+    throw new ConvexError({
+      code: "INVALID_NAME",
+      message: "Sprint name must be at most 80 characters.",
+    })
+  }
+  return value
+}
+
+/**
+ * Return the Organization's Sprint settings, creating a defaults row if none
+ * exists. Sprints are never auto-created here: a workspace stays empty until a
+ * member explicitly creates one, and settings only hold cadence + pointers.
+ */
+export async function ensureSettings(
   ctx: MutationCtx,
   organizationId: string,
   now = Date.now()
@@ -30,58 +69,31 @@ export async function ensureSprintPair(
     .query("organizationSettings")
     .withIndex("by_organization", (q) => q.eq("organizationId", organizationId))
     .unique()
-  if (existing?.currentSprintId && existing.upcomingSprintId) return existing
-
-  const cadence = existing ?? {
+  if (existing) return existing
+  const id = await ctx.db.insert("organizationSettings", {
+    organizationId,
     cadenceWeeks: 2,
     startWeekday: 1,
     timezone: "UTC",
-  }
-  const currentBounds = initialSprintBounds(now, cadence)
-  const currentNumber = existing?.nextSprintNumber ?? 1
-  const currentSprintId = await ctx.db.insert("sprints", {
-    organizationId,
-    number: currentNumber,
-    state: "current",
-    ...currentBounds,
+    nextSprintNumber: 1,
+    rolloverStatus: "idle",
     createdAt: now,
     updatedAt: now,
   })
-  const upcomingBounds = nextSprintBounds(currentBounds.endsAt, cadence)
-  const upcomingSprintId = await ctx.db.insert("sprints", {
-    organizationId,
-    number: currentNumber + 1,
-    state: "upcoming",
-    ...upcomingBounds,
-    createdAt: now,
-    updatedAt: now,
-  })
-  if (existing) {
-    await ctx.db.patch(existing._id, {
-      currentSprintId,
-      upcomingSprintId,
-      nextSprintNumber: currentNumber + 2,
-      rolloverStatus: "idle",
-      updatedAt: now,
-    })
-  } else {
-    await ctx.db.insert("organizationSettings", {
-      organizationId,
-      cadenceWeeks: cadence.cadenceWeeks,
-      startWeekday: cadence.startWeekday,
-      timezone: cadence.timezone,
-      nextSprintNumber: currentNumber + 2,
-      currentSprintId,
-      upcomingSprintId,
-      rolloverStatus: "idle",
-      createdAt: now,
-      updatedAt: now,
-    })
-  }
-  return (await ctx.db
-    .query("organizationSettings")
-    .withIndex("by_organization", (q) => q.eq("organizationId", organizationId))
-    .unique())!
+  return (await ctx.db.get(id))!
+}
+
+/**
+ * The active Sprint id when one is genuinely current, else undefined. Guards
+ * against a stale pointer left after a Sprint closed with nothing scheduled.
+ */
+export async function activeSprintId(
+  ctx: MutationCtx,
+  settings: Doc<"organizationSettings">
+) {
+  if (!settings.currentSprintId) return undefined
+  const sprint = await ctx.db.get(settings.currentSprintId)
+  return sprint && sprint.state === "current" ? sprint._id : undefined
 }
 
 async function activeEntry(
@@ -235,8 +247,16 @@ export async function applyStatusSprintRules(
 ) {
   const { task, project, actor, nextStatus, now } = args
   if (task.status === nextStatus) return {}
-  const settings = await ensureSprintPair(ctx, task.organizationId, now)
-  const currentSprintId = settings.currentSprintId!
+  const settings = await ensureSettings(ctx, task.organizationId, now)
+  const currentSprintId = await activeSprintId(ctx, settings)
+
+  // No active Sprint: status changes never create or join a Sprint; only the
+  // task's own completion timestamp moves.
+  if (!currentSprintId) {
+    if (nextStatus === "done") return { completedAt: now }
+    if (task.status === "done") return { completedAt: undefined }
+    return {}
+  }
 
   if (task.status === "done" && nextStatus !== "done") {
     const priorCompletionSprintId = await latestCreditedSprint(ctx, task)

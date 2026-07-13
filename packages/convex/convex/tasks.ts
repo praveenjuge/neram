@@ -17,7 +17,7 @@ import { status } from "./schema"
 import {
   addTaskToSprint,
   applyStatusSprintRules,
-  ensureSprintPair,
+  ensureSettings,
   markTaskEntriesRemoved,
 } from "./sprintModel"
 import {
@@ -277,20 +277,26 @@ export const create = mutation({
       updatedAt: now,
     })
     if (args.sprint && args.sprint !== "backlog") {
-      const settings = await ensureSprintPair(ctx, actor.organizationId, now)
-      const taskDoc = await ctx.db.get(taskId)
-      if (!taskDoc) throw new Error("Created task not found")
-      await addTaskToSprint(ctx, {
-        task: taskDoc,
-        project,
-        sprintId:
-          args.sprint === "current"
-            ? settings.currentSprintId!
-            : settings.upcomingSprintId!,
-        actor,
-        origin: args.sprint === "current" ? "scope_added" : "planned",
-        now,
-      })
+      const settings = await ensureSettings(ctx, actor.organizationId, now)
+      const targetId =
+        args.sprint === "current"
+          ? settings.currentSprintId
+          : settings.upcomingSprintId
+      const targetSprint = targetId ? await ctx.db.get(targetId) : null
+      // Place the task only when the requested Sprint exists and is open;
+      // otherwise it simply stays in the Backlog.
+      if (targetSprint && targetSprint.state !== "closed") {
+        const taskDoc = await ctx.db.get(taskId)
+        if (!taskDoc) throw new Error("Created task not found")
+        await addTaskToSprint(ctx, {
+          task: taskDoc,
+          project,
+          sprintId: targetSprint._id,
+          actor,
+          origin: targetSprint.state === "current" ? "scope_added" : "planned",
+          now,
+        })
+      }
     }
     await ctx.db.patch(args.projectId, {
       taskCount: project.taskCount + 1,

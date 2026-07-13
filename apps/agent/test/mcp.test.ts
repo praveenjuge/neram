@@ -45,6 +45,7 @@ function fakeApi(overrides: Partial<NeramApi> = {}): NeramApi {
     deleteWorkspace: vi.fn(async () => "job_delete"),
     currentSprint: vi.fn(async () => null),
     upcomingSprint: vi.fn(async () => null),
+    upcomingSprints: vi.fn(async () => []),
     backlogTasks: vi.fn(async () => []),
     sprintHistory: vi.fn(async () => ({
       page: [],
@@ -60,6 +61,9 @@ function fakeApi(overrides: Partial<NeramApi> = {}): NeramApi {
     removeSprintTasks: vi.fn(async () => undefined),
     updateSprintGoal: vi.fn(async () => undefined),
     updateSprintCadence: vi.fn(async () => undefined),
+    scheduleSprint: vi.fn(async () => "sprint_new"),
+    renameSprint: vi.fn(async () => undefined),
+    unscheduleSprint: vi.fn(async () => undefined),
     rolloverSprint: vi.fn(async () => "job_rollover"),
     projects: vi.fn(async () => [
       {
@@ -180,11 +184,15 @@ describe("neram mcp server", () => {
           "delete_workspace",
           "get_sprint",
           "list_sprint_tasks",
+          "list_upcoming_sprints",
           "sprint_history",
           "plan_sprint_tasks",
           "remove_sprint_tasks",
           "update_sprint_goal",
           "update_sprint_cadence",
+          "schedule_sprint",
+          "rename_sprint",
+          "unschedule_sprint",
           "rollover_sprint",
         ])
       )
