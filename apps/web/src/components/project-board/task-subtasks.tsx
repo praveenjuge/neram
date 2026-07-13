@@ -50,13 +50,8 @@ export function TaskSubtasks({ taskId }: { taskId: Id<"tasks"> }) {
   return (
     <section className="grid gap-3" data-testid="task-subtasks">
       <div className="flex items-center justify-between gap-3">
-        <div>
-          <h2 className="font-heading text-sm font-medium">Subtasks</h2>
-          <p className="text-xs text-muted-foreground">
-            Keep the checklist in the order you want to work it.
-          </p>
-        </div>
-        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+        <h2 className="font-heading text-sm font-medium">Subtasks</h2>
+        <label className="flex items-center gap-2 text-sm text-muted-foreground">
           <input
             checked={hideCompleted}
             onChange={(event) => setHideCompleted(event.target.checked)}
@@ -97,7 +92,7 @@ export function TaskSubtasks({ taskId }: { taskId: Id<"tasks"> }) {
           ))}
         </ul>
       ) : (
-        <p className="rounded-xl border border-dashed px-3 py-5 text-center text-sm text-muted-foreground">
+        <p className="px-1 text-sm text-muted-foreground">
           {rows ? "No subtasks yet." : "Loading subtasks…"}
         </p>
       )}
@@ -142,7 +137,7 @@ function SubtaskRow({
   }
 
   return (
-    <li className="flex items-center gap-1 rounded-xl border bg-card p-1.5">
+    <li className="group/subtask flex items-center gap-1 rounded-lg p-1 transition-colors hover:bg-muted/50">
       <Button
         aria-label={row.completed ? "Reopen subtask" : "Complete subtask"}
         onClick={() =>
@@ -171,20 +166,34 @@ function SubtaskRow({
         }}
         value={title}
       />
-      <Button aria-label="Move subtask up" disabled={!canMoveUp} onClick={onMoveUp} size="icon-sm" variant="ghost">
-        <ArrowUp />
-      </Button>
-      <Button aria-label="Move subtask down" disabled={!canMoveDown} onClick={onMoveDown} size="icon-sm" variant="ghost">
-        <ArrowDown />
-      </Button>
-      <Button
-        aria-label="Delete subtask"
-        onClick={() => void remove({ subtaskId: row._id })}
-        size="icon-sm"
-        variant="ghost"
-      >
-        <Trash2 />
-      </Button>
+      <div className="flex items-center opacity-0 transition-opacity group-focus-within/subtask:opacity-100 group-hover/subtask:opacity-100 max-md:opacity-100">
+        <Button
+          aria-label="Move subtask up"
+          disabled={!canMoveUp}
+          onClick={onMoveUp}
+          size="icon-sm"
+          variant="ghost"
+        >
+          <ArrowUp />
+        </Button>
+        <Button
+          aria-label="Move subtask down"
+          disabled={!canMoveDown}
+          onClick={onMoveDown}
+          size="icon-sm"
+          variant="ghost"
+        >
+          <ArrowDown />
+        </Button>
+        <Button
+          aria-label="Delete subtask"
+          onClick={() => void remove({ subtaskId: row._id })}
+          size="icon-sm"
+          variant="ghost"
+        >
+          <Trash2 />
+        </Button>
+      </div>
     </li>
   )
 }

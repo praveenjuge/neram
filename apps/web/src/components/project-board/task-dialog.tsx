@@ -3,12 +3,8 @@
 import { useQuery } from "convex-helpers/react/cache"
 import { useMutation } from "convex/react"
 import type { FunctionReturnType } from "convex/server"
-import {
-  CalendarClock,
-  CheckCircle2,
-  MoreHorizontal,
-  Trash2,
-} from "lucide-react"
+import { format } from "date-fns"
+import { CalendarClock, MoreHorizontal, Trash2 } from "lucide-react"
 import { useRef, useState } from "react"
 import { toast } from "sonner"
 
@@ -111,7 +107,7 @@ function TaskView({
   }
   return (
     <div className="grid lg:grid-cols-[minmax(0,3fr)_minmax(15rem,1fr)]">
-      <main className="grid content-start gap-7 p-5 sm:p-7">
+      <main className="grid content-start gap-5 p-5">
         <InlineFields task={task} />
         <Separator />
         <TaskSubtasks taskId={task._id} />
@@ -245,7 +241,7 @@ function InlineFields({ task }: { task: TaskDetail }) {
       {conflictActions("title")}
       <Textarea
         aria-label="Task description"
-        className="min-h-28 resize-y border-0 bg-muted/35 px-3 py-2 shadow-none focus-visible:ring-1"
+        className="min-h-16 resize-y border-0 bg-muted/35 px-3 py-2 shadow-none focus-visible:ring-1"
         maxLength={2000}
         onBlur={() => {
           setEditingDescription(false)
@@ -329,8 +325,8 @@ function TaskMetadata({
   }
 
   return (
-    <aside className="border-t bg-muted/25 p-5 lg:border-t-0 lg:border-l lg:p-6">
-      <div className="grid gap-5 lg:sticky lg:top-0">
+    <aside className="border-t bg-muted/25 p-5 lg:border-t-0 lg:border-l">
+      <div className="grid gap-4 lg:sticky lg:top-0">
         <div className="flex items-center justify-between gap-2">
           <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
             Task details
@@ -392,16 +388,12 @@ function TaskMetadata({
           }
           value={task.assigneeSubject ?? UNASSIGNED}
         />
-        <div className="grid gap-2 rounded-xl border bg-background/60 p-3 text-xs text-muted-foreground">
-          <span className="flex items-center gap-2">
-            <CheckCircle2 className="size-3.5" />
-            {task.completedSubtasks}/{task.totalSubtasks} subtasks complete
-          </span>
+        <div className="grid gap-1.5 rounded-xl border bg-background/60 p-3 text-sm text-muted-foreground">
           <span className="flex items-center gap-2">
             <CalendarClock className="size-3.5" />
-            Updated {new Date(task.updatedAt).toLocaleString()}
+            Updated {format(task.updatedAt, "MMM d, yyyy")}
           </span>
-          <span>Created {new Date(task.createdAt).toLocaleString()}</span>
+          <span>Created {format(task.createdAt, "MMM d, yyyy")}</span>
         </div>
         {confirmDelete ? (
           <div className="grid gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-3">

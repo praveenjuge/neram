@@ -14,7 +14,7 @@ export function AppUserButton() {
     <UserButton
       appearance={{
         elements: {
-          rootBox: "flex size-8 items-center justify-center",
+          rootBox: "flex size-8 shrink-0 items-center justify-center",
           avatarBox: "size-8",
           userButtonTrigger:
             "size-8 rounded-full ring-sidebar-ring outline-hidden focus-visible:ring-3",

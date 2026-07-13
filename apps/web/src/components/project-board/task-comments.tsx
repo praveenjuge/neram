@@ -22,7 +22,9 @@ import { Textarea } from "@/components/ui/textarea"
 import { useOrganizationMembers } from "@/lib/use-organization-members"
 
 type Comment = FunctionReturnType<typeof api.taskComments.list>["page"][number]
-type Member = FunctionReturnType<typeof api.organizations.members>["page"][number]
+type Member = FunctionReturnType<
+  typeof api.organizations.members
+>["page"][number]
 type Mention = Comment["mentions"][number]
 
 export function TaskComments({
@@ -39,13 +41,8 @@ export function TaskComments({
   const isAdmin = context?.membership.role === "org:admin"
 
   return (
-    <section className="grid gap-4" data-testid="task-comments">
-      <div>
-        <h2 className="font-heading text-sm font-medium">Comments</h2>
-        <p className="text-xs text-muted-foreground">
-          Reply in context and mention workspace members directly.
-        </p>
-      </div>
+    <section className="grid gap-3" data-testid="task-comments">
+      <h2 className="font-heading text-sm font-medium">Comments</h2>
       <CommentComposer
         members={members}
         onSubmit={async (payload) => {
@@ -100,11 +97,7 @@ function CommentBranch({
     return <p className="text-sm text-muted-foreground">Loading comments…</p>
   }
   if (results.length === 0 && !parentCommentId) {
-    return (
-      <p className="rounded-xl border border-dashed px-3 py-5 text-center text-sm text-muted-foreground">
-        No comments yet.
-      </p>
-    )
+    return <p className="text-sm text-muted-foreground">No comments yet.</p>
   }
   return (
     <div className={cn("grid gap-2", depth > 0 && "border-l pl-3")}>
@@ -162,14 +155,14 @@ function CommentNode({
   return (
     <article
       className={cn(
-        "scroll-mt-8 rounded-xl border bg-card p-3 transition-colors",
-        highlighted && "border-primary bg-primary/5 ring-2 ring-primary/25"
+        "group/comment scroll-mt-8 rounded-lg px-2 py-1.5 transition-colors",
+        highlighted && "bg-primary/5 ring-2 ring-primary/25"
       )}
       id={`comment-${comment._id}`}
       style={{ marginLeft: `${Math.min(depth, 3) * 12}px` }}
     >
       <header className="flex items-center justify-between gap-2">
-        <p className="text-xs text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           <span className="font-medium text-foreground">
             {comment.authorName}
           </span>
@@ -178,7 +171,7 @@ function CommentNode({
             : ""}
         </p>
         {!comment.deletedAt ? (
-          <div className="flex gap-1">
+          <div className="flex gap-1 opacity-0 transition-opacity group-focus-within/comment:opacity-100 group-hover/comment:opacity-100 max-md:opacity-100">
             {canEdit ? (
               <Button
                 aria-label="Edit comment"
@@ -223,17 +216,17 @@ function CommentNode({
           {comment.deletedAt ? "Comment deleted" : comment.body}
         </p>
       )}
-      <div className="mt-2 flex gap-2">
+      <div className="mt-1 flex gap-1">
         <Button
           onClick={() => setReplying((value) => !value)}
-          size="sm"
+          size="xs"
           variant="ghost"
         >
           <MessageSquareReply /> Reply
         </Button>
         <Button
           onClick={() => setShowReplies((value) => !value)}
-          size="sm"
+          size="xs"
           variant="ghost"
         >
           <ChevronDown /> {showReplies ? "Hide replies" : "Show replies"}

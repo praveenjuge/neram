@@ -202,27 +202,22 @@ function AppSidebar() {
         <SidebarMenu>
           <SidebarMenuItem>
             <div className="flex w-full items-center gap-2 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:gap-1">
-              <SidebarMenuButton asChild tooltip="Neram">
-                <Link href={dashboardHref}>
-                  {/* eslint-disable-next-line @next/next/no-img-element -- static brand mark from /public */}
-                  <img
-                    alt=""
-                    className="size-4 shrink-0 rounded-sm"
-                    height={16}
-                    src="/pwa-icon.svg"
-                    width={16}
-                  />
-                  <span className="font-medium">Neram</span>
-                </Link>
-              </SidebarMenuButton>
-              <div className="ml-auto flex shrink-0 items-center justify-center group-data-[collapsible=icon]:ml-0">
-                <OrganizationSwitcher
-                  afterCreateOrganizationUrl="/w/:slug/dashboard"
-                  afterSelectOrganizationUrl="/w/:slug/dashboard"
-                  hidePersonal
-                />
-                <AppUserButton />
-              </div>
+              <OrganizationSwitcher
+                afterCreateOrganizationUrl="/w/:slug/dashboard"
+                afterSelectOrganizationUrl="/w/:slug/dashboard"
+                hidePersonal
+                appearance={{
+                  elements: {
+                    rootBox: "min-w-0 flex-1",
+                    organizationSwitcherTrigger:
+                      "w-full max-w-full justify-start overflow-hidden",
+                    organizationPreview: "min-w-0",
+                    organizationPreviewTextContainer: "min-w-0",
+                    organizationPreviewMainIdentifier: "truncate",
+                  },
+                }}
+              />
+              <AppUserButton />
             </div>
           </SidebarMenuItem>
         </SidebarMenu>

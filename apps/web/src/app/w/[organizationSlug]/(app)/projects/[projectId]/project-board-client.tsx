@@ -1,5 +1,7 @@
 "use client"
 
+import { useState } from "react"
+
 import { useQuery } from "convex-helpers/react/cache"
 import { useMutation } from "convex/react"
 import { ArrowLeft } from "lucide-react"
@@ -29,10 +31,7 @@ export function ProjectBoardClient({ projectId }: { projectId: string }) {
   const projectIdArg = projectId as Id<"projects">
   const organizationSlug =
     typeof params.organizationSlug === "string" ? params.organizationSlug : ""
-  const projectHref = workspaceHref(
-    organizationSlug,
-    `/projects/${projectId}`
-  )
+  const projectHref = workspaceHref(organizationSlug, `/projects/${projectId}`)
   const project = useQuery(api.projects.get, { projectId: projectIdArg })
   const tasks = useQuery(api.tasks.list, { projectId: projectIdArg })
   const moveTask = useMutation(api.tasks.move).withOptimisticUpdate(
@@ -40,21 +39,44 @@ export function ProjectBoardClient({ projectId }: { projectId: string }) {
   )
   const router = useRouter()
   const searchParams = useSearchParams()
-  const openTaskId = searchParams.get("task") as Id<"tasks"> | null
-  const commentId = searchParams.get("comment") as Id<"taskComments"> | null
+  const urlTaskId = searchParams.get("task") as Id<"tasks"> | null
+
+  // Drive the dialog from local state so it opens instantly on click. A raw
+  // window.history.pushState does not reliably re-render useSearchParams in the
+  // App Router, so the URL alone can't be trusted to open the modal. We still
+  // write the URL for deep links and the back button, then reconcile local
+  // state whenever the URL itself changes (back/forward, deep link, project
+  // move) by adjusting state during render, per the React docs.
+  const [openTaskId, setOpenTaskId] = useState<Id<"tasks"> | null>(urlTaskId)
+  const [syncedTaskId, setSyncedTaskId] = useState<Id<"tasks"> | null>(
+    urlTaskId
+  )
+  if (urlTaskId !== syncedTaskId) {
+    setSyncedTaskId(urlTaskId)
+    setOpenTaskId(urlTaskId)
+  }
+
+  // A comment target only applies to the task named in the URL (a deep link),
+  // never to a card the user just clicked.
+  const commentId =
+    openTaskId && openTaskId === urlTaskId
+      ? (searchParams.get("comment") as Id<"taskComments"> | null)
+      : null
 
   function openTask(taskId: Id<"tasks">) {
-    const params = new URLSearchParams(searchParams.toString())
-    params.set("task", taskId)
-    params.delete("comment")
+    setOpenTaskId(taskId)
+    const next = new URLSearchParams(searchParams.toString())
+    next.set("task", taskId)
+    next.delete("comment")
     window.history.pushState(
       { ...window.history.state, neramTaskModal: true },
       "",
-      `${projectHref}?${params.toString()}`
+      `${projectHref}?${next.toString()}`
     )
   }
 
   function closeTask() {
+    setOpenTaskId(null)
     if (window.history.state?.neramTaskModal) {
       router.back()
       return
@@ -138,11 +160,7 @@ export function ProjectBoardClient({ projectId }: { projectId: string }) {
         </h1>
         <NewTaskDialog projectId={projectIdArg} />
       </div>
-      <KanbanBoard
-        onDrop={handleDrop}
-        onOpenTask={openTask}
-        tasks={tasks}
-      />
+      <KanbanBoard onDrop={handleDrop} onOpenTask={openTask} tasks={tasks} />
       <TaskDialog
         commentId={commentId}
         onClose={closeTask}

@@ -39,7 +39,7 @@ export function AssigneeSelect({
 
   return (
     <div className="grid gap-2">
-      <Label htmlFor={id}>Assignee (optional)</Label>
+      <Label htmlFor={id}>Assignee</Label>
       <Select
         onValueChange={(next) => {
           if (next === UNASSIGNED) {
