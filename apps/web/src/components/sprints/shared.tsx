@@ -3,12 +3,13 @@
 import { useMutation } from "convex/react"
 import type { FunctionReturnType } from "convex/server"
 import { format } from "date-fns"
-import { Info, X } from "lucide-react"
+import { Info, Undo2 } from "lucide-react"
 import type { ReactNode } from "react"
 import { toast } from "sonner"
 
 import { api } from "@neram/convex/api"
 import type { Id } from "@neram/convex/data-model"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import {
@@ -80,6 +81,8 @@ export function SprintHeader({
   state,
   hint,
   action,
+  details,
+  taskCount,
 }: {
   number: number
   name?: string
@@ -88,17 +91,27 @@ export function SprintHeader({
   state: "Current" | "Upcoming"
   hint: string
   action?: ReactNode
+  details?: ReactNode
+  taskCount: number
 }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2">
-      <div>
-        <h2 className="flex items-center gap-1.5 font-heading text-base font-medium">
-          {state} · {sprintLabel({ name, number })}
-          <InfoHint text={hint} />
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          {dateRange(startsAt, endsAt)}
-        </p>
+    <div className="flex flex-wrap items-start justify-between gap-3 border-b pb-4">
+      <div className="grid min-w-0 flex-1 gap-2">
+        <div className="grid gap-1">
+          <h2 className="flex flex-wrap items-center gap-2 font-heading text-base font-medium">
+            {sprintLabel({ name, number })}
+            <Badge variant="secondary">{state}</Badge>
+            <InfoHint text={hint} />
+          </h2>
+          <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+            <span>{dateRange(startsAt, endsAt)}</span>
+            <span aria-hidden>·</span>
+            <span>
+              {taskCount} open {taskCount === 1 ? "task" : "tasks"}
+            </span>
+          </p>
+        </div>
+        {details}
       </div>
       {action ? <div className="flex items-center gap-2">{action}</div> : null}
     </div>
@@ -109,23 +122,28 @@ export function RemoveTaskButton({
   task,
   sprint,
 }: {
-  task: SprintTask
+  task: Pick<SprintTask, "_id" | "title">
   sprint: SprintTarget
 }) {
   const remove = useMutation(api.sprints.remove)
   return (
-    <Button
-      aria-label={`Remove ${task.title} from this Sprint`}
-      onClick={() =>
-        runToast(remove({ taskIds: [task._id], sprint }), {
-          success: "Task returned to Backlog.",
-          error: "Could not remove the task.",
-        })
-      }
-      size="icon-sm"
-      variant="ghost"
-    >
-      <X />
-    </Button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          aria-label={`Return ${task.title} to Backlog`}
+          onClick={() =>
+            runToast(remove({ taskIds: [task._id], sprint }), {
+              success: "Task returned to Backlog.",
+              error: "Could not remove the task.",
+            })
+          }
+          size="icon-sm"
+          variant="ghost"
+        >
+          <Undo2 />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>Return to Backlog</TooltipContent>
+    </Tooltip>
   )
 }

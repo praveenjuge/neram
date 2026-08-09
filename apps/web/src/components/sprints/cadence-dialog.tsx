@@ -14,7 +14,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -42,17 +41,17 @@ const WEEKDAYS = [
   "Saturday",
 ]
 
-export function CadenceDialog() {
+export function CadenceDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
   const context = useQuery(api.organizations.current)
-  const [open, setOpen] = useState(false)
 
   return (
-    <Dialog onOpenChange={setOpen} open={open}>
-      <DialogTrigger asChild>
-        <Button size="sm" variant="ghost">
-          <CalendarClock /> Cadence
-        </Button>
-      </DialogTrigger>
+    <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-1.5">
@@ -65,7 +64,7 @@ export function CadenceDialog() {
         </DialogHeader>
         {open && context !== undefined ? (
           <CadenceForm
-            onDone={() => setOpen(false)}
+            onDone={() => onOpenChange(false)}
             settings={context.settings}
           />
         ) : (

@@ -1,9 +1,11 @@
 "use client"
 
 import { useMutation, useQuery } from "convex/react"
-import { CalendarPlus, Pencil, Trash2 } from "lucide-react"
+import { CalendarPlus, ChevronDown, Pencil, Trash2 } from "lucide-react"
+import { useState } from "react"
 
 import { api } from "@neram/convex/api"
+import type { Id } from "@neram/convex/data-model"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 
@@ -27,12 +29,22 @@ export function UpcomingSprint() {
   const schedule = useMutation(api.sprints.scheduleSprint)
   const unschedule = useMutation(api.sprints.unscheduleSprint)
   const rename = useMutation(api.sprints.renameSprint)
+  const [expanded, setExpanded] = useState<Set<Id<"sprints">>>(() => new Set())
   if (upcoming === undefined) return <Loading />
 
   // Match the number the backend will assign (settings.nextSprintNumber) so the
   // default name never duplicates an existing Sprint — e.g. an active
   // "Sprint 1" with nothing scheduled suggests "Sprint 2", not "Sprint 1".
   const nextNumber = context?.settings?.nextSprintNumber ?? 1
+
+  function toggle(sprintId: Id<"sprints">) {
+    setExpanded((current) => {
+      const next = new Set(current)
+      if (next.has(sprintId)) next.delete(sprintId)
+      else next.add(sprintId)
+      return next
+    })
+  }
 
   return (
     <div className="grid gap-4">
@@ -64,85 +76,105 @@ export function UpcomingSprint() {
           No upcoming Sprints scheduled.
         </p>
       ) : (
-        upcoming.map(({ sprint, tasks }) => (
-          <section
-            className="grid gap-3 rounded-lg border p-4"
-            key={sprint._id}
-          >
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-1">
-                <div>
-                  <h3 className="font-heading text-sm font-medium">
-                    {sprintLabel(sprint)}
-                  </h3>
-                  <p className="text-xs text-muted-foreground">
-                    {dateRange(sprint.startsAt, sprint.endsAt)}
-                  </p>
-                </div>
-                <SprintNameDialog
-                  defaultName={sprintLabel(sprint)}
-                  description="Update this Sprint's name."
-                  onSubmit={(name) =>
-                    runToast(rename({ sprint: sprint._id, name }), {
-                      success: "Renamed the Sprint.",
-                      error: "Could not rename the Sprint.",
-                    })
-                  }
-                  submitLabel="Save"
-                  title="Rename Sprint"
-                  trigger={
+        <div className="divide-y rounded-lg border">
+          {upcoming.map(({ sprint, tasks }) => {
+            const isExpanded = expanded.has(sprint._id)
+            return (
+              <section key={sprint._id}>
+                <div className="flex items-center gap-1 p-2">
+                  <button
+                    aria-expanded={isExpanded}
+                    className="flex min-w-0 flex-1 items-center gap-3 rounded-md px-2 py-1.5 text-left hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/30 focus-visible:outline-none"
+                    onClick={() => toggle(sprint._id)}
+                    type="button"
+                  >
+                    <ChevronDown
+                      className={`size-4 shrink-0 text-muted-foreground transition-transform ${isExpanded ? "rotate-180" : ""}`}
+                    />
+                    <span className="grid min-w-0 flex-1 gap-0.5">
+                      <span className="truncate font-heading text-sm font-medium">
+                        {sprintLabel(sprint)}
+                      </span>
+                      <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+                        <span className="shrink-0">
+                          {dateRange(sprint.startsAt, sprint.endsAt)}
+                        </span>
+                        <span aria-hidden>·</span>
+                        <span className="truncate">
+                          {sprint.goal || "No goal set"}
+                        </span>
+                      </span>
+                    </span>
+                    <Badge className="shrink-0" variant="secondary">
+                      {tasks.length} {tasks.length === 1 ? "task" : "tasks"}
+                    </Badge>
+                  </button>
+                  <div className="flex shrink-0 items-center">
+                    <SprintNameDialog
+                      defaultName={sprintLabel(sprint)}
+                      description="Update this Sprint's name."
+                      onSubmit={(name) =>
+                        runToast(rename({ sprint: sprint._id, name }), {
+                          success: "Renamed the Sprint.",
+                          error: "Could not rename the Sprint.",
+                        })
+                      }
+                      submitLabel="Save"
+                      title="Rename Sprint"
+                      trigger={
+                        <Button
+                          aria-label={`Rename ${sprintLabel(sprint)}`}
+                          size="icon-sm"
+                          variant="ghost"
+                        >
+                          <Pencil />
+                        </Button>
+                      }
+                    />
                     <Button
-                      aria-label={`Rename ${sprintLabel(sprint)}`}
+                      aria-label={`Remove ${sprintLabel(sprint)}`}
+                      onClick={() =>
+                        runToast(unschedule({ sprintId: sprint._id }), {
+                          success: "Removed the scheduled Sprint.",
+                          error: "Could not remove the Sprint.",
+                        })
+                      }
                       size="icon-sm"
                       variant="ghost"
                     >
-                      <Pencil />
+                      <Trash2 />
                     </Button>
-                  }
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <Badge variant="outline">
-                  {tasks.length} {tasks.length === 1 ? "task" : "tasks"}
-                </Badge>
-                <Button
-                  aria-label={`Remove ${sprintLabel(sprint)}`}
-                  onClick={() =>
-                    runToast(unschedule({ sprintId: sprint._id }), {
-                      success: "Removed the scheduled Sprint.",
-                      error: "Could not remove the Sprint.",
-                    })
-                  }
-                  size="icon-sm"
-                  variant="ghost"
-                >
-                  <Trash2 />
-                </Button>
-              </div>
-            </div>
-            <GoalEditor initialGoal={sprint.goal} sprint={sprint._id} />
-            {tasks.length === 0 ? (
-              <p className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">
-                No tasks planned. Add work from the Backlog.
-              </p>
-            ) : (
-              <div className="grid divide-y rounded-md border">
-                {tasks.map((task) => (
-                  <div
-                    className="flex items-center gap-3 px-3 py-2"
-                    key={task._id}
-                  >
-                    <span className="min-w-0 flex-1 truncate text-sm">
-                      {task.title}
-                    </span>
-                    <Badge variant="outline">{task.projectName}</Badge>
-                    <RemoveTaskButton sprint={sprint._id} task={task} />
                   </div>
-                ))}
-              </div>
-            )}
-          </section>
-        ))
+                </div>
+                {isExpanded ? (
+                  <div className="grid gap-3 border-t px-4 py-3">
+                    <GoalEditor initialGoal={sprint.goal} sprint={sprint._id} />
+                    {tasks.length === 0 ? (
+                      <p className="py-3 text-center text-xs text-muted-foreground">
+                        No tasks planned. Use Plan Sprint to add work.
+                      </p>
+                    ) : (
+                      <div className="grid divide-y border-y">
+                        {tasks.map((task) => (
+                          <div
+                            className="flex items-center gap-3 py-2"
+                            key={task._id}
+                          >
+                            <span className="min-w-0 flex-1 truncate text-sm">
+                              {task.title}
+                            </span>
+                            <Badge variant="outline">{task.projectName}</Badge>
+                            <RemoveTaskButton sprint={sprint._id} task={task} />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+              </section>
+            )
+          })}
+        </div>
       )}
     </div>
   )

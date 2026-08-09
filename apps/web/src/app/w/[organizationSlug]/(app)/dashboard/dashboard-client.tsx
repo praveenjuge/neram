@@ -2,7 +2,7 @@
 
 import { useQuery } from "convex-helpers/react/cache"
 import type { FunctionReturnType } from "convex/server"
-import { FolderPlus, ListChecks, Pencil, Plus } from "lucide-react"
+import { FolderPlus, ListChecks, Pencil, Plus, Share2 } from "lucide-react"
 
 import Link from "next/link"
 import { useParams } from "next/navigation"
@@ -11,6 +11,7 @@ import {
   AddTaskDialog,
   EditProjectDialog,
   NewProjectDialog,
+  ShareProjectsDialog,
 } from "@/components/project-dialogs"
 import { useProjectPrefetch } from "@/lib/prefetch"
 import { getProjectColorText } from "@/lib/project-colors"
@@ -33,23 +34,37 @@ export function DashboardClient() {
   // The list already arrives ordered by most recently updated first, so the
   // freshest projects surface at the top with no client-side grouping.
   const projects = useQuery(api.projects.list)
+  const organization = useQuery(api.organizations.current)
   const params = useParams()
   const organizationSlug =
     typeof params.organizationSlug === "string" ? params.organizationSlug : ""
 
   return (
     <section className="mx-auto grid w-full max-w-6xl gap-6 p-5">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-heading text-lg font-medium">Projects</h1>
-        <NewProjectDialog
-          trigger={
-            <DialogTrigger asChild>
-              <Button data-testid="new-project-trigger">
-                <FolderPlus /> New project
-              </Button>
-            </DialogTrigger>
-          }
-        />
+        <div className="flex items-center gap-2">
+          {organization?.membership.role === "org:admin" ? (
+            <ShareProjectsDialog
+              trigger={
+                <DialogTrigger asChild>
+                  <Button variant="outline">
+                    <Share2 /> Share projects
+                  </Button>
+                </DialogTrigger>
+              }
+            />
+          ) : null}
+          <NewProjectDialog
+            trigger={
+              <DialogTrigger asChild>
+                <Button data-testid="new-project-trigger">
+                  <FolderPlus /> New project
+                </Button>
+              </DialogTrigger>
+            }
+          />
+        </div>
       </div>
       {projects === undefined ? (
         <div className="grid min-h-[40vh] place-items-center">
@@ -108,9 +123,7 @@ function ProjectRow({
         <div className="flex items-center gap-4 text-xs text-muted-foreground">
           {counts.map((count) => (
             <span key={count.label} className="whitespace-nowrap">
-              <span className="font-medium text-foreground">
-                {count.value}
-              </span>{" "}
+              <span className="font-medium text-foreground">{count.value}</span>{" "}
               {count.label}
             </span>
           ))}

@@ -85,7 +85,7 @@ export function PlanTargetDialog({
         </DialogHeader>
         {options.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            No Sprints yet. Create one from the Current or Upcoming tab first.
+            No Sprints yet. Create a Current or Upcoming Sprint first.
           </p>
         ) : (
           <Select onValueChange={setTarget} value={selected ?? ""}>

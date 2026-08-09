@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils"
 import { ListChecks, MessageSquare } from "lucide-react"
+import type { ReactNode } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { TaskItem } from "@/components/task-item"
 
@@ -13,6 +14,7 @@ export function TaskCard({
   onHover,
   onOpen,
   showProject = false,
+  action,
 }: {
   task: BoardTask
   isDragging: boolean
@@ -22,71 +24,82 @@ export function TaskCard({
   onOpen: () => void
   /** Show the project chip (used on the cross-project Tasks board). */
   showProject?: boolean
+  action?: ReactNode
 }) {
   return (
-    <Card
-      aria-label={`Open ${task.title}`}
-      className={cn(
-        "cursor-grab gap-2 transition-opacity outline-none focus-visible:ring-3 focus-visible:ring-ring/30 active:cursor-grabbing",
-        isDragging && "opacity-50"
-      )}
-      data-testid="task-card"
-      draggable
-      onClick={onOpen}
-      onDragEnd={onDragEnd}
-      onDragOver={(event) => {
-        event.preventDefault()
-        event.dataTransfer.dropEffect = "move"
-        onHover()
-      }}
-      onDragStart={(event) => {
-        event.dataTransfer.effectAllowed = "move"
-        event.dataTransfer.setData("text/plain", task._id)
-        onDragStart()
-      }}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
+    <div className="group/task relative">
+      <Card
+        aria-label={`Open ${task.title}`}
+        className={cn(
+          "cursor-grab gap-2 transition-opacity outline-none focus-visible:ring-3 focus-visible:ring-ring/30 active:cursor-grabbing",
+          isDragging && "opacity-50"
+        )}
+        data-testid="task-card"
+        draggable
+        onClick={onOpen}
+        onDragEnd={onDragEnd}
+        onDragOver={(event) => {
           event.preventDefault()
-          onOpen()
-        }
-      }}
-      role="button"
-      size="sm"
-      tabIndex={0}
-    >
-      <CardContent>
-        <TaskItem
-          assigneeName={task.assigneeName}
-          dueDate={task.dueDate}
-          project={
-            showProject && task.projectName
-              ? {
-                  name: task.projectName,
-                  icon: task.projectIcon,
-                  color: task.projectColor,
-                }
-              : undefined
+          event.dataTransfer.dropEffect = "move"
+          onHover()
+        }}
+        onDragStart={(event) => {
+          event.dataTransfer.effectAllowed = "move"
+          event.dataTransfer.setData("text/plain", task._id)
+          onDragStart()
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault()
+            onOpen()
           }
-          status={task.status}
-          title={task.title}
-        />
-        {task.totalSubtasks > 0 || task.activeCommentCount > 0 ? (
-          <div className="mt-2 flex items-center gap-3 pl-6 text-xs text-muted-foreground">
-            {task.totalSubtasks > 0 ? (
-              <span className="flex items-center gap-1">
-                <ListChecks className="size-3.5" />
-                {task.completedSubtasks}/{task.totalSubtasks}
-              </span>
-            ) : null}
-            {task.activeCommentCount > 0 ? (
-              <span className="flex items-center gap-1">
-                <MessageSquare className="size-3.5" />
-                {task.activeCommentCount}
-              </span>
-            ) : null}
-          </div>
-        ) : null}
-      </CardContent>
-    </Card>
+        }}
+        role="button"
+        size="sm"
+        tabIndex={0}
+      >
+        <CardContent className={cn(action && "pr-10")}>
+          <TaskItem
+            assigneeName={task.assigneeName}
+            dueDate={task.dueDate}
+            project={
+              showProject && task.projectName
+                ? {
+                    name: task.projectName,
+                    icon: task.projectIcon,
+                    color: task.projectColor,
+                  }
+                : undefined
+            }
+            status={task.status}
+            title={task.title}
+          />
+          {task.totalSubtasks > 0 || task.activeCommentCount > 0 ? (
+            <div className="mt-2 flex items-center gap-3 pl-6 text-xs text-muted-foreground">
+              {task.totalSubtasks > 0 ? (
+                <span className="flex items-center gap-1">
+                  <ListChecks className="size-3.5" />
+                  {task.completedSubtasks}/{task.totalSubtasks}
+                </span>
+              ) : null}
+              {task.activeCommentCount > 0 ? (
+                <span className="flex items-center gap-1">
+                  <MessageSquare className="size-3.5" />
+                  {task.activeCommentCount}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+      {action ? (
+        <div
+          className="absolute top-2 right-2"
+          onClick={(event) => event.stopPropagation()}
+        >
+          {action}
+        </div>
+      ) : null}
+    </div>
   )
 }

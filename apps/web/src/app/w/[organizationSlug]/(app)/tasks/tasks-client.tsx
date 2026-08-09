@@ -14,6 +14,7 @@ import {
   type Status,
 } from "@/components/project-board/board-shared"
 import { KanbanBoard } from "@/components/project-board/kanban-board"
+import { NewTaskDialog } from "@/components/project-board/new-task-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Spinner } from "@/components/ui/spinner"
 import { parseDueDate } from "@/lib/dates"
@@ -52,7 +53,11 @@ function isDueSoon(task: Task, today: Date) {
   return due >= today && due <= soonEnd
 }
 
-function matchesDueFilters(task: Task, dueFilters: Set<DueFilter>, today: Date) {
+function matchesDueFilters(
+  task: Task,
+  dueFilters: Set<DueFilter>,
+  today: Date
+) {
   if (dueFilters.size === 0) return true
   if (dueFilters.has("overdue") && isOverdue(task, today)) return true
   if (dueFilters.has("dueSoon") && isDueSoon(task, today)) return true
@@ -78,11 +83,7 @@ function FilterChip({
       )}
       variant={active ? "default" : "outline"}
     >
-      <button
-        aria-pressed={active}
-        onClick={onClick}
-        type="button"
-      >
+      <button aria-pressed={active} onClick={onClick} type="button">
         {children}
       </button>
     </Badge>
@@ -125,6 +126,7 @@ export function TasksClient() {
     if (!tasks) return undefined
     const today = startOfToday()
     return tasks.filter((task) => {
+      if (task.status === "done") return false
       if (unassigned && task.assigneeSubject) return false
       if (!matchesDueFilters(task, dueFilters, today)) return false
       return true
@@ -189,8 +191,7 @@ export function TasksClient() {
     }
     const dest = board
       .filter(
-        (item) =>
-          item.status === status && item.projectId === moving.projectId
+        (item) => item.status === status && item.projectId === moving.projectId
       )
       .sort((a, b) => a.position - b.position)
     const position = positionFor(dest, sameProjectIndex, taskId)
@@ -228,7 +229,10 @@ export function TasksClient() {
   return (
     <section className="mx-auto grid w-full max-w-7xl gap-5 p-5">
       <div className="grid gap-3">
-        <h1 className="font-heading text-lg font-medium">Tasks</h1>
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="font-heading text-lg font-medium">Tasks</h1>
+          <NewTaskDialog />
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <FilterChip active={assignedToMe} onClick={onAssignedToMe}>
             Assigned to me
@@ -268,6 +272,7 @@ export function TasksClient() {
         }}
         showProject
         tasks={filteredTasks}
+        visibleStatuses={["todo", "inProgress"]}
       />
     </section>
   )

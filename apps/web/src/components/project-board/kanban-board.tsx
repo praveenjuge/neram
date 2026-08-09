@@ -1,6 +1,7 @@
 "use client"
 
 import { Fragment, useState } from "react"
+import type { ReactNode } from "react"
 
 import type { Id } from "@neram/convex/data-model"
 import { cn } from "@/lib/utils"
@@ -19,6 +20,8 @@ export function KanbanBoard({
   onDrop,
   onOpenTask,
   showProject = false,
+  visibleStatuses,
+  renderTaskAction,
 }: {
   tasks: BoardTask[]
   onDrop: (
@@ -29,14 +32,27 @@ export function KanbanBoard({
   onOpenTask: (taskId: Id<"tasks">) => void
   /** Show each card's project chip (cross-project Tasks board). */
   showProject?: boolean
+  /** Limit the board to the statuses that belong on this surface. */
+  visibleStatuses?: Status[]
+  /** Optional per-card action rendered separately from the card's open target. */
+  renderTaskAction?: (task: BoardTask) => ReactNode
 }) {
   const [draggingId, setDraggingId] = useState<Id<"tasks"> | null>(null)
   const [overColumn, setOverColumn] = useState<Status | null>(null)
   const [overIndex, setOverIndex] = useState<number | null>(null)
 
+  const visibleColumns = visibleStatuses
+    ? columns.filter((column) => visibleStatuses.includes(column.key))
+    : columns
+
   return (
-    <div className="grid gap-3 lg:grid-cols-3">
-      {columns.map((column) => {
+    <div
+      className={cn(
+        "grid gap-3",
+        visibleColumns.length === 2 ? "lg:grid-cols-2" : "lg:grid-cols-3"
+      )}
+    >
+      {visibleColumns.map((column) => {
         const columnTasks = tasks
           .filter((task) => task.status === column.key)
           .sort((a, b) => a.position - b.position)
@@ -107,6 +123,7 @@ export function KanbanBoard({
                       setOverIndex(index)
                     }}
                     onOpen={() => onOpenTask(task._id)}
+                    action={renderTaskAction?.(task)}
                     showProject={showProject}
                     task={task}
                   />

@@ -1,7 +1,6 @@
 "use client"
 
 import { usePaginatedQuery, useQuery } from "convex/react"
-import { History } from "lucide-react"
 import { useState } from "react"
 
 import { api } from "@neram/convex/api"
@@ -14,7 +13,6 @@ import {
   SheetDescription,
   SheetHeader,
   SheetTitle,
-  SheetTrigger,
 } from "@/components/ui/sheet"
 import { Spinner } from "@/components/ui/spinner"
 import { cn } from "@/lib/utils"
@@ -24,14 +22,15 @@ import { dateRange, InfoHint } from "./shared"
 const COUNTS_HINT =
   "baseline: tasks at start · completed: finished · carried: moved to the next Sprint · added: added mid-Sprint · removed: returned to Backlog."
 
-export function HistorySheet() {
+export function HistorySheet({
+  open,
+  onOpenChange,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
   return (
-    <Sheet>
-      <SheetTrigger asChild>
-        <Button size="sm" variant="ghost">
-          <History /> History
-        </Button>
-      </SheetTrigger>
+    <Sheet onOpenChange={onOpenChange} open={open}>
       <SheetContent className="w-full gap-0 sm:max-w-lg">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-1.5">
@@ -39,7 +38,7 @@ export function HistorySheet() {
             <InfoHint text={COUNTS_HINT} />
           </SheetTitle>
           <SheetDescription>
-            Closed Sprints and their append-only scope audit.
+            Completed work and closed Sprint scope audits.
           </SheetDescription>
         </SheetHeader>
         <HistoryContent />
@@ -49,6 +48,7 @@ export function HistorySheet() {
 }
 
 function HistoryContent() {
+  const current = useQuery(api.sprints.current)
   const { results, status, loadMore } = usePaginatedQuery(
     api.sprints.history,
     {},
@@ -65,8 +65,10 @@ function HistoryContent() {
         }
       : "skip"
   )
+  const completed =
+    current?.tasks.filter((task) => task.status === "done") ?? []
 
-  if (status === "LoadingFirstPage") {
+  if (status === "LoadingFirstPage" || current === undefined) {
     return (
       <div className="grid flex-1 place-items-center">
         <Spinner className="size-6 text-muted-foreground" />
@@ -74,10 +76,10 @@ function HistoryContent() {
     )
   }
 
-  if (results.length === 0) {
+  if (results.length === 0 && completed.length === 0) {
     return (
       <p className="px-6 pb-6 text-sm text-muted-foreground">
-        No closed Sprints yet.
+        No completed work or closed Sprints yet.
       </p>
     )
   }
@@ -85,6 +87,26 @@ function HistoryContent() {
   return (
     <div className="flex-1 overflow-y-auto px-6 pb-6">
       <div className="grid gap-3">
+        {completed.length > 0 ? (
+          <section className="grid gap-2 border-b pb-4">
+            <h3 className="text-sm font-medium">Completed this Sprint</h3>
+            <div className="grid divide-y">
+              {completed.map((task) => (
+                <div className="flex items-center gap-2 py-2" key={task._id}>
+                  <span className="min-w-0 flex-1 truncate text-sm">
+                    {task.title}
+                  </span>
+                  <Badge variant="outline">{task.projectName}</Badge>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
+        {results.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No closed Sprints yet.
+          </p>
+        ) : null}
         {results.map((sprint) => {
           const isSelected = selectedSprintId === sprint._id
           return (

@@ -31,7 +31,6 @@ import { messageFromError } from "@/lib/errors"
 
 import { GoalEditor } from "./goal-editor"
 import {
-  InfoHint,
   Loading,
   RemoveTaskButton,
   runToast,
@@ -41,7 +40,7 @@ import {
 import { SprintNameDialog } from "./sprint-name-dialog"
 
 const CURRENT_HINT =
-  "The active Sprint. Its dates are locked — drag tasks across the board to update status."
+  "The active Sprint. Drag open tasks to update status; completed work stays out of this board and is recorded in Sprint history."
 
 export function CurrentSprint() {
   const current = useQuery(api.sprints.current)
@@ -102,7 +101,7 @@ export function CurrentSprint() {
     }
   }
 
-  const removable = current.tasks.filter((task) => task.status !== "done")
+  const openTasks = current.tasks.filter((task) => task.status !== "done")
 
   return (
     <div className="grid gap-5">
@@ -134,32 +133,22 @@ export function CurrentSprint() {
             <EarlyRollover />
           </>
         }
+        details={
+          <GoalEditor initialGoal={current.sprint.goal} sprint="current" />
+        }
         hint={CURRENT_HINT}
         state="Current"
+        taskCount={openTasks.length}
       />
-      <GoalEditor initialGoal={current.sprint.goal} sprint="current" />
-      {removable.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="mr-1 inline-flex items-center gap-1 text-xs text-muted-foreground">
-            Return to Backlog
-            <InfoHint text="Takes a task out of this Sprint and back to the Backlog." />
-          </span>
-          {removable.map((task) => (
-            <span
-              className="flex items-center rounded-md border pl-2 text-xs"
-              key={task._id}
-            >
-              <span className="max-w-40 truncate">{task.title}</span>
-              <RemoveTaskButton sprint="current" task={task} />
-            </span>
-          ))}
-        </div>
-      ) : null}
       <KanbanBoard
         onDrop={handleDrop}
         onOpenTask={setOpenTaskId}
+        renderTaskAction={(task) => (
+          <RemoveTaskButton sprint="current" task={task} />
+        )}
         showProject
-        tasks={current.tasks}
+        tasks={openTasks}
+        visibleStatuses={["todo", "inProgress"]}
       />
       <TaskDialog
         commentId={null}

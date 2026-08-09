@@ -26,7 +26,7 @@ export function ProjectSelect({
   id,
   enabled = true,
 }: {
-  value: Id<"projects">
+  value?: Id<"projects">
   onChange: (projectId: Id<"projects">) => void
   id: string
   enabled?: boolean

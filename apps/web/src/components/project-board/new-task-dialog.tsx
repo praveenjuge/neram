@@ -1,4 +1,4 @@
-import { useMutation } from "convex/react"
+import { useMutation, useQuery } from "convex/react"
 import { Plus } from "lucide-react"
 import type { FormEvent } from "react"
 import { useState } from "react"
@@ -8,6 +8,7 @@ import { api } from "@neram/convex/api"
 import type { Id } from "@neram/convex/data-model"
 import { AssigneeSelect, UNASSIGNED } from "@/components/assignee-select"
 import { DueDatePicker } from "@/components/due-date-picker"
+import { ProjectSelect } from "@/components/project-select"
 import { messageFromError } from "@/lib/errors"
 import { createTaskOptimistic } from "@/lib/optimistic"
 import { Button } from "@/components/ui/button"
@@ -26,19 +27,27 @@ import { Label } from "@/components/ui/label"
 import { SprintSelect, type SprintPlacement } from "@/components/sprint-select"
 import { Textarea } from "@/components/ui/textarea"
 
-export function NewTaskDialog({ projectId }: { projectId: Id<"projects"> }) {
+export function NewTaskDialog({ projectId }: { projectId?: Id<"projects"> }) {
+  const projects = useQuery(api.projects.names)
   const createTask = useMutation(api.tasks.create).withOptimisticUpdate(
-    createTaskOptimistic(projectId)
+    (store, args) => createTaskOptimistic(args.projectId)(store, args)
   )
   const [open, setOpen] = useState(false)
+  const [selectedProjectId, setSelectedProjectId] = useState<
+    Id<"projects"> | undefined
+  >(projectId)
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [dueDate, setDueDate] = useState("")
   const [assigneeSubject, setAssigneeSubject] = useState(UNASSIGNED)
   const [assigneeName, setAssigneeName] = useState<string | null>(null)
   const [sprint, setSprint] = useState<SprintPlacement>("backlog")
+  const effectiveProjectId =
+    selectedProjectId ?? projectId ?? projects?.[0]?._id
+  const actionLabel = projectId ? "Add task" : "New Task"
 
   function reset() {
+    setSelectedProjectId(projectId ?? projects?.[0]?._id)
     setTitle("")
     setDescription("")
     setDueDate("")
@@ -54,11 +63,15 @@ export function NewTaskDialog({ projectId }: { projectId: Id<"projects"> }) {
       toast.error("Task title is required.")
       return
     }
+    if (!effectiveProjectId) {
+      toast.error("Choose a project for this task.")
+      return
+    }
 
     // Fire optimistically: the card appears instantly, so close the dialog now
     // and surface only failures. The optimistic update rolls back on error.
     void createTask({
-      projectId,
+      projectId: effectiveProjectId,
       title: nextTitle.slice(0, 120),
       description: description || undefined,
       dueDate: dueDate || undefined,
@@ -79,20 +92,34 @@ export function NewTaskDialog({ projectId }: { projectId: Id<"projects"> }) {
   }
 
   return (
-    <Dialog onOpenChange={setOpen} open={open}>
+    <Dialog
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen)
+        if (nextOpen) setSelectedProjectId(projectId ?? projects?.[0]?._id)
+      }}
+      open={open}
+    >
       <DialogTrigger asChild>
         <Button data-testid="new-task-trigger">
-          <Plus /> Add task
+          <Plus /> {actionLabel}
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Add task</DialogTitle>
+          <DialogTitle>{actionLabel}</DialogTitle>
           <DialogDescription>
             New tasks start in the Todo column.
           </DialogDescription>
         </DialogHeader>
         <form className="grid gap-4" onSubmit={onSubmit}>
+          {!projectId ? (
+            <ProjectSelect
+              enabled={open}
+              id="task-project"
+              onChange={setSelectedProjectId}
+              value={effectiveProjectId}
+            />
+          ) : null}
           <div className="grid gap-2">
             <Label htmlFor="task-title">Title</Label>
             <Input
@@ -141,8 +168,12 @@ export function NewTaskDialog({ projectId }: { projectId: Id<"projects"> }) {
                 Cancel
               </Button>
             </DialogClose>
-            <Button data-testid="create-task-button" type="submit">
-              <Plus /> Add task
+            <Button
+              data-testid="create-task-button"
+              disabled={!effectiveProjectId}
+              type="submit"
+            >
+              <Plus /> {actionLabel}
             </Button>
           </DialogFooter>
         </form>
