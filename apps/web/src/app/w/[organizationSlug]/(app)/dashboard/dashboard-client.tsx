@@ -101,7 +101,6 @@ function ProjectRow({
   const counts = [
     { label: "Todo", value: project.todoCount },
     { label: "Doing", value: project.inProgressCount },
-    { label: "Done", value: project.doneCount },
   ]
 
   return (

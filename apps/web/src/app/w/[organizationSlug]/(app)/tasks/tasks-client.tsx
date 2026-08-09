@@ -126,7 +126,6 @@ export function TasksClient() {
     if (!tasks) return undefined
     const today = startOfToday()
     return tasks.filter((task) => {
-      if (task.status === "done") return false
       if (unassigned && task.assigneeSubject) return false
       if (!matchesDueFilters(task, dueFilters, today)) return false
       return true
@@ -272,7 +271,6 @@ export function TasksClient() {
         }}
         showProject
         tasks={filteredTasks}
-        visibleStatuses={["todo", "inProgress"]}
       />
     </section>
   )
