@@ -6,8 +6,8 @@ export function MissingEnv() {
           Neram is missing runtime configuration.
         </h1>
         <p className="mt-2 text-muted-foreground">
-          Set NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY and NEXT_PUBLIC_CONVEX_URL,
-          then rebuild the app.
+          Set NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY and NEXT_PUBLIC_CONVEX_URL, then
+          rebuild the app.
         </p>
       </div>
     </div>

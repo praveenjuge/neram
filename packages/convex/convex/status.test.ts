@@ -81,11 +81,23 @@ test("status totals open (todo + in-progress) tasks, excluding done", async () =
   const { alice } = await setup()
   const projectId = await alice.mutation(api.projects.create, { name: "Alpha" })
 
-  const todo = await alice.mutation(api.tasks.create, { projectId, title: "Todo task" })
-  const inProgress = await alice.mutation(api.tasks.create, { projectId, title: "Doing task" })
-  const finished = await alice.mutation(api.tasks.create, { projectId, title: "Done task" })
+  const todo = await alice.mutation(api.tasks.create, {
+    projectId,
+    title: "Todo task",
+  })
+  const inProgress = await alice.mutation(api.tasks.create, {
+    projectId,
+    title: "Doing task",
+  })
+  const finished = await alice.mutation(api.tasks.create, {
+    projectId,
+    title: "Done task",
+  })
 
-  await alice.mutation(api.tasks.move, { taskId: inProgress, status: "inProgress" })
+  await alice.mutation(api.tasks.move, {
+    taskId: inProgress,
+    status: "inProgress",
+  })
   await alice.mutation(api.tasks.move, { taskId: finished, status: "done" })
   // Keep `todo` in the todo column.
   expect(todo).toBeDefined()

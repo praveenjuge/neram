@@ -93,7 +93,11 @@ async function syncMemberships(
       ) {
         requiredMemberFound = true
       }
-      for (let index = 0; index < views.length; index += PROJECTION_BATCH_SIZE) {
+      for (
+        let index = 0;
+        index < views.length;
+        index += PROJECTION_BATCH_SIZE
+      ) {
         await ctx.runMutation(internal.organizations.upsertMembers, {
           members: views.slice(index, index + PROJECTION_BATCH_SIZE),
         })

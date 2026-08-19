@@ -23,7 +23,7 @@ export async function GET() {
         process.env.CLERK_FRONTEND_API_URL
     ),
     convexUrl: envValue(
-      process.env.NERAM_CONVEX_URL ?? process.env.NEXT_PUBLIC_CONVEX_URL,
+      process.env.NERAM_CONVEX_URL ?? process.env.NEXT_PUBLIC_CONVEX_URL
     ),
     oauthClientId: envValue(process.env.NERAM_CLERK_OAUTH_CLIENT_ID),
   }

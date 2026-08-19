@@ -8,7 +8,10 @@ import { fileURLToPath } from "node:url"
 // relative "../package.json" resolves the same way from either entry point.
 export function packageVersion(): string {
   try {
-    const packagePath = join(dirname(fileURLToPath(import.meta.url)), "../package.json")
+    const packagePath = join(
+      dirname(fileURLToPath(import.meta.url)),
+      "../package.json"
+    )
     return JSON.parse(readFileSync(packagePath, "utf8")).version as string
   } catch {
     return "0.0.0"

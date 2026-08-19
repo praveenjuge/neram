@@ -88,15 +88,16 @@ async function validateMentions(
   }
   const subjects = [...new Set(ordered.map((item) => item.subject))]
   const memberships = await Promise.all(
-    subjects.map(async (subject) =>
-      await ctx.db
-        .query("organizationMembers")
-        .withIndex("by_organization_and_user", (q) =>
-          q
-            .eq("organizationId", args.project.organizationId)
-            .eq("userId", subject)
-        )
-        .unique()
+    subjects.map(
+      async (subject) =>
+        await ctx.db
+          .query("organizationMembers")
+          .withIndex("by_organization_and_user", (q) =>
+            q
+              .eq("organizationId", args.project.organizationId)
+              .eq("userId", subject)
+          )
+          .unique()
     )
   )
   const missingSubject = subjects.find((_, index) => !memberships[index])

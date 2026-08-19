@@ -21,7 +21,10 @@ export function SprintSelect({
   return (
     <div className="grid gap-2">
       <Label htmlFor={id}>Sprint</Label>
-      <Select onValueChange={(next) => onChange(next as SprintPlacement)} value={value}>
+      <Select
+        onValueChange={(next) => onChange(next as SprintPlacement)}
+        value={value}
+      >
         <SelectTrigger className="w-full" id={id}>
           <SelectValue />
         </SelectTrigger>

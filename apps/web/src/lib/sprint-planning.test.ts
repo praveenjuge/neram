@@ -43,9 +43,7 @@ describe("Sprint planning UI model", () => {
       isError: false,
     }
     expect(membershipLookupState(page)).toBe("fetch-next")
-    expect(membershipLookupState({ ...page, isFetching: true })).toBe(
-      "loading"
-    )
+    expect(membershipLookupState({ ...page, isFetching: true })).toBe("loading")
     const loadedMemberships = [...firstPage, target]
     expect(
       membershipLookupState({

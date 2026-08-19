@@ -2,7 +2,12 @@ import { ConvexError, v } from "convex/values"
 
 import type { Doc } from "./_generated/dataModel"
 import { mutation, query, type MutationCtx } from "./_generated/server"
-import { patchTaskStats, requireTaskAccess, taskCounts, taskStats } from "./taskModel"
+import {
+  patchTaskStats,
+  requireTaskAccess,
+  taskCounts,
+  taskStats,
+} from "./taskModel"
 
 const MAX_SUBTASKS = 1000
 const POSITION_GAP = 1024
@@ -29,10 +34,7 @@ function cleanTitle(value: string) {
   return title
 }
 
-async function touch(
-  ctx: MutationCtx,
-  task: Doc<"tasks">
-) {
+async function touch(ctx: MutationCtx, task: Doc<"tasks">) {
   const now = Date.now()
   await ctx.db.patch(task._id, { updatedAt: now })
   await ctx.db.patch(task.projectId, { updatedAt: now })
@@ -88,7 +90,10 @@ export const rename = mutation({
   handler: async (ctx, args) => {
     const current = await ctx.db.get(args.subtaskId)
     if (!current) {
-      throw new ConvexError({ code: "NOT_FOUND", message: "Subtask not found." })
+      throw new ConvexError({
+        code: "NOT_FOUND",
+        message: "Subtask not found.",
+      })
     }
     const { task } = await requireTaskAccess(ctx, current.taskId)
     const now = await touch(ctx, task)
@@ -106,7 +111,10 @@ export const setCompleted = mutation({
   handler: async (ctx, args) => {
     const current = await ctx.db.get(args.subtaskId)
     if (!current) {
-      throw new ConvexError({ code: "NOT_FOUND", message: "Subtask not found." })
+      throw new ConvexError({
+        code: "NOT_FOUND",
+        message: "Subtask not found.",
+      })
     }
     const { task } = await requireTaskAccess(ctx, current.taskId)
     if (current.completed === args.completed) return null
@@ -142,7 +150,10 @@ export const reorder = mutation({
     }
     const current = await ctx.db.get(args.subtaskId)
     if (!current) {
-      throw new ConvexError({ code: "NOT_FOUND", message: "Subtask not found." })
+      throw new ConvexError({
+        code: "NOT_FOUND",
+        message: "Subtask not found.",
+      })
     }
     const { task } = await requireTaskAccess(ctx, current.taskId)
     const rows = await ctx.db
@@ -162,13 +173,14 @@ export const reorder = mutation({
     const insertIndex = args.beforeSubtaskId ? index : index + 1
     const previous = withoutCurrent[insertIndex - 1]
     const next = withoutCurrent[insertIndex]
-    const position = previous && next
-      ? (previous.position + next.position) / 2
-      : previous
-        ? previous.position + POSITION_GAP
-        : next
-          ? next.position - POSITION_GAP
-          : POSITION_GAP
+    const position =
+      previous && next
+        ? (previous.position + next.position) / 2
+        : previous
+          ? previous.position + POSITION_GAP
+          : next
+            ? next.position - POSITION_GAP
+            : POSITION_GAP
     const now = await touch(ctx, task)
     await ctx.db.patch(current._id, { position, updatedAt: now })
     return null
@@ -181,7 +193,10 @@ export const remove = mutation({
   handler: async (ctx, args) => {
     const current = await ctx.db.get(args.subtaskId)
     if (!current) {
-      throw new ConvexError({ code: "NOT_FOUND", message: "Subtask not found." })
+      throw new ConvexError({
+        code: "NOT_FOUND",
+        message: "Subtask not found.",
+      })
     }
     const { task } = await requireTaskAccess(ctx, current.taskId)
     await touch(ctx, task)

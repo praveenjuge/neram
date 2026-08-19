@@ -66,6 +66,9 @@
       "dependsOn": ["transit"],
       "inputs": ["$TURBO_DEFAULT$", ".env", ".env.*"],
       "outputs": []
+    },
+    "check:docs": {
+      "outputs": []
     }
   }
 }

@@ -2,16 +2,21 @@ import type { Metadata, Viewport } from "next"
 import { GeistSans } from "geist/font/sans"
 import type { ReactNode } from "react"
 
-import { Providers } from "@/app/providers"
 import { SwRegistration } from "@/components/sw-registration"
+import { ThemeProvider } from "@/components/theme-provider"
+import { Toaster } from "@/components/ui/sonner"
+import { TooltipProvider } from "@/components/ui/tooltip"
 
 import "./globals.css"
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://neram.praveenjuge.com"),
   title: {
-    default: "Neram",
+    default: "Neram — Quiet commitments for teams and agents",
     template: "%s — Neram",
   },
+  description:
+    "Organization-wide projects and Sprints. Give your coding agent a workspace with CLI and MCP.",
   manifest: "/manifest.webmanifest",
   icons: {
     icon: [
@@ -20,6 +25,9 @@ export const metadata: Metadata = {
       { url: "/pwa-512.png", sizes: "512x512", type: "image/png" },
     ],
     apple: [{ url: "/pwa-192.png", sizes: "192x192", type: "image/png" }],
+  },
+  alternates: {
+    canonical: "https://neram.praveenjuge.com",
   },
 }
 
@@ -30,11 +38,14 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html className={GeistSans.variable} lang="en" suppressHydrationWarning>
-      <body className="antialiased text-sm">
-        <Providers>
-          <SwRegistration />
-          {children}
-        </Providers>
+      <body className="text-sm antialiased">
+        <ThemeProvider>
+          <TooltipProvider>
+            <SwRegistration />
+            {children}
+            <Toaster position="bottom-right" />
+          </TooltipProvider>
+        </ThemeProvider>
       </body>
     </html>
   )
