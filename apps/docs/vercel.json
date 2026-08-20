@@ -12,6 +12,10 @@
       "destination": "https://neram-theta.vercel.app/sign-in/:path*"
     },
     {
+      "source": "/__clerk/:path*",
+      "destination": "https://neram-theta.vercel.app/__clerk/:path*"
+    },
+    {
       "source": "/.well-known/:path*",
       "destination": "https://neram-theta.vercel.app/.well-known/:path*"
     },
