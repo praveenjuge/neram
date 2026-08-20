@@ -1,0 +1,24 @@
+{
+  "framework": "astro",
+  "installCommand": "bun install --frozen-lockfile",
+  "buildCommand": "cd ../.. && bun run build --filter=@neram/docs",
+  "rewrites": [
+    { "source": "/w/:path*", "destination": "$NERAM_WEB_URL/w/:path*" },
+    { "source": "/api/:path*", "destination": "$NERAM_WEB_URL/api/:path*" },
+    { "source": "/mcp", "destination": "$NERAM_WEB_URL/mcp" },
+    { "source": "/sign-in", "destination": "$NERAM_WEB_URL/sign-in" },
+    {
+      "source": "/sign-in/:path*",
+      "destination": "$NERAM_WEB_URL/sign-in/:path*"
+    },
+    {
+      "source": "/.well-known/:path*",
+      "destination": "$NERAM_WEB_URL/.well-known/:path*"
+    },
+    { "source": "/sw.js", "destination": "$NERAM_WEB_URL/sw.js" },
+    {
+      "source": "/manifest.webmanifest",
+      "destination": "$NERAM_WEB_URL/manifest.webmanifest"
+    }
+  ]
+}

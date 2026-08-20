@@ -1,0 +1,26 @@
+{
+  "name": "@neram/docs",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "build": "blume build",
+    "check:docs": "node scripts/check-docs-drift.mjs",
+    "dev": "blume dev",
+    "doctor": "blume doctor",
+    "format": "prettier --write \"content/**/*.{md,mdx}\" \"pages/**/*.astro\" \"*.{ts,json}\"",
+    "lint": "blume check",
+    "preview": "blume preview",
+    "release:docs": "bash scripts/release-docs.sh",
+    "typecheck": "blume check"
+  },
+  "dependencies": {
+    "blume": "^1.5.1"
+  },
+  "devDependencies": {
+    "astro": "7.2.4",
+    "@types/react": "^19",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  }
+}

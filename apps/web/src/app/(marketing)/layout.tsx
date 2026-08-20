@@ -55,10 +55,10 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
             >
               GitHub
             </a>
-            <Link className="hover:text-foreground" href="/privacy">
+            <Link className="hover:text-foreground" href="/docs/privacy">
               Privacy
             </Link>
-            <Link className="hover:text-foreground" href="/terms">
+            <Link className="hover:text-foreground" href="/docs/terms">
               Terms
             </Link>
           </div>

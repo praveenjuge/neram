@@ -1,0 +1,60 @@
+---
+title: Introduction
+description: Neram in 5 minutes — quiet Sprints for teams and coding agents.
+---
+
+Neram is a project and task workspace where Clerk Organizations are the canonical tenant and Sprints provide a recurring Current/Upcoming cadence across every project. Browser, CLI, and MCP share the same identity and Sprint engine.
+
+<CardGroup cols={2}>
+  <Card title="CLI reference" href="/docs/cli" icon="terminal">
+    Every command, every `--json` payload.
+  </Card>
+  <Card title="MCP reference" href="/docs/mcp" icon="plug">
+    Local stdio and hosted Streamable HTTP.
+  </Card>
+</CardGroup>
+
+## Quickstart
+
+```bash lineNumbers
+npx neram login          # Clerk OAuth (PKCE); choose an Organization
+npx neram doctor --json  # config, auth, and MCP readiness
+npx neram whoami --json  # identity + active Organization + workspace totals
+npx neram daily --json   # compact execution digest
+```
+
+`neram login` opens the browser, returns to a loopback `127.0.0.1` callback, and stores the Organization-bound token in the OS keychain with a `chmod 600` fallback at `~/.config/neram/credentials.json`. Switching workspaces reruns OAuth and requires MCP reconnection.
+
+## What is a Sprint?
+
+A Sprint is an organization-wide timebox, not per-project. You choose weeks (e.g., 2), start weekday, and timezone. Tasks can be planned into `backlog`, `current`, or `upcoming`. Rollover archives the Sprint and carries the history.
+
+## Three surfaces, one model
+
+<Columns cols={3}>
+  <Column>
+    <Card title="Web" icon="layout-dashboard">
+      Kanban board, Sprint board, task detail.
+    </Card>
+  </Column>
+  <Column>
+    <Card title="CLI" icon="terminal">
+      `neram` on npm. Human text by default, `--json` for agents.
+    </Card>
+  </Column>
+  <Column>
+    <Card title="MCP" icon="plug">
+      Local stdio or hosted HTTP. Same tools, same auth.
+    </Card>
+  </Column>
+</Columns>
+
+## Next
+
+- [CLI → install, daily work, sprints, tasks](/docs/cli)
+- [MCP → stdio vs HTTP, tool list](/docs/mcp)
+- [Concepts → workspaces, Sprints, task model](/docs/concepts)
+
+## Config
+
+CLI loads public config from `/.well-known/neram-agent.json`. Override only for local dev with `NERAM_CONVEX_URL`, `NERAM_CLERK_FRONTEND_API_URL`, `NERAM_CLERK_OAUTH_CLIENT_ID`.

@@ -1,0 +1,22 @@
+---
+title: Privacy
+description: Neram privacy — how workspace data is handled.
+---
+
+Last updated: Aug 19, 2026. This is a minimal, developer-oriented notice for the hosted instance at `neram.praveenjuge.com`. If you self-host Neram, this does not apply beyond your own deployment.
+
+## Data we store
+
+Workspaces are Clerk Organizations. We store projects, tasks, and Sprint history in Convex under your Organization id. Clerk holds identity (email, name, org membership). Neram does not sell your data.
+
+## OAuth and tokens
+
+`neram login` uses Clerk OAuth Authorization Code with PKCE and loopback callback. Tokens live in OS keychain when available, fallback to `~/.config/neram/credentials.json` (0600). Hosted MCP requires a Clerk `id_token` per request — we do not persist it server-side.
+
+## Analytics
+
+The marketing site currently runs with no analytics (per launch choice). If we add cookieless analytics later, it will be disclosed here with no cross-site tracking.
+
+## Contact
+
+Questions: open an issue at [github.com/praveenjuge/neram](https://github.com/praveenjuge/neram).

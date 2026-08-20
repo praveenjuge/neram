@@ -1,0 +1,45 @@
+---
+title: Concepts
+description: Neram concepts — workspaces, Sprints, projects, tasks.
+---
+
+How Neram models work: Organizations as tenants, Sprints as a recurring cadence, and a kanban board that stays in sync across web, CLI, and MCP.
+
+## Workspaces
+
+A workspace is a Clerk Organization. Every project, task, and Sprint belongs to one Organization. Members are Clerk users with roles `org:admin` or `org:member`. Switching workspaces reruns OAuth and replaces the stored token — reconnect local or hosted MCP afterward.
+
+:::note
+Canon: organization id + slug must both match for destructive operations (`remove-member`, `delete_workspace`, `rollover_sprint`). The confirmation prevents cross-org mistakes.
+:::
+
+## Sprints
+
+Sprints are organization-wide, not per-project. They have `backlog`, `current`, and `upcoming`. The cadence (weeks + start weekday + timezone) controls when a new Sprint begins.
+
+```bash lineNumbers
+npx neram sprint cadence --weeks 2 --start-weekday 1 --timezone Asia/Kolkata
+npx neram sprint goal --sprint current --goal "Ship the cutover"
+npx neram sprint current --json
+```
+
+Use `sprint plan` and `sprint remove` to assign tasks to a Sprint. `sprint history` shows commitment and carryover. `rollover` is destructive and requires exact Organization confirmation.
+
+## Tasks & Board
+
+Tasks belong to a project. They have `title`, optional `description`, `status` (`todo` / `inProgress` / `done`), `assignee`, `dueDate`, `sprint`, and kanban `position`. Moving a task between projects or statuses preserves identity; deleting is hard-delete.
+
+```bash lineNumbers
+npx neram task move --task-id TASK_ID --status inProgress --position 1.5
+npx neram task move --task-id TASK_ID --status done
+# status: todo | inProgress | done
+# position: fractional kanban order; omit to append
+```
+
+### Projects
+
+Projects have `name`, `icon`, `color`, and role-aware archived state. Agents can call `summarize_project` to get compact LLM context: project + sampled tasks.
+
+### Daily brief
+
+`daily_brief` (CLI: `neram daily --json`) returns a compact digest: totals, Sprint goals, overdue, and recent activity. It's the cheapest call for an agent loop.

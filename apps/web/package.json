@@ -10,8 +10,7 @@
     "lint": "eslint .",
     "preview": "next start",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit",
-    "check:docs": "node scripts/check-docs-drift.mjs"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.5.12",
@@ -31,7 +30,6 @@
     "react": "^19.2.6",
     "react-day-picker": "^10.0.1",
     "react-dom": "^19.2.6",
-    "shiki": "^4.3.1",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.6.0",
     "tailwindcss": "^4",

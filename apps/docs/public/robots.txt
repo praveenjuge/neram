@@ -1,0 +1,7 @@
+User-agent: *
+Disallow: /w/
+Disallow: /api/
+Disallow: /mcp
+Allow: /
+
+Sitemap: https://neram.praveenjuge.com/sitemap.xml

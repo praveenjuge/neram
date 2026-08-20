@@ -9,6 +9,7 @@ Current/Upcoming planning cadence across every project in a workspace.
 ```text
 apps/
   web/            Next.js App Router, React, and shadcn/ui
+  docs/           Blume (Astro) — landing page and docs on the public site
   native/         Expo iOS app
 packages/
   convex/         Convex functions, generated API, and backend tests

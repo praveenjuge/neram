@@ -1,0 +1,98 @@
+---
+title: CLI
+description: Neram CLI reference — login, daily, tasks, projects, sprints.
+---
+
+Package `neram` on npm. Commands print human text by default; add `--json` for the exact, backward-compatible payload. Prefer ids (`--task-id`, `--project-id`) for automation.
+
+## Sign in and check readiness
+
+```bash lineNumbers
+npx neram login          # Clerk OAuth (PKCE); choose an Organization
+# fallback: ~/.config/neram/credentials.json (chmod 600)
+npx neram doctor --json  # config, auth, and MCP readiness
+npx neram whoami --json  # identity + active Organization + workspace totals
+npx neram logout         # clear creds; best-effort revoke refresh token
+```
+
+```json lineNumbers
+{
+  "ok": true,
+  "identity": { "name": "Ada Lovelace", "email": "ada@example.com" },
+  "organization": {
+    "organizationId": "org_123",
+    "slug": "acme",
+    "name": "Acme",
+    "role": "org:admin"
+  },
+  "workspace": {
+    "projects": 8,
+    "openTasks": 12
+  }
+}
+```
+
+Use `--project-id` for exact ids. `--project` only when the name is unambiguous; the CLI rejects ambiguous matches with `AMBIGUOUS` and `details.matches`.
+
+## Daily work
+
+```bash lineNumbers
+npx neram daily --json                    # compact execution digest
+npx neram brief --project-limit 5 --json  # alias for daily
+npx neram activity --limit 20 --json      # recent activity feed
+```
+
+## Tasks
+
+```bash lineNumbers
+npx neram task list --project "Project name" --status inProgress
+npx neram task add --project "Project name" --title "Follow up" --due 2026-02-01 --sprint backlog
+npx neram task move --task-id TASK_ID --status inProgress
+npx neram task move --task-id TASK_ID --status inProgress --position 1.5  # kanban order
+npx neram task done --task-id TASK_ID
+npx neram task update --task-id TASK_ID --title "New title" --clear-assignee
+npx neram task update --project "Project name" --task-title "Old title" --title "New title"
+npx neram task move-to --task-id TASK_ID --to-project "Other project"
+npx neram task rm --task-id TASK_ID
+```
+
+## Projects
+
+```bash lineNumbers
+npx neram project list --json
+npx neram project add --name "Project name" --icon rocket --color blue
+npx neram project update --project "Project name" --name "Renamed"
+npx neram project summary --project "Project name" --json
+npx neram project rm --project-id PROJECT_ID   # id required; purges tasks
+```
+
+## Workspaces (Clerk Organizations)
+
+Clerk Organizations are the workspace boundary. Switching replaces the stored token; reconnect MCP afterward.
+
+```bash lineNumbers
+npx neram workspace current --json
+npx neram workspace create --name "Acme" --slug acme
+npx neram workspace switch              # rerun OAuth, then reconnect MCP
+npx neram workspace members --json
+npx neram workspace invite --email member@example.com --role org:member
+npx neram workspace role --user-id USER_ID --role org:admin
+npx neram workspace remove-member --user-id USER_ID --organization-id ORG_ID --organization-slug SLUG --confirm
+npx neram workspace delete --organization-id ORG_ID --organization-slug SLUG --confirm
+```
+
+## Sprints
+
+```bash lineNumbers
+npx neram sprint current --json          # also: backlog, upcoming
+npx neram sprint history [--sprint-id SPRINT_ID] --limit 20 --json
+npx neram sprint plan --task-id TASK_ID --sprint upcoming
+npx neram sprint remove --task-id TASK_ID --sprint current
+npx neram sprint goal --sprint current --goal "Ship the cutover"
+npx neram sprint cadence --weeks 2 --start-weekday 1 --timezone Asia/Kolkata
+npx neram sprint rollover --reason "Customer deadline" --organization-id ORG_ID --organization-slug SLUG --confirm
+```
+
+### Notes
+
+`neram task move` accepts an optional `--position` for kanban order. Sprints are organization-wide — planning one project also respects the same Current/Upcoming.
