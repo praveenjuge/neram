@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from "next"
 import { GeistSans } from "geist/font/sans"
 import type { ReactNode } from "react"
 
-import { SwRegistration } from "@/components/sw-registration"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
@@ -41,7 +40,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body className="text-sm antialiased">
         <ThemeProvider>
           <TooltipProvider>
-            <SwRegistration />
             {children}
             <Toaster position="bottom-right" />
           </TooltipProvider>

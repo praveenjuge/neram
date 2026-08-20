@@ -41,6 +41,10 @@ apps/web/public/index.md
 apps/web/public/index.mdx
 apps/web/public/llms-full.txt
 apps/web/public/llms.txt
+apps/web/public/manifest.webmanifest
 apps/web/public/og
+apps/web/public/pwa-192.png
+apps/web/public/pwa-512.png
+apps/web/public/pwa-icon.svg
 apps/web/public/robots.txt
 apps/web/public/sitemap.xml

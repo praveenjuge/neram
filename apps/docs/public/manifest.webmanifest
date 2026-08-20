@@ -1,8 +1,9 @@
 {
   "name": "Neram",
   "short_name": "Neram",
-  "description": "Personal project and kanban tracking.",
-  "start_url": "/dashboard",
+  "description": "Quiet commitments for teams and agents.",
+  "id": "/",
+  "start_url": "/sign-in",
   "scope": "/",
   "display": "standalone",
   "background_color": "#ffffff",

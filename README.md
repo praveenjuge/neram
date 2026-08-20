@@ -38,6 +38,9 @@ Start development:
 bun run dev
 ```
 
+The production Vercel project uses `bun run deploy:web`, which deploys Convex
+and builds the composed Blume + Next.js site as one release.
+
 ## Commands
 
 ```bash

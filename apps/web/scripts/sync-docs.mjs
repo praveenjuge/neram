@@ -8,8 +8,8 @@ const root = resolve(__dirname, "..")
 const docsDist = resolve(root, "../docs/dist")
 const publicDir = resolve(root, "public")
 
-// Files and folders the docs build generates. web/public keeps its own
-// manifest + PWA assets, so only these paths are cleaned and overwritten.
+// Files and folders the docs build generates. Only these paths are cleaned and
+// overwritten so unrelated Next.js public assets remain untouched.
 const generated = [
   "404.html",
   "_astro",
@@ -23,9 +23,20 @@ const generated = [
   "index.mdx",
   "llms-full.txt",
   "llms.txt",
+  "manifest.webmanifest",
   "og",
+  "pwa-192.png",
+  "pwa-512.png",
+  "pwa-icon.svg",
   "robots.txt",
   "sitemap.xml",
+]
+
+const requiredAppAssets = [
+  "manifest.webmanifest",
+  "pwa-192.png",
+  "pwa-512.png",
+  "pwa-icon.svg",
 ]
 
 if (!existsSync(docsDist)) {
@@ -35,13 +46,24 @@ if (!existsSync(docsDist)) {
   process.exit(1)
 }
 
+for (const name of requiredAppAssets) {
+  if (!existsSync(resolve(docsDist, name))) {
+    console.error(
+      `[sync-docs] Required app asset missing from docs output: ${name}`
+    )
+    process.exit(1)
+  }
+}
+
 for (const name of generated) {
   rmSync(resolve(publicDir, name), { recursive: true, force: true })
 }
 
 for (const name of readdirSync(docsDist)) {
   if (generated.includes(name)) {
-    cpSync(resolve(docsDist, name), resolve(publicDir, name), { recursive: true })
+    cpSync(resolve(docsDist, name), resolve(publicDir, name), {
+      recursive: true,
+    })
   }
 }
 

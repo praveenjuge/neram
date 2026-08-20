@@ -10,16 +10,6 @@
     },
     "build": {
       "dependsOn": ["^build"],
-      "env": ["NEXT_PUBLIC_*"],
-      "passThroughEnv": [
-        "CLERK_SECRET_KEY",
-        "CLERK_FRONTEND_API_URL",
-        "CONVEX_DEPLOYMENT",
-        "CONVEX_DEPLOY_KEY",
-        "NERAM_CLERK_FRONTEND_API_URL",
-        "NERAM_CLERK_OAUTH_CLIENT_ID",
-        "NERAM_CONVEX_URL"
-      ],
       "inputs": ["$TURBO_DEFAULT$", ".env", ".env.*"],
       "outputs": ["dist/**", "convex/_generated/**"]
     },

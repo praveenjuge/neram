@@ -1,4 +1,4 @@
-import { defineConfig } from "blume";
+import { defineConfig } from "blume"
 
 export default defineConfig({
   title: "Neram",
@@ -28,7 +28,10 @@ export default defineConfig({
   navigation: {
     tabs: [
       { label: "Docs", path: "/docs" },
-      { label: "Sign in", path: "/sign-in", href: "/sign-in" },
+      {
+        label: "Sign in",
+        path: "https://neram.praveenjuge.com/sign-in",
+      },
     ],
   },
   seo: {
@@ -38,4 +41,4 @@ export default defineConfig({
     robots: true,
     structuredData: true,
   },
-});
+})

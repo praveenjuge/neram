@@ -2,6 +2,18 @@
   "extends": ["//"],
   "tasks": {
     "build": {
+      "env": ["NEXT_PUBLIC_*"],
+      "passThroughEnv": [
+        "CLERK_FRONTEND_API_URL",
+        "NERAM_CLERK_FRONTEND_API_URL",
+        "NERAM_CLERK_OAUTH_CLIENT_ID",
+        "NERAM_CONVEX_URL",
+        "VERCEL",
+        "VERCEL_DEPLOYMENT_ID",
+        "VERCEL_ENV",
+        "VERCEL_GIT_COMMIT_REF",
+        "VERCEL_GIT_COMMIT_SHA"
+      ],
       "outputs": [".next/**", "!.next/cache/**"]
     }
   }
