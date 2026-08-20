@@ -15,6 +15,14 @@ const nextConfig: NextConfig = {
   },
   partialPrefetching: true,
   reactCompiler: true,
+  redirects: async () => [
+    {
+      source: "/sign-in",
+      destination:
+        "https://accounts.neram.praveenjuge.com/sign-in?redirect_url=https%3A%2F%2Fneram.praveenjuge.com%2F",
+      permanent: false,
+    },
+  ],
   rewrites: async () => [
     {
       source: "/.well-known/neram-agent.json",

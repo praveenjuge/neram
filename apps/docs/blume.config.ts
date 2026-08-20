@@ -30,7 +30,7 @@ export default defineConfig({
       { label: "Docs", path: "/docs" },
       {
         label: "Sign in",
-        path: "https://neram.praveenjuge.com/sign-in",
+        path: "https://accounts.neram.praveenjuge.com/sign-in?redirect_url=https%3A%2F%2Fneram.praveenjuge.com%2F",
       },
     ],
   },

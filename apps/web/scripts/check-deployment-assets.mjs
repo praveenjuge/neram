@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFileSync } from "node:fs"
+import { globSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
 
 const rawDeploymentId = process.env.VERCEL_DEPLOYMENT_ID
@@ -13,9 +13,9 @@ for (const asset of appAssets) {
   readFileSync(resolve(publicDir, asset))
 }
 
-if (manifest.start_url !== "/sign-in") {
+if (manifest.start_url !== "/") {
   console.error(
-    `[deployment-assets] Expected manifest start_url /sign-in; found ${String(manifest.start_url)}`
+    `[deployment-assets] Expected manifest start_url /; found ${String(manifest.start_url)}`
   )
   process.exit(1)
 }
@@ -32,15 +32,15 @@ if (!rawDeploymentId) {
 }
 
 const deploymentId = rawDeploymentId.replace(/^dpl_/, "").slice(0, 32)
-const htmlPath = resolve(
-  import.meta.dirname,
-  "../.next/server/app/sign-in.html"
+const appOutputDir = resolve(import.meta.dirname, "../.next/server/app")
+const htmlPaths = globSync("**/*.html", { cwd: appOutputDir }).map((path) =>
+  resolve(appOutputDir, path)
 )
 const serverFilesPath = resolve(
   import.meta.dirname,
   "../.next/required-server-files.json"
 )
-const html = readFileSync(htmlPath, "utf8")
+const html = htmlPaths.map((path) => readFileSync(path, "utf8")).join("\n")
 const serverFiles = JSON.parse(readFileSync(serverFilesPath, "utf8"))
 const assetUrls = [
   ...html.matchAll(/(?:href|src)="([^"]*\/_next\/static[^"]*)"/g),

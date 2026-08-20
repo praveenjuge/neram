@@ -27,12 +27,12 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
             >
               GitHub
             </a>
-            <Link
+            <a
               className="ml-1 inline-flex h-7 items-center rounded-full bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-              href="/sign-in"
+              href="https://accounts.neram.praveenjuge.com/sign-in?redirect_url=https%3A%2F%2Fneram.praveenjuge.com%2F"
             >
               Sign in
-            </Link>
+            </a>
           </nav>
         </div>
       </header>

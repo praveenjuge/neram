@@ -3,7 +3,7 @@
   "short_name": "Neram",
   "description": "Quiet commitments for teams and agents.",
   "id": "/",
-  "start_url": "/sign-in",
+  "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "background_color": "#ffffff",

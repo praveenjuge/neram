@@ -18,6 +18,7 @@ const generated = [
   "docs",
   "docs.md",
   "docs.mdx",
+  "favicon.svg",
   "index.html",
   "index.md",
   "index.mdx",
@@ -33,6 +34,7 @@ const generated = [
 ]
 
 const requiredAppAssets = [
+  "favicon.svg",
   "manifest.webmanifest",
   "pwa-192.png",
   "pwa-512.png",
