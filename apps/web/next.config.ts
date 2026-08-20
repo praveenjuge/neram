@@ -13,6 +13,18 @@ const nextConfig: NextConfig = {
       source: "/.well-known/neram-agent.json",
       destination: "/api/agent-config",
     },
+    {
+      source: "/",
+      destination: "/index.html",
+    },
+    {
+      source: "/docs",
+      destination: "/docs/index.html",
+    },
+    {
+      source: "/docs/:path*",
+      destination: "/docs/:path*/index.html",
+    },
   ],
 }
 

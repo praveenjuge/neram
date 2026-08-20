@@ -96,6 +96,7 @@
         "@clerk/nextjs": "^7.5.12",
         "@clerk/ui": "^1.20.0",
         "@neram/convex": "workspace:*",
+        "@neram/docs": "workspace:*",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
         "convex": "^1.41.0",
