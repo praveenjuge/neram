@@ -19,7 +19,7 @@ const nextConfig: NextConfig = {
     {
       source: "/sign-in",
       destination:
-        "https://accounts.neram.praveenjuge.com/sign-in?redirect_url=https%3A%2F%2Fneram.praveenjuge.com%2F",
+        "https://accounts.neram.praveenjuge.com/sign-in?redirect_url=https%3A%2F%2Fneram.praveenjuge.com%2Fw",
       permanent: false,
     },
   ],
