@@ -3,10 +3,22 @@
   "installCommand": "bun install --frozen-lockfile",
   "buildCommand": "cd ../.. && bun run build --filter=@neram/docs",
   "rewrites": [
-    { "source": "/w/:path*", "destination": "https://neram-theta.vercel.app/w/:path*" },
-    { "source": "/api/:path*", "destination": "https://neram-theta.vercel.app/api/:path*" },
-    { "source": "/mcp", "destination": "https://neram-theta.vercel.app/mcp" },
-    { "source": "/sign-in", "destination": "https://neram-theta.vercel.app/sign-in" },
+    {
+      "source": "/w/:path*",
+      "destination": "https://neram-theta.vercel.app/w/:path*"
+    },
+    {
+      "source": "/api/:path*",
+      "destination": "https://neram-theta.vercel.app/api/:path*"
+    },
+    {
+      "source": "/mcp",
+      "destination": "https://neram-theta.vercel.app/mcp"
+    },
+    {
+      "source": "/sign-in",
+      "destination": "https://neram-theta.vercel.app/sign-in"
+    },
     {
       "source": "/sign-in/:path*",
       "destination": "https://neram-theta.vercel.app/sign-in/:path*"
@@ -19,10 +31,17 @@
       "source": "/.well-known/:path*",
       "destination": "https://neram-theta.vercel.app/.well-known/:path*"
     },
-    { "source": "/sw.js", "destination": "https://neram-theta.vercel.app/sw.js" },
+    {
+      "source": "/sw.js",
+      "destination": "https://neram-theta.vercel.app/sw.js"
+    },
     {
       "source": "/manifest.webmanifest",
       "destination": "https://neram-theta.vercel.app/manifest.webmanifest"
+    },
+    {
+      "source": "/host-test/:path*",
+      "destination": "https://httpbin.org/headers"
     }
   ]
 }
