@@ -8,8 +8,11 @@ Current/Upcoming planning cadence across every project in a workspace.
 
 ```text
 apps/
-  web/            Next.js App Router, React, and shadcn/ui
-  docs/           Blume (Astro) — landing page and docs on the public site
+  web/            Next.js App Router, React, and shadcn/ui — serves the public
+                  site (landing + /docs) by building Blume's static output into
+                  public/ (see scripts/sync-docs.mjs)
+  docs/           Blume (Astro) — the landing page + docs source, built into
+                  apps/web for the single Vercel project
   native/         Expo iOS app
 packages/
   convex/         Convex functions, generated API, and backend tests
