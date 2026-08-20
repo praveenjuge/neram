@@ -1,7 +1,13 @@
 import type { NextConfig } from "next"
 
+const deploymentId = process.env.VERCEL_DEPLOYMENT_ID?.replace(
+  /^dpl_/,
+  ""
+).slice(0, 32)
+
 const nextConfig: NextConfig = {
   cacheComponents: true,
+  deploymentId,
   experimental: {
     turbopackFileSystemCacheForBuild: true,
     turbopackRustReactCompiler: true,

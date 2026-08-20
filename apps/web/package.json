@@ -4,7 +4,8 @@
   "version": "0.0.1",
   "type": "module",
   "scripts": {
-    "build": "node scripts/sync-docs.mjs && next build",
+    "build": "node scripts/sync-docs.mjs && next build && node scripts/check-deployment-assets.mjs",
+    "check:deployment-assets": "node scripts/check-deployment-assets.mjs",
     "dev": "node scripts/sync-docs.mjs && next dev",
     "format": "prettier --write \"src/**/*.{ts,tsx}\"",
     "lint": "eslint .",
