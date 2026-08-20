@@ -4,7 +4,6 @@ import type { Id } from "@neram/convex/data-model"
 import { useMutation, useQuery } from "convex/react"
 import { router, Stack, useLocalSearchParams } from "expo-router"
 import { useMemo, useState } from "react"
-import { Alert } from "react-native"
 
 import { HeaderIconButton } from "@/lib/header"
 import { NativeTextPrompt } from "@/lib/task-ui"
@@ -36,11 +35,8 @@ export default function ProjectScreen() {
     [tasks, status]
   )
 
-  function createAndOpenTask(
-    title: string,
-    sprint: "backlog" | "current" | "upcoming"
-  ) {
-    void createTask({ projectId: id, title, sprint }).then((taskId) =>
+  function createAndOpenTask(title: string) {
+    void createTask({ projectId: id, title }).then((taskId) =>
       router.push(`/task/${taskId}?projectId=${id}`)
     )
   }
@@ -76,7 +72,9 @@ export default function ProjectScreen() {
         </Section>
         <Section title="People">
           {members.map((member) => (
-            <Text key={member.userId}>{`${member.displayName} - ${member.role}${member.userId === user?.id ? " - you" : ""}`}</Text>
+            <Text
+              key={member.userId}
+            >{`${member.displayName} - ${member.role}${member.userId === user?.id ? " - you" : ""}`}</Text>
           ))}
           {membersLoading ? <Text>Loading members...</Text> : null}
         </Section>
@@ -108,21 +106,7 @@ export default function ProjectScreen() {
           const title = value.trim()
           if (!title) return
           setCreatingTask(false)
-          Alert.alert("Plan task", "Choose its initial Sprint.", [
-            { text: "Cancel", style: "cancel" },
-            {
-              text: "Backlog",
-              onPress: () => createAndOpenTask(title, "backlog"),
-            },
-            {
-              text: "Current",
-              onPress: () => createAndOpenTask(title, "current"),
-            },
-            {
-              text: "Upcoming",
-              onPress: () => createAndOpenTask(title, "upcoming"),
-            },
-          ])
+          createAndOpenTask(title)
         }}
         submitLabel="Create"
         title="New task"

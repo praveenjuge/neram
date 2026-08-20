@@ -42,20 +42,21 @@ neram workspace role --user-id USER_ID --role org:admin
 neram workspace remove-member --user-id USER_ID --organization-id ORG_ID --organization-slug SLUG --confirm
 neram workspace delete --organization-id ORG_ID --organization-slug SLUG --confirm
 
-neram sprint current                     # also: backlog, upcoming
-neram sprint history [--sprint-id SPRINT_ID] [--limit 20] [--cursor CURSOR]
-neram sprint plan --task-id TASK_ID [TASK_ID...] --sprint current|upcoming|backlog
-neram sprint remove --task-id TASK_ID [TASK_ID...] --sprint current|upcoming
-neram sprint goal --sprint current|upcoming (--goal "Outcome" | --clear)
-neram sprint cadence --weeks 2 --start-weekday 1 --timezone Asia/Kolkata
-neram sprint rollover --reason "Customer deadline" --organization-id ORG_ID --organization-slug SLUG --confirm
+neram sprint current                     # or: backlog
+neram sprint history [--limit 20] [--cursor CURSOR]
+neram sprint start [--duration 1|2|4|open] [--goal "Outcome"]
+neram sprint plan --task-id TASK_ID [TASK_ID...]
+neram sprint remove --task-id TASK_ID [TASK_ID...]
+neram sprint goal (--goal "Outcome" | --clear)
+neram sprint duration --value 1|2|4|open
+neram sprint end --confirm
 
 neram daily [--project-limit <n>]        # daily execution digest
 neram activity [--limit <n>]             # recent activity feed
 
 neram task list -p <project> [--status <todo|inProgress|done>]
 neram task show --task-id <id>
-neram task add -p <project> -t <title> [-d <desc>] [--due <yyyy-mm-dd>] [--sprint backlog|current|upcoming]
+neram task add -p <project> -t <title> [-d <desc>] [--due <yyyy-mm-dd>]
 neram task move -t <title> -p <project> --status <status>
 neram task done -t <title> -p <project> [--confirm-incomplete-subtasks]
 neram task update --task-id <id> [--title <t>] [--description <d>] [--due <date>] [--clear-assignee]
@@ -102,12 +103,12 @@ Mutations: `capture_task`, `update_task`, `move_task`, `complete_task`,
 Organization and Sprint mutations: `create_workspace`,
 `invite_workspace_member`, `update_workspace_member_role`,
 `remove_workspace_member`, `delete_workspace`, `plan_sprint_tasks`,
-`remove_sprint_tasks`, `update_sprint_goal`, `update_sprint_cadence`, and
-`rollover_sprint`.
+`remove_sprint_tasks`, `update_sprint_goal`, `update_sprint_duration`,
+`start_sprint`, and `end_sprint`.
 
 Tools carry annotations (read-only / idempotent / destructive) and stable output
-schemas for mutation shapes. Organization removal/deletion and early rollover
-require the exact Organization ID and slug plus confirmation. Tool failures come back as `isError`
+schemas for mutation shapes. Organization removal/deletion requires the exact
+Organization ID and slug; ending a Sprint requires confirmation. Tool failures come back as `isError`
 results carrying `{ error: { code, message, details } }` rather than
 protocol-level exceptions, so agents can read `AMBIGUOUS` candidate lists and act
 on stable codes. Local and hosted MCP are scoped to the Organization selected

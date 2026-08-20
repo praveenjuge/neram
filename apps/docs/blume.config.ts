@@ -3,7 +3,7 @@ import { defineConfig } from "blume"
 export default defineConfig({
   title: "Neram",
   description:
-    "A quiet cadence for shared work — org-wide projects, a recurring Sprint with memory, and the same commitments for humans and agents.",
+    "Projects hold all work. One optional Sprint keeps humans and agents focused on what matters now.",
   github: {
     owner: "praveenjuge",
     repo: "neram",

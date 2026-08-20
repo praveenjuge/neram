@@ -3,8 +3,8 @@ import * as z from "zod/v3"
 import { schemas } from "./schemas.js"
 
 export type OrganizationRole = "org:admin" | "org:member"
-export type SprintPlacement = "backlog" | "current" | "upcoming"
-export type SprintRef = "current" | "upcoming"
+export type SprintPlacement = "backlog" | "current"
+export type SprintDuration = 1 | 2 | 4 | "open"
 
 export type Organization = {
   organizationId: string
@@ -23,10 +23,7 @@ export type OrganizationMember = {
 }
 
 export type OrganizationSettings = {
-  cadenceWeeks: number
-  startWeekday: number
-  timezone: string
-  nextSprintNumber: number
+  sprintDuration: SprintDuration
 }
 
 export type WorkspaceContext = {
@@ -38,19 +35,13 @@ export type WorkspaceContext = {
 export type Sprint = {
   _id: string
   number: number
-  name?: string
   goal?: string
-  state: "current" | "upcoming" | "closed"
+  state: "current" | "closed"
   startsAt: number
-  endsAt: number
+  endsAt?: number
   closedAt?: number
-  earlyCloseReason?: string
   baselineCount?: number
   completedCount?: number
-  carriedCount?: number
-  addedCount?: number
-  removedCount?: number
-  reopenedCount?: number
 }
 
 export type SprintTask = {
@@ -63,29 +54,11 @@ export type SprintTask = {
   status: "todo" | "inProgress" | "done"
   assigneeName?: string
   currentSprintId?: string
-  upcomingSprintId?: string
   completedAt?: number
   totalSubtasks: number
   completedSubtasks: number
   activeCommentCount: number
   updatedAt: number
-}
-
-export type SprintEntry = {
-  _id: string
-  sprintId: string
-  taskId: string
-  projectId: string
-  projectNameSnapshot: string
-  taskTitleSnapshot: string
-  origin: "planned" | "carried" | "scope_added" | "reopened"
-  actorName: string
-  addedAt: number
-  removedAt?: number
-  removalReason?: string
-  creditedCompletionAt?: number
-  carriedToSprintId?: string
-  priorCompletionSprintId?: string
 }
 
 type Page<T> = { page: T[]; isDone: boolean; continueCursor: string }
@@ -116,37 +89,20 @@ export type PlanningApi = {
     confirm: boolean
   }): Promise<string>
   currentSprint(): Promise<SprintView | null>
-  upcomingSprint(): Promise<SprintView | null>
-  upcomingSprints(): Promise<SprintView[]>
   backlogTasks(): Promise<SprintTask[]>
   sprintHistory(args: {
     cursor: string | null
     pageSize: number
   }): Promise<Page<Sprint>>
-  sprintAudit(args: {
-    sprintId: string
-    cursor: string | null
-    pageSize: number
-  }): Promise<Page<SprintEntry>>
-  // `sprint` is a placement alias ("backlog"/"current"/"upcoming") or a
-  // scheduled Sprint id; the backend validates it either way.
-  planSprintTasks(args: { taskIds: string[]; sprint: string }): Promise<void>
-  removeSprintTasks(args: { taskIds: string[]; sprint: string }): Promise<void>
-  updateSprintGoal(args: { sprint: string; goal?: string }): Promise<void>
-  updateSprintCadence(args: {
-    cadenceWeeks: number
-    startWeekday: number
-    timezone: string
-  }): Promise<void>
-  scheduleSprint(args: { name?: string; goal?: string }): Promise<string>
-  renameSprint(args: { sprint: string; name?: string }): Promise<void>
-  unscheduleSprint(args: { sprintId: string }): Promise<void>
-  rolloverSprint(args: {
-    organizationId: string
-    organizationSlug: string
-    confirm: boolean
-    reason: string
+  planSprintTasks(args: { taskIds: string[] }): Promise<void>
+  removeSprintTasks(args: { taskIds: string[] }): Promise<void>
+  updateSprintGoal(args: { goal?: string }): Promise<void>
+  updateSprintDuration(args: { duration: SprintDuration }): Promise<void>
+  startSprint(args: {
+    goal?: string
+    duration?: SprintDuration
   }): Promise<string>
+  endSprint(args: { confirm: boolean }): Promise<string>
 }
 
 type Call = <T>(fn: unknown, args: Record<string, unknown>) => Promise<T>
@@ -189,16 +145,9 @@ export function createPlanningApi(
         slug: organizationSlug,
       }),
     currentSprint: () => calls.query(api.sprints.current, {}),
-    upcomingSprint: () => calls.query(api.sprints.upcoming, {}),
-    upcomingSprints: () => calls.query(api.sprints.upcomingList, {}),
     backlogTasks: () => calls.query(api.sprints.backlog, {}),
     sprintHistory: ({ cursor, pageSize }) =>
       calls.query(api.sprints.history, {
-        paginationOpts: { cursor, numItems: pageSize },
-      }),
-    sprintAudit: ({ sprintId, cursor, pageSize }) =>
-      calls.query(api.sprints.audit, {
-        sprintId,
         paginationOpts: { cursor, numItems: pageSize },
       }),
     planSprintTasks: async (args) => {
@@ -210,21 +159,11 @@ export function createPlanningApi(
     updateSprintGoal: async (args) => {
       await calls.mutation(api.sprints.updateGoal, args)
     },
-    updateSprintCadence: async (args) => {
-      await calls.mutation(api.sprints.updateCadence, args)
+    updateSprintDuration: async (args) => {
+      await calls.mutation(api.sprints.updateDuration, args)
     },
-    scheduleSprint: (args) => calls.mutation(api.sprints.scheduleSprint, args),
-    renameSprint: async (args) => {
-      await calls.mutation(api.sprints.renameSprint, args)
-    },
-    unscheduleSprint: async (args) => {
-      await calls.mutation(api.sprints.unscheduleSprint, args)
-    },
-    rolloverSprint: ({ organizationSlug, ...args }) =>
-      calls.mutation(api.sprints.rollover, {
-        ...args,
-        slug: organizationSlug,
-      }),
+    startSprint: (args) => calls.mutation(api.sprints.start, args),
+    endSprint: (args) => calls.mutation(api.sprints.end, args),
   }
 }
 
@@ -236,20 +175,14 @@ function compactSprint(sprint: Sprint) {
   return {
     sprintId: sprint._id,
     number: sprint.number,
-    name: sprint.name,
     goal: sprint.goal,
     state: sprint.state,
     startsAt: iso(sprint.startsAt),
     endsAt: iso(sprint.endsAt),
     closedAt: iso(sprint.closedAt),
-    earlyCloseReason: sprint.earlyCloseReason,
     counts: {
-      baseline: sprint.baselineCount,
+      committed: sprint.baselineCount,
       completed: sprint.completedCount,
-      carried: sprint.carriedCount,
-      added: sprint.addedCount,
-      removed: sprint.removedCount,
-      reopened: sprint.reopenedCount,
     },
   }
 }
@@ -317,11 +250,8 @@ export function createPlanningTools(neram: PlanningApi) {
       return { jobId, deleting: true as const }
     },
     async get_sprint(raw?: z.input<typeof schemas.get_sprint>) {
-      const { sprint } = schemas.get_sprint.parse(raw ?? {})
-      const view =
-        sprint === "current"
-          ? await neram.currentSprint()
-          : await neram.upcomingSprint()
+      schemas.get_sprint.parse(raw ?? {})
+      const view = await neram.currentSprint()
       return {
         sprint: view ? compactSprint(view.sprint) : null,
         taskCount: view?.tasks.length ?? 0,
@@ -336,10 +266,7 @@ export function createPlanningTools(neram: PlanningApi) {
           tasks: (await neram.backlogTasks()).map(compactSprintTask),
         }
       }
-      const view =
-        sprint === "current"
-          ? await neram.currentSprint()
-          : await neram.upcomingSprint()
+      const view = await neram.currentSprint()
       return {
         sprint,
         details: view ? compactSprint(view.sprint) : null,
@@ -348,23 +275,6 @@ export function createPlanningTools(neram: PlanningApi) {
     },
     async sprint_history(raw?: z.input<typeof schemas.sprint_history>) {
       const input = schemas.sprint_history.parse(raw ?? {})
-      if (input.sprintId) {
-        const result = await neram.sprintAudit({
-          sprintId: input.sprintId,
-          cursor: input.cursor ?? null,
-          pageSize: input.pageSize,
-        })
-        return {
-          sprintId: input.sprintId,
-          entries: result.page.map((entry) => ({
-            ...entry,
-            addedAt: iso(entry.addedAt),
-            removedAt: iso(entry.removedAt),
-            creditedCompletionAt: iso(entry.creditedCompletionAt),
-          })),
-          cursor: result.isDone ? null : result.continueCursor,
-        }
-      }
       const result = await neram.sprintHistory({
         cursor: input.cursor ?? null,
         pageSize: input.pageSize,
@@ -374,65 +284,38 @@ export function createPlanningTools(neram: PlanningApi) {
         cursor: result.isDone ? null : result.continueCursor,
       }
     },
-    async list_upcoming_sprints(
-      raw?: z.input<typeof schemas.list_upcoming_sprints>
-    ) {
-      schemas.list_upcoming_sprints.parse(raw ?? {})
-      const views = await neram.upcomingSprints()
-      return {
-        sprints: views.map((view) => ({
-          ...compactSprint(view.sprint),
-          taskCount: view.tasks.length,
-          tasks: view.tasks.map(compactSprintTask),
-        })),
-      }
-    },
     async plan_sprint_tasks(raw: z.input<typeof schemas.plan_sprint_tasks>) {
       const input = schemas.plan_sprint_tasks.parse(raw)
-      const sprint = input.sprintId ?? input.sprint
-      await neram.planSprintTasks({ taskIds: input.taskIds, sprint })
-      return { taskIds: input.taskIds, sprint }
+      await neram.planSprintTasks({ taskIds: input.taskIds })
+      return { taskIds: input.taskIds }
     },
     async remove_sprint_tasks(
       raw: z.input<typeof schemas.remove_sprint_tasks>
     ) {
       const input = schemas.remove_sprint_tasks.parse(raw)
-      const sprint = input.sprintId ?? input.sprint
-      await neram.removeSprintTasks({ taskIds: input.taskIds, sprint })
-      return { taskIds: input.taskIds, sprint }
+      await neram.removeSprintTasks({ taskIds: input.taskIds })
+      return { taskIds: input.taskIds }
     },
     async update_sprint_goal(raw: z.input<typeof schemas.update_sprint_goal>) {
       const input = schemas.update_sprint_goal.parse(raw)
-      const sprint = input.sprintId ?? input.sprint
-      await neram.updateSprintGoal({ sprint, goal: input.goal })
-      return { sprint }
+      await neram.updateSprintGoal({ goal: input.goal })
+      return { updated: true as const }
     },
-    async update_sprint_cadence(
-      raw: z.input<typeof schemas.update_sprint_cadence>
+    async update_sprint_duration(
+      raw: z.input<typeof schemas.update_sprint_duration>
     ) {
-      const input = schemas.update_sprint_cadence.parse(raw)
-      await neram.updateSprintCadence(input)
+      const input = schemas.update_sprint_duration.parse(raw)
+      await neram.updateSprintDuration(input)
       return input
     },
-    async schedule_sprint(raw?: z.input<typeof schemas.schedule_sprint>) {
-      const input = schemas.schedule_sprint.parse(raw ?? {})
-      const sprintId = await neram.scheduleSprint(input)
-      return { sprintId, scheduled: true as const }
+    async start_sprint(raw?: z.input<typeof schemas.start_sprint>) {
+      const input = schemas.start_sprint.parse(raw ?? {})
+      const sprintId = await neram.startSprint(input)
+      return { sprintId, started: true as const }
     },
-    async rename_sprint(raw: z.input<typeof schemas.rename_sprint>) {
-      const input = schemas.rename_sprint.parse(raw)
-      const sprint = input.sprintId ?? input.sprint
-      await neram.renameSprint({ sprint, name: input.name })
-      return { sprint }
-    },
-    async unschedule_sprint(raw: z.input<typeof schemas.unschedule_sprint>) {
-      const input = schemas.unschedule_sprint.parse(raw)
-      await neram.unscheduleSprint(input)
-      return { sprintId: input.sprintId, removed: true as const }
-    },
-    async rollover_sprint(raw: z.input<typeof schemas.rollover_sprint>) {
-      const input = schemas.rollover_sprint.parse(raw)
-      const jobId = await neram.rolloverSprint(input)
+    async end_sprint(raw: z.input<typeof schemas.end_sprint>) {
+      const input = schemas.end_sprint.parse(raw)
+      const jobId = await neram.endSprint(input)
       return { jobId, started: true as const }
     },
   }

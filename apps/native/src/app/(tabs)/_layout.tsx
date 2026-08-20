@@ -13,10 +13,18 @@ export default function TabsLayout() {
   const { isLoaded, isSignedIn } = useAuth({ treatPendingAsSignedOut: false })
   const [authOpen, setAuthOpen] = useState(false)
   const { organization } = useOrganization()
-  const { isLoaded: organizationsLoaded, createOrganization, setActive, userMemberships } =
-    useOrganizationList({ userMemberships: { infinite: true, pageSize: 100 } })
+  const {
+    isLoaded: organizationsLoaded,
+    createOrganization,
+    setActive,
+    userMemberships,
+  } = useOrganizationList({
+    userMemberships: { infinite: true, pageSize: 100 },
+  })
   const syncCurrent = useAction(api.organizationActions.syncCurrent)
-  const [syncedOrganizationId, setSyncedOrganizationId] = useState<string | null>(null)
+  const [syncedOrganizationId, setSyncedOrganizationId] = useState<
+    string | null
+  >(null)
 
   useEffect(() => {
     if (!organization || syncedOrganizationId === organization.id) return
@@ -26,7 +34,11 @@ export default function TabsLayout() {
         if (active) setSyncedOrganizationId(organization.id)
       })
       .catch((error) => {
-        if (active) Alert.alert("Workspace unavailable", error instanceof Error ? error.message : "Try again.")
+        if (active)
+          Alert.alert(
+            "Workspace unavailable",
+            error instanceof Error ? error.message : "Try again."
+          )
       })
     return () => {
       active = false
@@ -66,7 +78,10 @@ export default function TabsLayout() {
     )
   }
 
-  if (!organizationsLoaded || (organization && syncedOrganizationId !== organization.id)) {
+  if (
+    !organizationsLoaded ||
+    (organization && syncedOrganizationId !== organization.id)
+  ) {
     return (
       <Screen>
         <Section title="Workspace">
@@ -85,18 +100,26 @@ export default function TabsLayout() {
               key={membership.id}
               label={membership.organization.name}
               systemImage="building.2"
-              onPress={() => void setActive?.({ organization: membership.organization.id })}
+              onPress={() =>
+                void setActive?.({ organization: membership.organization.id })
+              }
             />
           ))}
           <Button
             label="Create workspace"
             systemImage="plus"
             onPress={() =>
-              Alert.prompt("Create workspace", "Workspace name", (value?: string) => {
-                const name = (value ?? "").trim()
-                if (!name || !createOrganization) return
-                void createOrganization({ name }).then((created) => setActive?.({ organization: created.id }))
-              })
+              Alert.prompt(
+                "Create workspace",
+                "Workspace name",
+                (value?: string) => {
+                  const name = (value ?? "").trim()
+                  if (!name || !createOrganization) return
+                  void createOrganization({ name }).then((created) =>
+                    setActive?.({ organization: created.id })
+                  )
+                }
+              )
             }
           />
         </Section>
@@ -115,8 +138,8 @@ export default function TabsLayout() {
         <NativeTabs.Trigger.Label>Tasks</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="sprints">
-        <NativeTabs.Trigger.Icon sf="arrow.triangle.2.circlepath" />
-        <NativeTabs.Trigger.Label>Sprints</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="scope" />
+        <NativeTabs.Trigger.Label>Focus</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="activity">
         <NativeTabs.Trigger.Icon sf="clock" />

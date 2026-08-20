@@ -15,7 +15,7 @@ export default function SprintsLayout() {
         ),
       }}
     >
-      <Stack.Screen name="index" options={{ title: "Sprints" }} />
+      <Stack.Screen name="index" options={{ title: "Focus" }} />
     </Stack>
   )
 }

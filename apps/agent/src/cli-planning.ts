@@ -33,7 +33,7 @@ function memberLines(
 
 function sprintLines(result: Awaited<ReturnType<Tools["list_sprint_tasks"]>>) {
   const heading = result.details
-    ? `${result.details.name ?? `Sprint ${result.details.number}`} · ${result.sprint} · ${result.tasks.length} tasks`
+    ? `Current Sprint · ${result.tasks.length} tasks`
     : `${result.sprint} · ${result.tasks.length} tasks`
   const tasks = result.tasks.map(
     (task) =>
@@ -42,18 +42,11 @@ function sprintLines(result: Awaited<ReturnType<Tools["list_sprint_tasks"]>>) {
   return [heading, ...tasks].join("\n")
 }
 
-function upcomingLines(
-  result: Awaited<ReturnType<Tools["list_upcoming_sprints"]>>
-) {
-  if (result.sprints.length === 0) return "No upcoming Sprints scheduled."
-  return result.sprints
-    .map(
-      (sprint) =>
-        `${sprint.sprintId}  ${sprint.name ?? `Sprint ${sprint.number}`} · ${sprint.taskCount} task(s)${
-          sprint.goal ? ` · ${sprint.goal}` : ""
-        }`
-    )
-    .join("\n")
+function sprintDuration(value: string) {
+  if (value === "open") return value
+  const weeks = toInt(value)
+  if (weeks === 1 || weeks === 2 || weeks === 4) return weeks
+  throw new AgentError("VALIDATION", "Use duration 1, 2, 4, or open.")
 }
 
 export function registerPlanningCommands(program: Command, runtime: Runtime) {
@@ -185,7 +178,7 @@ export function registerPlanningCommands(program: Command, runtime: Runtime) {
     .command("sprint")
     .description("Plan and manage Sprints")
 
-  for (const placement of ["current", "backlog", "upcoming"] as const) {
+  for (const placement of ["current", "backlog"] as const) {
     sprint
       .command(placement)
       .description(`Show ${placement} Sprint work`)
@@ -204,8 +197,7 @@ export function registerPlanningCommands(program: Command, runtime: Runtime) {
 
   sprint
     .command("history")
-    .description("List closed Sprints or inspect one Sprint audit")
-    .option("--sprint-id <id>")
+    .description("List closed Sprints with committed and completed counts")
     .option("--cursor <cursor>")
     .option("--limit <n>", "Page size (1-50)", toInt)
     .option("--json")
@@ -214,7 +206,6 @@ export function registerPlanningCommands(program: Command, runtime: Runtime) {
         const result = await (
           await tools()
         ).sprint_history({
-          sprintId: opts.sprintId,
           cursor: opts.cursor,
           pageSize: opts.limit,
         })
@@ -223,79 +214,27 @@ export function registerPlanningCommands(program: Command, runtime: Runtime) {
     )
 
   sprint
-    .command("list")
-    .description("List every scheduled upcoming Sprint with its id")
-    .option("--json")
-    .action((opts) =>
-      wrap(opts, async () => {
-        const result = await (await tools()).list_upcoming_sprints({})
-        emit(opts, upcomingLines(result), result)
-      })
-    )
-
-  sprint
-    .command("schedule")
-    .description(
-      "Create a Sprint (the first becomes active, later ones are scheduled)"
-    )
-    .option("--name <name>")
+    .command("start")
+    .description("Start one optional Sprint with an empty focus list")
     .option("--goal <goal>")
+    .option("--duration <1|2|4|open>")
     .option("--json")
     .action((opts) =>
       wrap(opts, async () => {
         const result = await (
           await tools()
-        ).schedule_sprint({ name: opts.name, goal: opts.goal })
-        emit(opts, `Scheduled Sprint ${result.sprintId}.`, result)
-      })
-    )
-
-  sprint
-    .command("rename")
-    .description("Rename the Current, Upcoming, or a scheduled Sprint")
-    .option("--sprint <current|upcoming>", "Target Sprint", "current")
-    .option("--sprint-id <id>", "Target a specific scheduled Sprint")
-    .option("--name <name>")
-    .option("--clear", "Clear the name (restore the default label)")
-    .option("--json")
-    .action((opts) =>
-      wrap(opts, async () => {
-        if (opts.name === undefined && !opts.clear) {
-          throw new AgentError("VALIDATION", "Provide --name or --clear.")
-        }
-        const result = await (
-          await tools()
-        ).rename_sprint({
-          sprint: opts.sprint,
-          sprintId: opts.sprintId,
-          name: opts.clear ? undefined : opts.name,
+        ).start_sprint({
+          goal: opts.goal,
+          duration: opts.duration ? sprintDuration(opts.duration) : undefined,
         })
-        emit(opts, `Renamed the ${result.sprint} Sprint.`, result)
-      })
-    )
-
-  sprint
-    .command("unschedule")
-    .description("Remove a scheduled Sprint; its work returns to Backlog")
-    .requiredOption("--sprint-id <id>")
-    .option("--json")
-    .action((opts) =>
-      wrap(opts, async () => {
-        const result = await (
-          await tools()
-        ).unschedule_sprint({ sprintId: opts.sprintId })
-        emit(opts, `Removed scheduled Sprint ${result.sprintId}.`, result)
+        emit(opts, `Started Sprint ${result.sprintId}.`, result)
       })
     )
 
   sprint
     .command("plan")
-    .description(
-      "Plan tasks into Backlog, Current, Upcoming, or a scheduled Sprint"
-    )
+    .description("Add Backlog tasks to the active Sprint")
     .requiredOption("--task-id <ids...>")
-    .option("--sprint <backlog|current|upcoming>", "Target Sprint", "backlog")
-    .option("--sprint-id <id>", "Target a specific scheduled Sprint")
     .option("--json")
     .action((opts) =>
       wrap(opts, async () => {
@@ -303,25 +242,15 @@ export function registerPlanningCommands(program: Command, runtime: Runtime) {
           await tools()
         ).plan_sprint_tasks({
           taskIds: opts.taskId,
-          sprint: opts.sprint,
-          sprintId: opts.sprintId,
         })
-        emit(
-          opts,
-          `Planned ${result.taskIds.length} task(s) in ${result.sprint}.`,
-          result
-        )
+        emit(opts, `Added ${result.taskIds.length} task(s) to Current.`, result)
       })
     )
 
   sprint
     .command("remove")
-    .description(
-      "Return Current, Upcoming, or a scheduled Sprint's tasks to Backlog"
-    )
+    .description("Return active Sprint tasks to Backlog")
     .requiredOption("--task-id <ids...>")
-    .option("--sprint <current|upcoming>", "Source Sprint", "current")
-    .option("--sprint-id <id>", "Target a specific scheduled Sprint")
     .option("--json")
     .action((opts) =>
       wrap(opts, async () => {
@@ -329,8 +258,6 @@ export function registerPlanningCommands(program: Command, runtime: Runtime) {
           await tools()
         ).remove_sprint_tasks({
           taskIds: opts.taskId,
-          sprint: opts.sprint,
-          sprintId: opts.sprintId,
         })
         emit(
           opts,
@@ -342,9 +269,7 @@ export function registerPlanningCommands(program: Command, runtime: Runtime) {
 
   sprint
     .command("goal")
-    .description("Set or clear a Sprint goal")
-    .option("--sprint <current|upcoming>", "Target Sprint", "current")
-    .option("--sprint-id <id>", "Target a specific scheduled Sprint")
+    .description("Set or clear the active Sprint goal")
     .option("--goal <goal>")
     .option("--clear", "Clear the goal")
     .option("--json")
@@ -356,46 +281,39 @@ export function registerPlanningCommands(program: Command, runtime: Runtime) {
         const result = await (
           await tools()
         ).update_sprint_goal({
-          sprint: opts.sprint,
-          sprintId: opts.sprintId,
           goal: opts.clear ? undefined : opts.goal,
         })
-        emit(opts, `Updated the ${result.sprint} Sprint goal.`, result)
+        emit(opts, "Updated the Sprint goal.", result)
       })
     )
 
   sprint
-    .command("cadence")
-    .description("Update the cadence applied after the active Sprint")
-    .requiredOption("--weeks <1-8>", "Cadence length", toInt)
-    .requiredOption("--start-weekday <0-6>", "Sunday=0", toInt)
-    .requiredOption("--timezone <iana-timezone>")
+    .command("duration")
+    .description("Set the default duration for the next Sprint")
+    .requiredOption("--value <1|2|4|open>")
     .option("--json")
     .action((opts) =>
       wrap(opts, async () => {
         const result = await (
           await tools()
-        ).update_sprint_cadence({
-          cadenceWeeks: opts.weeks,
-          startWeekday: opts.startWeekday,
-          timezone: opts.timezone,
+        ).update_sprint_duration({
+          duration: sprintDuration(opts.value),
         })
-        emit(opts, `Cadence updated to ${result.cadenceWeeks} week(s).`, result)
+        emit(opts, `Default duration updated to ${result.duration}.`, result)
       })
     )
 
   sprint
-    .command("rollover")
-    .description("Close Current early and roll unfinished work forward")
-    .requiredOption("--reason <reason>")
-    .requiredOption("--organization-id <id>")
-    .requiredOption("--organization-slug <slug>")
-    .option("--confirm", "Confirm the irreversible rollover")
+    .command("end")
+    .description("End Current and return unfinished work to Backlog")
+    .option("--confirm", "Confirm the Sprint close")
     .option("--json")
     .action((opts) =>
       wrap(opts, async () => {
-        const result = await (await tools()).rollover_sprint(opts)
-        emit(opts, `Sprint rollover started (${result.jobId}).`, result)
+        const result = await (
+          await tools()
+        ).end_sprint({ confirm: opts.confirm })
+        emit(opts, `Sprint close started (${result.jobId}).`, result)
       })
     )
 }

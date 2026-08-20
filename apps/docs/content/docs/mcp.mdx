@@ -51,7 +51,6 @@ get_workspace
 list_workspace_members
 get_sprint
 list_sprint_tasks
-list_upcoming_sprints
 sprint_history
 list_projects
 list_tasks
@@ -88,11 +87,9 @@ delete_workspace        # destructive — exact Organization confirmation
 plan_sprint_tasks
 remove_sprint_tasks
 update_sprint_goal
-update_sprint_cadence
-schedule_sprint
-rename_sprint
-unschedule_sprint
-rollover_sprint         # destructive — exact Organization confirmation
+update_sprint_duration
+start_sprint
+end_sprint              # destructive — unfinished work returns to Backlog
 
 # failures return isError results with:
 # { error: { code, message, details } }

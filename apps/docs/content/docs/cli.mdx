@@ -46,7 +46,7 @@ npx neram activity --limit 20 --json      # recent activity feed
 
 ```bash lineNumbers
 npx neram task list --project "Project name" --status inProgress
-npx neram task add --project "Project name" --title "Follow up" --due 2026-02-01 --sprint backlog
+npx neram task add --project "Project name" --title "Follow up" --due 2026-02-01
 npx neram task move --task-id TASK_ID --status inProgress
 npx neram task move --task-id TASK_ID --status inProgress --position 1.5  # kanban order
 npx neram task done --task-id TASK_ID
@@ -84,15 +84,16 @@ npx neram workspace delete --organization-id ORG_ID --organization-slug SLUG --c
 ## Sprints
 
 ```bash lineNumbers
-npx neram sprint current --json          # also: backlog, upcoming
-npx neram sprint history [--sprint-id SPRINT_ID] --limit 20 --json
-npx neram sprint plan --task-id TASK_ID --sprint upcoming
-npx neram sprint remove --task-id TASK_ID --sprint current
-npx neram sprint goal --sprint current --goal "Ship the cutover"
-npx neram sprint cadence --weeks 2 --start-weekday 1 --timezone Asia/Kolkata
-npx neram sprint rollover --reason "Customer deadline" --organization-id ORG_ID --organization-slug SLUG --confirm
+npx neram sprint current --json          # or: backlog
+npx neram sprint history --limit 20 --json
+npx neram sprint start --duration 2 --goal "Ship the cutover"
+npx neram sprint plan --task-id TASK_ID
+npx neram sprint remove --task-id TASK_ID
+npx neram sprint goal --goal "Ship the cutover"
+npx neram sprint duration --value 1      # 1, 2, 4, or open
+npx neram sprint end --confirm
 ```
 
 ### Notes
 
-`neram task move` accepts an optional `--position` for kanban order. Sprints are organization-wide — planning one project also respects the same Current/Upcoming.
+`neram task move` accepts an optional `--position` for kanban order. Sprints are organization-wide and optional; a workspace can have only one active Sprint.

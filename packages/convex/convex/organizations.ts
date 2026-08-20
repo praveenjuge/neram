@@ -14,6 +14,7 @@ import {
 } from "./_generated/server"
 import type { MutationCtx } from "./_generated/server"
 import { actor, requireOrganization, requireOrganizationAdmin } from "./model"
+import { configuredDuration } from "./sprintModel"
 
 const role = v.union(v.literal("org:admin"), v.literal("org:member"))
 const memberFields = {
@@ -52,19 +53,12 @@ const member = v.object({
   updatedAt: v.number(),
 })
 const settings = v.object({
-  _id: v.id("organizationSettings"),
-  _creationTime: v.number(),
-  organizationId: v.string(),
-  cadenceWeeks: v.number(),
-  startWeekday: v.number(),
-  timezone: v.string(),
-  nextSprintNumber: v.number(),
-  currentSprintId: v.optional(v.id("sprints")),
-  upcomingSprintId: v.optional(v.id("sprints")),
-  rolloverStatus: v.union(v.literal("idle"), v.literal("running")),
-  activeRolloverJobId: v.optional(v.id("sprintRolloverJobs")),
-  createdAt: v.number(),
-  updatedAt: v.number(),
+  sprintDuration: v.union(
+    v.literal(1),
+    v.literal(2),
+    v.literal(4),
+    v.literal("open")
+  ),
 })
 const tokenContext = v.object({
   organizationId: v.string(),
@@ -96,7 +90,9 @@ export const current = query({
     return {
       organization: access.organization,
       membership: access.membership,
-      settings,
+      settings: settings
+        ? { sprintDuration: configuredDuration(settings) }
+        : null,
     }
   },
 })

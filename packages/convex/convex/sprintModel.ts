@@ -1,33 +1,12 @@
 import { ConvexError } from "convex/values"
 
 import type { Doc, Id } from "./_generated/dataModel"
-import type { MutationCtx, QueryCtx } from "./_generated/server"
+import type { MutationCtx } from "./_generated/server"
 import type { Actor } from "./model"
+import type { SprintDuration } from "./sprintTime"
 
 export const MAX_SPRINT_TASKS = 1000
-// Upper bound on how many future Sprints can be scheduled ahead of the active
-// one. Keeps the planning list and every "re-flow all upcoming" loop bounded.
-export const MAX_SCHEDULED_SPRINTS = 12
 type SprintActor = Pick<Actor, "userId" | "name">
-
-/**
- * All future ("upcoming") Sprints for an Organization, ordered soonest-first.
- * Sprint numbers are contiguous and increasing, so number order is also
- * chronological order. Bounded by MAX_SCHEDULED_SPRINTS so callers can safely
- * iterate the whole list inside a single query or mutation.
- */
-export async function upcomingSprints(
-  ctx: QueryCtx | MutationCtx,
-  organizationId: string
-) {
-  const rows = await ctx.db
-    .query("sprints")
-    .withIndex("by_organization_and_state", (q) =>
-      q.eq("organizationId", organizationId).eq("state", "upcoming")
-    )
-    .take(MAX_SCHEDULED_SPRINTS + 2)
-  return rows.sort((a, b) => a.number - b.number)
-}
 
 export function cleanGoal(goal?: string) {
   if (goal === undefined) return undefined
@@ -42,24 +21,6 @@ export function cleanGoal(goal?: string) {
   return value
 }
 
-export function cleanName(name?: string) {
-  if (name === undefined) return undefined
-  const value = name.trim()
-  if (!value) return undefined
-  if (value.length > 80) {
-    throw new ConvexError({
-      code: "INVALID_NAME",
-      message: "Sprint name must be at most 80 characters.",
-    })
-  }
-  return value
-}
-
-/**
- * Return the Organization's Sprint settings, creating a defaults row if none
- * exists. Sprints are never auto-created here: a workspace stays empty until a
- * member explicitly creates one, and settings only hold cadence + pointers.
- */
 export async function ensureSettings(
   ctx: MutationCtx,
   organizationId: string,
@@ -72,6 +33,8 @@ export async function ensureSettings(
   if (existing) return existing
   const id = await ctx.db.insert("organizationSettings", {
     organizationId,
+    sprintDuration: 2,
+    // Retained only for schema compatibility with pre-Focus deployments.
     cadenceWeeks: 2,
     startWeekday: 1,
     timezone: "UTC",
@@ -83,17 +46,24 @@ export async function ensureSettings(
   return (await ctx.db.get(id))!
 }
 
-/**
- * The active Sprint id when one is genuinely current, else undefined. Guards
- * against a stale pointer left after a Sprint closed with nothing scheduled.
- */
+export function configuredDuration(
+  settings: Doc<"organizationSettings">
+): SprintDuration {
+  if (settings.sprintDuration) return settings.sprintDuration
+  return settings.cadenceWeeks === 1 ||
+    settings.cadenceWeeks === 2 ||
+    settings.cadenceWeeks === 4
+    ? settings.cadenceWeeks
+    : 2
+}
+
 export async function activeSprintId(
   ctx: MutationCtx,
   settings: Doc<"organizationSettings">
 ) {
   if (!settings.currentSprintId) return undefined
   const sprint = await ctx.db.get(settings.currentSprintId)
-  return sprint && sprint.state === "current" ? sprint._id : undefined
+  return sprint?.state === "current" ? sprint._id : undefined
 }
 
 async function activeEntry(
@@ -101,42 +71,38 @@ async function activeEntry(
   sprintId: Id<"sprints">,
   taskId: Id<"tasks">
 ) {
-  const entries = await ctx.db
+  return await ctx.db
     .query("sprintTaskEntries")
     .withIndex("by_sprint_task_and_removed", (q) =>
       q.eq("sprintId", sprintId).eq("taskId", taskId).eq("removedAt", undefined)
     )
     .unique()
-  return entries
 }
 
-async function assertCapacity(ctx: MutationCtx, sprintId: Id<"sprints">) {
-  const tasks = await ctx.db
-    .query("sprintTaskEntries")
-    .withIndex("by_sprint_and_removed", (q) =>
-      q.eq("sprintId", sprintId).eq("removedAt", undefined)
-    )
-    .take(MAX_SPRINT_TASKS)
-  if (tasks.length >= MAX_SPRINT_TASKS) {
-    throw new ConvexError({
-      code: "SPRINT_TASK_LIMIT",
-      message: "A Sprint can contain at most 1,000 tasks.",
-    })
-  }
-}
-
-async function assertPlacementWritable(
-  ctx: MutationCtx,
-  organizationId: string
-) {
+async function assertWritable(ctx: MutationCtx, organizationId: string) {
   const settings = await ctx.db
     .query("organizationSettings")
     .withIndex("by_organization", (q) => q.eq("organizationId", organizationId))
     .unique()
   if (settings?.rolloverStatus === "running") {
     throw new ConvexError({
-      code: "SPRINT_ROLLOVER_RUNNING",
-      message: "Sprint planning is paused while rollover completes.",
+      code: "SPRINT_CLOSING",
+      message: "Sprint changes are paused while it closes.",
+    })
+  }
+}
+
+async function assertCapacity(ctx: MutationCtx, sprintId: Id<"sprints">) {
+  const entries = await ctx.db
+    .query("sprintTaskEntries")
+    .withIndex("by_sprint_and_removed", (q) =>
+      q.eq("sprintId", sprintId).eq("removedAt", undefined)
+    )
+    .take(MAX_SPRINT_TASKS)
+  if (entries.length >= MAX_SPRINT_TASKS) {
+    throw new ConvexError({
+      code: "SPRINT_TASK_LIMIT",
+      message: "A Sprint can contain at most 1,000 tasks.",
     })
   }
 }
@@ -157,14 +123,12 @@ export async function addTaskToSprint(
   if (
     !sprint ||
     sprint.organizationId !== args.task.organizationId ||
-    sprint.state === "closed"
+    sprint.state !== "current"
   ) {
     throw new ConvexError({ code: "NOT_FOUND", message: "Sprint not found." })
   }
   if (await activeEntry(ctx, sprint._id, args.task._id)) return sprint
-  if (args.origin !== "carried") {
-    await assertPlacementWritable(ctx, sprint.organizationId)
-  }
+  await assertWritable(ctx, sprint.organizationId)
   await assertCapacity(ctx, sprint._id)
   const now = args.now ?? Date.now()
   await ctx.db.insert("sprintTaskEntries", {
@@ -181,8 +145,8 @@ export async function addTaskToSprint(
     priorCompletionSprintId: args.priorCompletionSprintId,
   })
   await ctx.db.patch(args.task._id, {
-    currentSprintId: sprint.state === "current" ? sprint._id : undefined,
-    upcomingSprintId: sprint.state === "upcoming" ? sprint._id : undefined,
+    currentSprintId: sprint._id,
+    upcomingSprintId: undefined,
     updatedAt: now,
   })
   return sprint
@@ -200,7 +164,7 @@ export async function removeTaskFromSprint(
 ) {
   const entry = await activeEntry(ctx, args.sprintId, args.task._id)
   if (!entry) return
-  await assertPlacementWritable(ctx, args.task.organizationId)
+  await assertWritable(ctx, args.task.organizationId)
   const now = args.now ?? Date.now()
   await ctx.db.patch(entry._id, {
     removedAt: now,
@@ -209,20 +173,14 @@ export async function removeTaskFromSprint(
     removalReason: args.reason,
   })
   await ctx.db.patch(args.task._id, {
-    currentSprintId:
-      args.task.currentSprintId === args.sprintId
-        ? undefined
-        : args.task.currentSprintId,
-    upcomingSprintId:
-      args.task.upcomingSprintId === args.sprintId
-        ? undefined
-        : args.task.upcomingSprintId,
+    currentSprintId: undefined,
+    upcomingSprintId: undefined,
     updatedAt: now,
   })
 }
 
 async function latestCreditedSprint(ctx: MutationCtx, task: Doc<"tasks">) {
-  const entries = await ctx.db
+  const entry = await ctx.db
     .query("sprintTaskEntries")
     .withIndex("by_organization_task_and_completion", (q) =>
       q
@@ -232,7 +190,7 @@ async function latestCreditedSprint(ctx: MutationCtx, task: Doc<"tasks">) {
     )
     .order("desc")
     .first()
-  return entries?.sprintId
+  return entry?.sprintId
 }
 
 export async function applyStatusSprintRules(
@@ -248,11 +206,9 @@ export async function applyStatusSprintRules(
   const { task, project, actor, nextStatus, now } = args
   if (task.status === nextStatus) return {}
   const settings = await ensureSettings(ctx, task.organizationId, now)
-  const currentSprintId = await activeSprintId(ctx, settings)
+  const sprintId = await activeSprintId(ctx, settings)
 
-  // No active Sprint: status changes never create or join a Sprint; only the
-  // task's own completion timestamp moves.
-  if (!currentSprintId) {
+  if (!sprintId) {
     if (nextStatus === "done") return { completedAt: now }
     if (task.status === "done") return { completedAt: undefined }
     return {}
@@ -264,49 +220,39 @@ export async function applyStatusSprintRules(
       await addTaskToSprint(ctx, {
         task,
         project,
-        sprintId: currentSprintId,
+        sprintId,
         actor,
         origin: "reopened",
         priorCompletionSprintId,
         now,
       })
     }
-    const entry = await activeEntry(ctx, currentSprintId, task._id)
+    const entry = await activeEntry(ctx, sprintId, task._id)
     if (entry)
       await ctx.db.patch(entry._id, { creditedCompletionAt: undefined })
-    return { completedAt: undefined, currentSprintId }
+    return { completedAt: undefined, currentSprintId: sprintId }
   }
 
-  if (nextStatus === "inProgress" || nextStatus === "done") {
-    if (task.upcomingSprintId) {
-      await removeTaskFromSprint(ctx, {
-        task,
-        sprintId: task.upcomingSprintId,
-        actor,
-        reason: "started_early",
-        now,
-      })
-    }
-    if (!task.currentSprintId) {
-      await addTaskToSprint(ctx, {
-        task: { ...task, upcomingSprintId: undefined },
-        project,
-        sprintId: currentSprintId,
-        actor,
-        origin: "scope_added",
-        now,
-      })
-    }
+  if (
+    (nextStatus === "inProgress" || nextStatus === "done") &&
+    !task.currentSprintId
+  ) {
+    await addTaskToSprint(ctx, {
+      task,
+      project,
+      sprintId,
+      actor,
+      origin: "scope_added",
+      now,
+    })
   }
 
   if (nextStatus === "done") {
-    const entry = await activeEntry(ctx, currentSprintId, task._id)
+    const entry = await activeEntry(ctx, sprintId, task._id)
     if (entry) await ctx.db.patch(entry._id, { creditedCompletionAt: now })
-    return { completedAt: now, currentSprintId }
+    return { completedAt: now, currentSprintId: sprintId }
   }
-  return task.upcomingSprintId
-    ? { upcomingSprintId: undefined, currentSprintId }
-    : {}
+  return task.currentSprintId ? {} : { currentSprintId: sprintId }
 }
 
 export async function markTaskEntriesRemoved(
@@ -319,14 +265,6 @@ export async function markTaskEntriesRemoved(
     await removeTaskFromSprint(ctx, {
       task,
       sprintId: task.currentSprintId,
-      actor,
-      reason,
-    })
-  }
-  if (task.upcomingSprintId) {
-    await removeTaskFromSprint(ctx, {
-      task,
-      sprintId: task.upcomingSprintId,
       actor,
       reason,
     })

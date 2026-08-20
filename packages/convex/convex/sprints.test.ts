@@ -5,7 +5,6 @@ import { expect, test } from "vitest"
 import { api, internal } from "./_generated/api"
 import type { Id } from "./_generated/dataModel"
 import schema from "./schema"
-import { initialSprintBounds } from "./sprintTime"
 
 const modules = import.meta.glob("./**/*.ts")
 const page = { paginationOpts: { numItems: 100, cursor: null } }
@@ -78,653 +77,239 @@ async function setup() {
   }
 }
 
-type Member = Awaited<ReturnType<typeof setup>>["alice"]
-
-// Workspaces start with no Sprints. Members create the active Sprint plus any
-// scheduled Sprints explicitly; the first created becomes Current and the rest
-// are Upcoming. Returns [currentId, ...upcomingIds].
-async function seedSprints(who: Member, upcomingCount = 1) {
-  const ids = [await who.mutation(api.sprints.scheduleSprint, {})]
-  for (let index = 0; index < upcomingCount; index += 1) {
-    ids.push(await who.mutation(api.sprints.scheduleSprint, {}))
+async function finishClose(
+  who: Awaited<ReturnType<typeof setup>>["alice"],
+  jobId: Id<"sprintRolloverJobs">
+) {
+  for (let index = 0; index < 10; index += 1) {
+    const complete = await who.run(
+      async (ctx) => (await ctx.db.get(jobId))?.status === "completed"
+    )
+    if (complete) return
+    await who.mutation(internal.sprintRollover.process, { jobId })
   }
-  return ids
+  throw new Error("Sprint close did not complete")
 }
 
-test("Organization projection enforces tenant isolation and stale-member denial", async () => {
-  const { t, alice, bob, carol } = await setup()
-  const projectId = await alice.mutation(api.projects.create, {
-    name: "Alpha Product",
-  })
-  await alice.mutation(api.tasks.create, { projectId, title: "Private task" })
-
-  expect(await bob.query(api.projects.list, {})).toHaveLength(1)
-  expect(await carol.query(api.projects.list, {})).toHaveLength(0)
-  expect(await carol.query(api.projects.get, { projectId })).toBeNull()
-  await expect(carol.query(api.tasks.list, { projectId })).rejects.toThrow()
-
-  await t.mutation(internal.organizations.removeMemberProjection, {
-    organizationId: "org_alpha",
-    userId: "user_bob",
-  })
-  await expect(bob.query(api.projects.list, {})).rejects.toThrow()
-})
-
-test("a new workspace has no Sprints until one is created", async () => {
-  const { alice } = await setup()
-  expect(await alice.query(api.sprints.current, {})).toBeNull()
-  expect(await alice.query(api.sprints.upcoming, {})).toBeNull()
-  expect(await alice.query(api.sprints.upcomingList, {})).toEqual([])
-
-  const firstId = await alice.mutation(api.sprints.scheduleSprint, {
-    name: "Kickoff",
-  })
-  const current = await alice.query(api.sprints.current, {})
-  expect(current?.sprint._id).toBe(firstId)
-  expect(current?.sprint.name).toBe("Kickoff")
-  // A second creation schedules an Upcoming Sprint rather than a second Current.
-  const secondId = await alice.mutation(api.sprints.scheduleSprint, {})
-  const list = await alice.query(api.sprints.upcomingList, {})
-  expect(list.map((entry) => entry.sprint._id)).toEqual([secondId])
-})
-
-test("moving a task with no active Sprint only changes status", async () => {
+test("Sprints are optional and task capture always starts in Backlog", async () => {
   const { alice } = await setup()
   const projectId = await alice.mutation(api.projects.create, {
     name: "Product",
   })
   const taskId = await alice.mutation(api.tasks.create, {
     projectId,
-    title: "Do the thing",
+    title: "Shape the release",
   })
+
+  expect(await alice.query(api.sprints.current, {})).toBeNull()
   await alice.mutation(api.tasks.move, { taskId, status: "inProgress" })
-  // With no Sprint, the task stays in the Backlog and just changes status.
-  expect(await alice.query(api.sprints.current, {})).toBeNull()
-  const backlog = await alice.query(api.sprints.backlog, {})
-  expect(backlog.find((task) => task._id === taskId)?.status).toBe("inProgress")
+  expect(
+    (await alice.query(api.sprints.backlog, {})).find(
+      (task) => task._id === taskId
+    )?.status
+  ).toBe("inProgress")
 })
 
-test("any upcoming Sprint can be unscheduled and returns work to the Backlog", async () => {
+test("only one Sprint can run and duration starts from the moment it begins", async () => {
   const { alice } = await setup()
+  const before = Date.now()
+  const sprintId = await alice.mutation(api.sprints.start, {
+    duration: 1,
+    goal: "Ship the cutover",
+  })
+  const current = await alice.query(api.sprints.current, {})
+
+  expect(current?.sprint._id).toBe(sprintId)
+  expect(current?.sprint.startsAt).toBeGreaterThanOrEqual(before)
+  expect(current!.sprint.endsAt! - current!.sprint.startsAt).toBe(
+    7 * 24 * 60 * 60 * 1000
+  )
+  expect(current?.sprint.goal).toBe("Ship the cutover")
+  await expect(alice.mutation(api.sprints.start, {})).rejects.toThrow()
+})
+
+test("open-ended Sprints have no scheduled end and duration affects only the next Sprint", async () => {
+  const { alice } = await setup()
+  await alice.mutation(api.sprints.updateDuration, { duration: "open" })
+  await alice.mutation(api.sprints.start, {})
+  const current = await alice.query(api.sprints.current, {})
+  const context = await alice.query(api.organizations.current, {})
+
+  expect(current?.sprint.endsAt).toBeUndefined()
+  expect(context.settings?.sprintDuration).toBe("open")
+  await alice.mutation(api.sprints.updateDuration, { duration: 2 })
+  expect(
+    (await alice.query(api.sprints.current, {}))?.sprint.endsAt
+  ).toBeUndefined()
+})
+
+test("members add Backlog work to Current and removal restores active work to Todo", async () => {
+  const { alice, bob } = await setup()
+  await alice.mutation(api.sprints.start, {})
   const projectId = await alice.mutation(api.projects.create, {
     name: "Product",
   })
-  const [, secondId] = await seedSprints(alice, 2)
   const taskId = await alice.mutation(api.tasks.create, {
     projectId,
-    title: "Planned work",
+    title: "Implement focus",
   })
-  await alice.mutation(api.sprints.plan, {
-    taskIds: [taskId],
-    sprint: secondId,
-  })
-  // Removing the earliest upcoming (not just the last) is allowed now.
-  await alice.mutation(api.sprints.unscheduleSprint, { sprintId: secondId })
-  const remaining = await alice.query(api.sprints.upcomingList, {})
-  expect(remaining.map((entry) => entry.sprint._id)).not.toContain(secondId)
-  expect(remaining).toHaveLength(1)
+
+  await bob.mutation(api.sprints.plan, { taskIds: [taskId] })
   expect(
-    (await alice.query(api.sprints.backlog, {})).map((task) => task._id)
+    (await bob.query(api.sprints.current, {}))?.tasks.map((task) => task._id)
   ).toContain(taskId)
+  await bob.mutation(api.tasks.move, { taskId, status: "inProgress" })
+  await bob.mutation(api.sprints.remove, { taskIds: [taskId] })
+
+  const backlogTask = (await bob.query(api.sprints.backlog, {})).find(
+    (task) => task._id === taskId
+  )
+  expect(backlogTask?.status).toBe("todo")
+  expect(backlogTask?.currentSprintId).toBeUndefined()
 })
 
-test("members plan work and status movement applies Current and early-start rules", async () => {
-  const { alice, bob } = await setup()
-  await seedSprints(alice)
-  const projectId = await alice.mutation(api.projects.create, {
-    name: "Product",
-  })
-  const backlogTask = await alice.mutation(api.tasks.create, {
-    projectId,
-    title: "Start from backlog",
-  })
-  const upcomingTask = await alice.mutation(api.tasks.create, {
-    projectId,
-    title: "Start early",
-    sprint: "upcoming",
-  })
-  await bob.mutation(api.sprints.plan, {
-    taskIds: [upcomingTask],
-    sprint: "upcoming",
-  })
-  await bob.mutation(api.sprints.plan, {
-    taskIds: [upcomingTask],
-    sprint: "upcoming",
-  })
-  const upcomingBeforeStart = await bob.query(api.sprints.upcoming, {})
-  const plannedEntries = await bob.query(api.sprints.audit, {
-    sprintId: upcomingBeforeStart!.sprint._id,
-    ...page,
-  })
-  expect(
-    plannedEntries.page.filter((entry) => entry.taskId === upcomingTask)
-  ).toHaveLength(1)
-
-  expect(
-    (await bob.query(api.sprints.backlog, {})).map((task) => task._id)
-  ).toContain(backlogTask)
-  await bob.mutation(api.tasks.move, {
-    taskId: backlogTask,
-    status: "inProgress",
-  })
-  await bob.mutation(api.tasks.move, {
-    taskId: upcomingTask,
-    status: "inProgress",
-  })
-
-  const current = await bob.query(api.sprints.current, {})
-  const upcoming = await bob.query(api.sprints.upcoming, {})
-  expect(current?.tasks.map((task) => task._id).sort()).toEqual(
-    [backlogTask, upcomingTask].sort()
-  )
-  expect(upcoming?.tasks).toHaveLength(0)
-
-  await bob.mutation(api.sprints.remove, {
-    taskIds: [upcomingTask],
-    sprint: "current",
-  })
-  const removed = (await bob.query(api.sprints.backlog, {})).find(
-    (task) => task._id === upcomingTask
-  )
-  expect(removed?.status).toBe("todo")
-  expect(await bob.query(api.projects.get, { projectId })).toMatchObject({
-    todoCount: 1,
-    inProgressCount: 1,
-  })
-})
-
-test("rollover credits cutoff completions, carries unfinished work, and preserves reopening history", async () => {
+test("starting work auto-joins Current and completion is credited", async () => {
   const { alice } = await setup()
-  await seedSprints(alice)
+  await alice.mutation(api.sprints.start, {})
   const projectId = await alice.mutation(api.projects.create, {
     name: "Product",
   })
-  const completed = await alice.mutation(api.tasks.create, {
+  const taskId = await alice.mutation(api.tasks.create, {
     projectId,
-    title: "Completed",
-    sprint: "current",
+    title: "Test the workflow",
   })
-  const carried = await alice.mutation(api.tasks.create, {
-    projectId,
-    title: "Carry me",
-    sprint: "current",
-  })
-  const planned = await alice.mutation(api.tasks.create, {
-    projectId,
-    title: "Planned next",
-    sprint: "upcoming",
-  })
-  await alice.mutation(api.tasks.move, { taskId: completed, status: "done" })
 
-  await expect(
-    alice.mutation(api.sprints.rollover, {
-      organizationId: "org_alpha",
-      slug: "wrong",
-      confirm: true,
-      reason: "Should fail",
-    })
-  ).rejects.toThrow()
-
-  const jobId = await alice.mutation(api.sprints.rollover, {
-    organizationId: "org_alpha",
-    slug: "alpha",
-    confirm: true,
-    reason: "Customer deadline",
-  })
-  for (let index = 0; index < 10; index += 1) {
-    const done = await alice.run(
-      async (ctx) => (await ctx.db.get(jobId))?.status === "completed"
-    )
-    if (done) break
-    await alice.mutation(internal.sprintRollover.process, { jobId })
-  }
-
+  await alice.mutation(api.tasks.move, { taskId, status: "inProgress" })
+  await alice.mutation(api.tasks.move, { taskId, status: "done" })
   const current = await alice.query(api.sprints.current, {})
-  expect(current?.tasks.map((task) => task._id).sort()).toEqual(
-    [carried, planned].sort()
-  )
-  const history = await alice.query(api.sprints.history, page)
-  expect(history.page).toHaveLength(1)
-  expect(history.page[0]).toMatchObject({
-    completedCount: 1,
-    carriedCount: 1,
-    addedCount: 2,
-    earlyCloseReason: "Customer deadline",
-  })
-
-  await alice.mutation(api.tasks.move, { taskId: completed, status: "todo" })
-  const reopenedCurrent = await alice.query(api.sprints.current, {})
-  expect(reopenedCurrent?.tasks.map((task) => task._id)).toContain(completed)
-  const audit = await alice.query(api.sprints.audit, {
-    sprintId: reopenedCurrent!.sprint._id,
-    ...page,
-  })
-  expect(audit.page.find((entry) => entry.taskId === completed)?.origin).toBe(
-    "reopened"
-  )
+  expect(
+    current?.tasks.find((task) => task._id === taskId)?.completedAt
+  ).toBeDefined()
+  await expect(
+    alice.mutation(api.sprints.remove, { taskIds: [taskId] })
+  ).rejects.toThrow()
 })
 
-test("closed summaries preserve baseline truth and later scope changes", async () => {
+test("ending snapshots simple progress and returns unfinished work to Backlog", async () => {
   const { alice } = await setup()
-  await seedSprints(alice)
+  await alice.mutation(api.sprints.start, {})
   const projectId = await alice.mutation(api.projects.create, {
-    name: "Planning",
+    name: "Product",
   })
-  const carried = await alice.mutation(api.tasks.create, {
+  const done = await alice.mutation(api.tasks.create, {
     projectId,
-    title: "Carry forward",
-    sprint: "current",
+    title: "Done",
   })
-  const planned = await alice.mutation(api.tasks.create, {
+  const unfinished = await alice.mutation(api.tasks.create, {
     projectId,
-    title: "Opening plan",
-    sprint: "upcoming",
+    title: "Still open",
   })
-  const firstJob = await alice.mutation(api.sprints.rollover, {
-    organizationId: "org_alpha",
-    slug: "alpha",
-    confirm: true,
-    reason: "Open the planned Sprint",
-  })
-  for (let index = 0; index < 10; index += 1) {
-    const done = await alice.run(
-      async (ctx) => (await ctx.db.get(firstJob))?.status === "completed"
-    )
-    if (done) break
-    await alice.mutation(internal.sprintRollover.process, { jobId: firstJob })
-  }
+  await alice.mutation(api.sprints.plan, { taskIds: [done, unfinished] })
+  await alice.mutation(api.tasks.move, { taskId: done, status: "done" })
 
-  // Schedule the next Sprint so unfinished work has somewhere to carry into.
-  await alice.mutation(api.sprints.scheduleSprint, {})
+  const jobId = await alice.mutation(api.sprints.end, { confirm: true })
+  await finishClose(alice, jobId)
 
-  await alice.mutation(api.sprints.remove, {
-    taskIds: [planned],
-    sprint: "current",
-  })
-  const added = await alice.mutation(api.tasks.create, {
-    projectId,
-    title: "Late discovery",
-  })
-  await alice.mutation(api.tasks.move, { taskId: added, status: "inProgress" })
-  await alice.mutation(api.tasks.move, { taskId: carried, status: "done" })
-
-  const secondJob = await alice.mutation(api.sprints.rollover, {
-    organizationId: "org_alpha",
-    slug: "alpha",
-    confirm: true,
-    reason: "Close with scope truth",
-  })
-  for (let index = 0; index < 10; index += 1) {
-    const done = await alice.run(
-      async (ctx) => (await ctx.db.get(secondJob))?.status === "completed"
-    )
-    if (done) break
-    await alice.mutation(internal.sprintRollover.process, { jobId: secondJob })
-  }
-
+  expect(await alice.query(api.sprints.current, {})).toBeNull()
+  const backlogIds = (await alice.query(api.sprints.backlog, {})).map(
+    (task) => task._id
+  )
+  expect(backlogIds).toContain(unfinished)
+  expect(backlogIds).not.toContain(done)
   const history = await alice.query(api.sprints.history, page)
   expect(history.page[0]).toMatchObject({
-    number: 2,
     baselineCount: 2,
     completedCount: 1,
-    carriedCount: 1,
-    addedCount: 1,
-    removedCount: 1,
   })
+  expect(history.page[0]).not.toHaveProperty("carriedCount")
+
+  await alice.mutation(api.sprints.start, {})
+  expect((await alice.query(api.sprints.current, {}))?.tasks).toEqual([])
 })
 
-test("delayed rollover uses the scheduled cutoff and repair resumes one job", async () => {
-  const { t, alice } = await setup()
-  await seedSprints(alice)
+test("Sprint planning preserves tenant isolation", async () => {
+  const { alice, carol } = await setup()
+  await alice.mutation(api.sprints.start, {})
   const projectId = await alice.mutation(api.projects.create, {
-    name: "Cutoff",
+    name: "Private",
   })
-  const exact = await alice.mutation(api.tasks.create, {
+  const taskId = await alice.mutation(api.tasks.create, {
     projectId,
-    title: "Exact cutoff",
-    sprint: "current",
+    title: "Secret",
   })
-  const late = await alice.mutation(api.tasks.create, {
+  await expect(
+    carol.mutation(api.sprints.plan, { taskIds: [taskId] })
+  ).rejects.toThrow()
+})
+
+test("approved migration returns future work to Backlog and removes only future Sprint data", async () => {
+  const { t, alice } = await setup()
+  const currentId = await alice.mutation(api.sprints.start, {})
+  const projectId = await alice.mutation(api.projects.create, {
+    name: "Product",
+  })
+  const currentTask = await alice.mutation(api.tasks.create, {
     projectId,
-    title: "After cutoff",
-    sprint: "current",
+    title: "Current work",
   })
-  const current = await alice.query(api.sprints.current, {})
-  const cutoffAt = Date.now() - 1_000
-  await t.run(async (ctx) => {
-    await ctx.db.patch(current!.sprint._id, { endsAt: cutoffAt })
-    for (const [taskId, completedAt] of [
-      [exact, cutoffAt],
-      [late, cutoffAt + 1],
-    ] as const) {
-      await ctx.db.patch(taskId, { status: "done", completedAt })
-      const entry = await ctx.db
-        .query("sprintTaskEntries")
-        .withIndex("by_sprint_task_and_removed", (q) =>
-          q
-            .eq("sprintId", current!.sprint._id)
-            .eq("taskId", taskId)
-            .eq("removedAt", undefined)
-        )
-        .unique()
-      await ctx.db.patch(entry!._id, { creditedCompletionAt: completedAt })
-    }
+  await alice.mutation(api.sprints.plan, { taskIds: [currentTask] })
+
+  const { futureId, futureTask } = await t.run(async (ctx) => {
+    const now = Date.now()
+    const futureId = await ctx.db.insert("sprints", {
+      organizationId: "org_alpha",
+      number: 99,
+      state: "upcoming",
+      startsAt: now + 1000,
+      endsAt: now + 2000,
+      createdAt: now,
+      updatedAt: now,
+    })
+    const futureTask = await ctx.db.insert("tasks", {
+      organizationId: "org_alpha",
+      projectId,
+      title: "Future work",
+      status: "todo",
+      upcomingSprintId: futureId,
+      position: now,
+      createdAt: now,
+      updatedAt: now,
+    })
+    await ctx.db.insert("sprintTaskEntries", {
+      organizationId: "org_alpha",
+      sprintId: futureId,
+      taskId: futureTask,
+      projectId,
+      projectNameSnapshot: "Product",
+      taskTitleSnapshot: "Future work",
+      origin: "planned",
+      actorUserId: "user_alice",
+      actorName: "Alice",
+      addedAt: now,
+    })
+    return { futureId, futureTask }
   })
 
-  await alice.mutation(internal.sprintRollover.scheduled, {
-    organizationId: "org_alpha",
-    sprintId: current!.sprint._id,
-  })
-  const jobId = await t.run(async (ctx) => {
-    const jobs = await ctx.db
-      .query("sprintRolloverJobs")
-      .withIndex("by_closing_sprint", (q) =>
-        q.eq("closingSprintId", current!.sprint._id)
-      )
-      .take(10)
-    expect(jobs).toHaveLength(1)
-    return jobs[0]._id
-  })
-  await alice.mutation(internal.sprintRollover.process, { jobId })
-  await alice.mutation(internal.sprintRollover.repair, {})
-  for (let index = 0; index < 10; index += 1) {
-    const done = await alice.run(
-      async (ctx) => (await ctx.db.get(jobId))?.status === "completed"
-    )
-    if (done) break
-    await alice.mutation(internal.sprintRollover.process, { jobId })
-  }
-
-  const history = await alice.query(api.sprints.history, page)
-  expect(history.page[0]).toMatchObject({
-    closedCutoffAt: cutoffAt,
-    completedCount: 1,
-    carriedCount: 1,
-  })
-  expect((await alice.query(api.sprints.current, {}))?.tasks).toEqual(
-    expect.arrayContaining([expect.objectContaining({ _id: late })])
-  )
   expect(
-    await t.run(
-      async (ctx) =>
-        await ctx.db
-          .query("sprintRolloverJobs")
-          .withIndex("by_closing_sprint", (q) =>
-            q.eq("closingSprintId", current!.sprint._id)
-          )
-          .take(10)
-    )
-  ).toHaveLength(1)
-})
+    (await alice.query(api.sprints.backlog, {})).map((task) => task._id)
+  ).toContain(futureTask)
 
-test("capacity counts live work and rollover summarizes a larger audit in batches", async () => {
-  const { t, alice } = await setup()
-  await seedSprints(alice)
-  const projectId = await alice.mutation(api.projects.create, {
-    name: "Ceiling",
-  })
-  const filler = await alice.mutation(api.tasks.create, {
-    projectId,
-    title: "Historical filler",
-  })
-  const target = await alice.mutation(api.tasks.create, {
-    projectId,
-    title: "Valid after churn",
-  })
-  const current = await alice.query(api.sprints.current, {})
-  for (let batch = 0; batch < 10; batch += 1) {
-    await t.run(async (ctx) => {
-      for (let offset = 0; offset < 100; offset += 1) {
-        const index = batch * 100 + offset
-        await ctx.db.insert("sprintTaskEntries", {
-          organizationId: "org_alpha",
-          sprintId: current!.sprint._id,
-          taskId: filler,
-          projectId,
-          projectNameSnapshot: "Ceiling",
-          taskTitleSnapshot: "Historical filler",
-          origin: "scope_added",
-          actorUserId: "user_alice",
-          actorName: "Alice",
-          addedAt: index,
-          removedAt: index + 1,
-          removedByUserId: "user_alice",
-          removedByName: "Alice",
-          removalReason: "test_churn",
-        })
-      }
+  for (let index = 0; index < 4; index += 1) {
+    await alice.mutation(internal.sprintMigration.cleanupSprint, {
+      sprintId: futureId,
     })
   }
-  await alice.mutation(api.sprints.plan, {
-    taskIds: [target],
-    sprint: "current",
-  })
-  await alice.mutation(api.sprints.remove, {
-    taskIds: [target],
-    sprint: "current",
-  })
-  const jobId = await alice.mutation(api.sprints.rollover, {
-    organizationId: "org_alpha",
-    slug: "alpha",
-    confirm: true,
-    reason: "Close high-churn Sprint",
-  })
-  for (let attempt = 0; attempt < 30; attempt += 1) {
-    const done = await t.run(
-      async (ctx) => (await ctx.db.get(jobId))?.status === "completed"
-    )
-    if (done) break
-    await alice.mutation(internal.sprintRollover.process, { jobId })
-  }
-  expect((await alice.query(api.sprints.history, page)).page[0]).toMatchObject({
-    removedCount: 1001,
-  })
-
-  const nextCurrent = await alice.query(api.sprints.current, {})
-  for (let batch = 0; batch < 10; batch += 1) {
-    await t.run(async (ctx) => {
-      for (let offset = 0; offset < 100; offset += 1) {
-        const index = batch * 100 + offset
-        await ctx.db.insert("sprintTaskEntries", {
-          organizationId: "org_alpha",
-          sprintId: nextCurrent!.sprint._id,
-          taskId: filler,
-          projectId,
-          projectNameSnapshot: "Ceiling",
-          taskTitleSnapshot: "Active filler",
-          origin: "scope_added",
-          actorUserId: "user_alice",
-          actorName: "Alice",
-          addedAt: index,
-        })
-      }
-    })
-  }
-  await expect(
-    alice.mutation(api.sprints.plan, {
-      taskIds: [target],
-      sprint: "current",
-    })
-  ).rejects.toThrow("at most 1,000 tasks")
-})
-
-test("rollover capacity fails before writes and recovers after replanning", async () => {
-  const { t, alice } = await setup()
-  await seedSprints(alice)
-  const projectId = await alice.mutation(api.projects.create, {
-    name: "Rollover ceiling",
-  })
-  await alice.mutation(api.tasks.create, {
-    projectId,
-    title: "Carry me",
-    sprint: "current",
-  })
-  const current = await alice.query(api.sprints.current, {})
-  const upcoming = await alice.query(api.sprints.upcoming, {})
-  const upcomingTaskIds: Id<"tasks">[] = []
-  for (let batch = 0; batch < 10; batch += 1) {
-    await t.run(async (ctx) => {
-      for (let offset = 0; offset < 100; offset += 1) {
-        const index = batch * 100 + offset
-        const taskId = await ctx.db.insert("tasks", {
-          organizationId: "org_alpha",
-          projectId,
-          title: `Planned ${index}`,
-          status: "todo",
-          upcomingSprintId: upcoming!.sprint._id,
-          position: index,
-          createdAt: index,
-          updatedAt: index,
-        })
-        upcomingTaskIds.push(taskId)
-        await ctx.db.insert("sprintTaskEntries", {
-          organizationId: "org_alpha",
-          sprintId: upcoming!.sprint._id,
-          taskId,
-          projectId,
-          projectNameSnapshot: "Rollover ceiling",
-          taskTitleSnapshot: `Planned ${index}`,
-          origin: "planned",
-          actorUserId: "user_alice",
-          actorName: "Alice",
-          addedAt: index,
-        })
-      }
-    })
-  }
-
-  await t.run(async (ctx) => {
-    await ctx.db.patch(current!.sprint._id, { endsAt: Date.now() - 1 })
-  })
-  await expect(
-    alice.mutation(internal.sprintRollover.scheduled, {
-      organizationId: "org_alpha",
-      sprintId: current!.sprint._id,
-    })
-  ).rejects.toThrow("Move at least 1 task from Upcoming to Backlog")
-  await t.run(async (ctx) => {
-    const settings = await ctx.db
-      .query("organizationSettings")
-      .withIndex("by_organization", (q) => q.eq("organizationId", "org_alpha"))
-      .unique()
-    expect(settings?.rolloverStatus).toBe("idle")
-    expect(settings?.activeRolloverJobId).toBeUndefined()
-    expect(
-      await ctx.db
-        .query("sprintRolloverJobs")
-        .withIndex("by_organization_and_status", (q) =>
-          q.eq("organizationId", "org_alpha").eq("status", "running")
-        )
-        .take(1)
-    ).toHaveLength(0)
-  })
-
-  await alice.mutation(api.sprints.remove, {
-    taskIds: [upcomingTaskIds[0]],
-    sprint: "upcoming",
-  })
-  await alice.mutation(internal.sprintRollover.scheduled, {
-    organizationId: "org_alpha",
-    sprintId: current!.sprint._id,
-  })
-  const jobId = await t.run(async (ctx) => {
-    const jobs = await ctx.db
-      .query("sprintRolloverJobs")
-      .withIndex("by_organization_and_status", (q) =>
-        q.eq("organizationId", "org_alpha").eq("status", "running")
-      )
-      .take(2)
-    expect(jobs).toHaveLength(1)
-    return jobs[0]._id
-  })
-  await expect(
-    alice.mutation(api.sprints.plan, {
-      taskIds: [upcomingTaskIds[0]],
-      sprint: "upcoming",
-    })
-  ).rejects.toThrow("planning is paused")
-  for (let attempt = 0; attempt < 30; attempt += 1) {
-    const done = await t.run(
-      async (ctx) => (await ctx.db.get(jobId))?.status === "completed"
-    )
-    if (done) break
-    await alice.mutation(internal.sprintRollover.process, { jobId })
-  }
-  await t.run(async (ctx) => {
-    expect(await ctx.db.get(jobId)).toMatchObject({ status: "completed" })
-    const settings = await ctx.db
-      .query("organizationSettings")
-      .withIndex("by_organization", (q) => q.eq("organizationId", "org_alpha"))
-      .unique()
-    expect(settings).toMatchObject({
-      rolloverStatus: "idle",
-      currentSprintId: upcoming!.sprint._id,
-    })
-    expect(settings?.activeRolloverJobId).toBeUndefined()
-  })
-})
-
-test("Sprint API keeps stable validation errors and allows member planning controls", async () => {
-  const { alice, bob, carol } = await setup()
-  await seedSprints(alice)
-  const beforeCurrent = await alice.query(api.sprints.current, {})
-  const beforeUpcoming = await alice.query(api.sprints.upcoming, {})
-
-  await bob.mutation(api.sprints.updateGoal, {
-    sprint: "current",
-    goal: "Ship the tenant cutover",
-  })
-  await bob.mutation(api.sprints.updateCadence, {
-    cadenceWeeks: 3,
-    startWeekday: 2,
-    timezone: "Asia/Kolkata",
-  })
-  const afterCurrent = await alice.query(api.sprints.current, {})
-  const afterUpcoming = await alice.query(api.sprints.upcoming, {})
-  expect(afterCurrent?.sprint).toMatchObject({
-    goal: "Ship the tenant cutover",
-    endsAt: beforeCurrent?.sprint.endsAt,
-  })
-  expect(afterUpcoming?.sprint.endsAt).not.toBe(beforeUpcoming?.sprint.endsAt)
-
-  await expect(
-    bob.mutation(api.sprints.updateCadence, {
-      cadenceWeeks: 0,
-      startWeekday: 1,
-      timezone: "UTC",
-    })
-  ).rejects.toThrow('"code":"INVALID_CADENCE"')
-  await expect(
-    bob.mutation(api.sprints.updateGoal, {
-      sprint: "current",
-      goal: "x".repeat(501),
-    })
-  ).rejects.toThrow('"code":"INVALID_GOAL"')
-  await expect(
-    carol.query(api.sprints.audit, {
-      sprintId: beforeCurrent!.sprint._id,
-      ...page,
-    })
-  ).rejects.toThrow('"code":"NOT_FOUND"')
-
-  await expect(
-    bob.mutation(api.sprints.rollover, {
-      organizationId: "org_alpha",
-      slug: "alpha",
-      confirm: true,
-      reason: "Member-triggered close",
-    })
-  ).resolves.toBeDefined()
-})
-
-test("Sprint boundaries retain local midnight across a DST change", () => {
-  const bounds = initialSprintBounds(Date.parse("2026-03-03T12:00:00Z"), {
-    cadenceWeeks: 2,
-    startWeekday: 1,
-    timezone: "America/New_York",
-  })
-  expect(new Date(bounds.startsAt).toISOString()).toBe(
-    "2026-03-02T05:00:00.000Z"
-  )
-  expect(new Date(bounds.endsAt).toISOString()).toBe("2026-03-16T04:00:00.000Z")
+  const state = await t.run(async (ctx) => ({
+    future: await ctx.db.get(futureId),
+    current: await ctx.db.get(currentId),
+    task: await ctx.db.get(futureTask),
+    entries: await ctx.db
+      .query("sprintTaskEntries")
+      .withIndex("by_sprint_and_added_at", (q) => q.eq("sprintId", futureId))
+      .take(10),
+  }))
+  expect(state.future).toBeNull()
+  expect(state.entries).toEqual([])
+  expect(state.task?.upcomingSprintId).toBeUndefined()
+  expect(state.current?.state).toBe("current")
 })

@@ -12,11 +12,10 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { groupBacklogTasks } from "@/lib/sprint-planning"
 
-import { PlanTargetDialog } from "./plan-dialog"
-import { InfoHint, Loading, runToast, type SprintTarget } from "./shared"
+import { InfoHint, Loading, runToast } from "./shared"
 
 const BACKLOG_HINT =
-  "Tasks not yet in a Sprint. Select any, then plan them into Current or a scheduled Sprint."
+  "Unfinished tasks outside the active Sprint. Select any to add them to this Sprint."
 
 export function BacklogPicker() {
   const backlog = useQuery(api.sprints.backlog)
@@ -29,11 +28,11 @@ export function BacklogPicker() {
   )
   if (backlog === undefined) return <Loading />
 
-  function submit(target: SprintTarget) {
+  function submit() {
     const taskIds = [...selected]
     if (taskIds.length === 0) return
-    runToast(plan({ taskIds, sprint: target }), {
-      success: `Planned ${taskIds.length} task${taskIds.length === 1 ? "" : "s"}.`,
+    runToast(plan({ taskIds }), {
+      success: `Added ${taskIds.length} task${taskIds.length === 1 ? "" : "s"} to this Sprint.`,
       error: "Could not plan those tasks.",
     })
     setSelected(new Set())
@@ -61,17 +60,11 @@ export function BacklogPicker() {
           />
         </div>
         <InfoHint text={BACKLOG_HINT} />
-        <PlanTargetDialog
-          count={selected.size}
-          onConfirm={submit}
-          trigger={
-            <Button disabled={selected.size === 0}>
-              {selected.size === 0
-                ? "Plan tasks"
-                : `Plan ${selected.size} ${selected.size === 1 ? "task" : "tasks"}`}
-            </Button>
-          }
-        />
+        <Button disabled={selected.size === 0} onClick={submit}>
+          {selected.size === 0
+            ? "Add tasks"
+            : `Add ${selected.size} ${selected.size === 1 ? "task" : "tasks"}`}
+        </Button>
       </div>
       {grouped.length === 0 ? (
         <p className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">

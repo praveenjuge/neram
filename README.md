@@ -1,8 +1,8 @@
 # Neram
 
 Neram is a project and task workspace built with Clerk, Convex, Next.js, and Expo.
-Clerk Organizations are the canonical tenant and Sprints provide one recurring
-Current/Upcoming planning cadence across every project in a workspace.
+Clerk Organizations are the canonical tenant. Projects hold all work, while an
+optional Sprint gives the workspace one shared focus list across projects.
 
 ## Structure
 
@@ -61,7 +61,8 @@ neram login
 neram workspace current --json
 neram workspace switch
 neram sprint current --json
-neram sprint plan --task-id TASK_ID --sprint upcoming --json
+neram sprint start --duration 2 --goal "Ship the cutover" --json
+neram sprint plan --task-id TASK_ID --json
 neram doctor --json
 neram daily --json
 neram task add --project "Project name" --title "Follow up" --json

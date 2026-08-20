@@ -21,7 +21,6 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { SprintSelect, type SprintPlacement } from "@/components/sprint-select"
 import { Textarea } from "@/components/ui/textarea"
 
 import { type ProjectRefProps, useControlledOpen } from "./shared"
@@ -42,7 +41,6 @@ export function AddTaskDialog({
   const [dueDate, setDueDate] = useState("")
   const [assigneeSubject, setAssigneeSubject] = useState(UNASSIGNED)
   const [assigneeName, setAssigneeName] = useState<string | null>(null)
-  const [sprint, setSprint] = useState<SprintPlacement>("backlog")
 
   // Clear the form each time the dialog opens.
   const [prevOpen, setPrevOpen] = useState(open)
@@ -54,7 +52,6 @@ export function AddTaskDialog({
       setDueDate("")
       setAssigneeSubject(UNASSIGNED)
       setAssigneeName(null)
-      setSprint("backlog")
     }
   }
 
@@ -79,7 +76,6 @@ export function AddTaskDialog({
         assigneeSubject === UNASSIGNED
           ? undefined
           : (assigneeName ?? undefined),
-      sprint,
     })
       .then(() => toast.success("Task added."))
       .catch((error) =>
@@ -143,11 +139,6 @@ export function AddTaskDialog({
               setAssigneeName(name)
             }}
             value={assigneeSubject}
-          />
-          <SprintSelect
-            id={`add-task-sprint-${id}`}
-            onChange={setSprint}
-            value={sprint}
           />
           <DialogFooter>
             <DialogClose asChild>

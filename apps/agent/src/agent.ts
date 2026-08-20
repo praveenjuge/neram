@@ -442,7 +442,6 @@ export function createTools(neram: NeramApi) {
         description: input.description,
         dueDate: input.dueDate,
         assigneeSubject: input.assigneeSubject,
-        sprint: input.sprint,
       })
       return {
         taskId,
@@ -450,7 +449,6 @@ export function createTools(neram: NeramApi) {
         projectName: project.name,
         title: input.title,
         status: "todo" as const,
-        sprint: input.sprint,
       }
     },
     async move_task(raw: z.input<typeof schemas.move_task>) {

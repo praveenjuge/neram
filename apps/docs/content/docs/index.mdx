@@ -1,9 +1,9 @@
 ---
 title: Docs
-description: Neram in 5 minutes — quiet Sprints for teams and coding agents.
+description: Neram in 5 minutes — projects with an optional shared focus Sprint.
 ---
 
-Neram is a project and task workspace where Clerk Organizations are the canonical tenant and Sprints provide a recurring Current/Upcoming cadence across every project. Browser, CLI, and MCP share the same identity and Sprint engine.
+Neram is a project and task workspace where Clerk Organizations are the canonical tenant. Projects hold the work; one optional Sprint shows what the team is focusing on now. Browser, CLI, and MCP share the same model.
 
 <CardGroup cols={2}>
   <Card title="CLI reference" href="/docs/cli" icon="terminal">
@@ -27,14 +27,14 @@ npx neram daily --json   # compact execution digest
 
 ## What is a Sprint?
 
-A Sprint is an organization-wide timebox, not per-project. You choose weeks (e.g., 2), start weekday, and timezone. Tasks can be planned into `backlog`, `current`, or `upcoming`. Rollover archives the Sprint and carries the history.
+A Sprint is an optional organization-wide focus window, not another home for tasks. Choose 1, 2, or 4 weeks—or no fixed end—then add a few Backlog tasks. Ending saves committed/completed history and returns unfinished work to Backlog.
 
 ## Three surfaces, one model
 
 <Columns cols={3}>
   <Column>
     <Card title="Web" icon="layout-dashboard">
-      Kanban board, Sprint board, task detail.
+      Kanban board, Focus view, task detail.
     </Card>
   </Column>
   <Column>

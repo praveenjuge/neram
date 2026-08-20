@@ -8,24 +8,18 @@ import { api } from "@neram/convex/api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 
-import { InfoHint, runToast, type SprintTarget } from "./shared"
+import { InfoHint, runToast } from "./shared"
 
 const GOAL_HINT =
   "A short outcome this Sprint should achieve. Keep it to one sentence."
 
-export function GoalEditor({
-  initialGoal,
-  sprint,
-}: {
-  initialGoal?: string
-  sprint: SprintTarget
-}) {
+export function GoalEditor({ initialGoal }: { initialGoal?: string }) {
   const updateGoal = useMutation(api.sprints.updateGoal)
   const [editing, setEditing] = useState(false)
   const [goal, setGoal] = useState(initialGoal ?? "")
 
   function save() {
-    runToast(updateGoal({ sprint, goal: goal.trim() || undefined }), {
+    runToast(updateGoal({ goal: goal.trim() || undefined }), {
       success: "Sprint goal updated.",
       error: "Could not update the goal.",
     })

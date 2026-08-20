@@ -14,12 +14,7 @@ import {
 } from "./model"
 import { accessibleProjects } from "./projects"
 import { status } from "./schema"
-import {
-  addTaskToSprint,
-  applyStatusSprintRules,
-  ensureSettings,
-  markTaskEntriesRemoved,
-} from "./sprintModel"
+import { applyStatusSprintRules, markTaskEntriesRemoved } from "./sprintModel"
 import {
   taskCounts,
   taskStats,
@@ -42,7 +37,6 @@ const task = v.object({
   assigneeSubject: v.optional(v.string()),
   assigneeName: v.optional(v.string()),
   currentSprintId: v.optional(v.id("sprints")),
-  upcomingSprintId: v.optional(v.id("sprints")),
   completedAt: v.optional(v.number()),
   position: v.number(),
   createdAt: v.number(),
@@ -64,7 +58,6 @@ function publicTask(taskDoc: Doc<"tasks">, counts: TaskCounts) {
     assigneeSubject: taskDoc.assigneeSubject,
     assigneeName: taskDoc.assigneeName,
     currentSprintId: taskDoc.currentSprintId,
-    upcomingSprintId: taskDoc.upcomingSprintId,
     completedAt: taskDoc.completedAt,
     position: taskDoc.position,
     createdAt: taskDoc.createdAt,
@@ -183,7 +176,6 @@ const taskWithProject = v.object({
   assigneeSubject: v.optional(v.string()),
   assigneeName: v.optional(v.string()),
   currentSprintId: v.optional(v.id("sprints")),
-  upcomingSprintId: v.optional(v.id("sprints")),
   completedAt: v.optional(v.number()),
   position: v.number(),
   createdAt: v.number(),
@@ -249,9 +241,6 @@ export const create = mutation({
     // Display hint used only for the optimistic UI; the server stores the
     // authoritative name resolved from the project's membership.
     assigneeName: v.optional(v.string()),
-    sprint: v.optional(
-      v.union(v.literal("backlog"), v.literal("current"), v.literal("upcoming"))
-    ),
   },
   returns: v.id("tasks"),
   handler: async (ctx, args) => {
@@ -276,28 +265,6 @@ export const create = mutation({
       createdAt: now,
       updatedAt: now,
     })
-    if (args.sprint && args.sprint !== "backlog") {
-      const settings = await ensureSettings(ctx, actor.organizationId, now)
-      const targetId =
-        args.sprint === "current"
-          ? settings.currentSprintId
-          : settings.upcomingSprintId
-      const targetSprint = targetId ? await ctx.db.get(targetId) : null
-      // Place the task only when the requested Sprint exists and is open;
-      // otherwise it simply stays in the Backlog.
-      if (targetSprint && targetSprint.state !== "closed") {
-        const taskDoc = await ctx.db.get(taskId)
-        if (!taskDoc) throw new Error("Created task not found")
-        await addTaskToSprint(ctx, {
-          task: taskDoc,
-          project,
-          sprintId: targetSprint._id,
-          actor,
-          origin: targetSprint.state === "current" ? "scope_added" : "planned",
-          now,
-        })
-      }
-    }
     await ctx.db.patch(args.projectId, {
       taskCount: project.taskCount + 1,
       todoCount: project.todoCount + 1,
@@ -519,15 +486,13 @@ export const changeProject = mutation({
 
     if (
       source.organizationId !== destination.organizationId ||
-      current.currentSprintId ||
-      current.upcomingSprintId
+      current.currentSprintId
     ) {
       throw new ConvexError({
         code: "INVALID_PROJECT_MOVE",
-        message:
-          current.currentSprintId || current.upcomingSprintId
-            ? "Move the task to Backlog before changing projects."
-            : "Tasks cannot move between workspaces.",
+        message: current.currentSprintId
+          ? "Move the task to Backlog before changing projects."
+          : "Tasks cannot move between workspaces.",
       })
     }
 

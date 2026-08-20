@@ -244,11 +244,11 @@ function AppSidebar() {
                   isActive={
                     pathname === workspaceHref(organizationSlug, "/sprints")
                   }
-                  tooltip="Sprints"
+                  tooltip="Focus"
                 >
                   <Link href={workspaceHref(organizationSlug, "/sprints")}>
                     <IterationCcw />
-                    <span>Sprints</span>
+                    <span>Focus</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

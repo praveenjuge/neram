@@ -28,10 +28,7 @@ function fakeApi(overrides: Partial<NeramApi> = {}): NeramApi {
       organization,
       membership,
       settings: {
-        cadenceWeeks: 2,
-        startWeekday: 1,
-        timezone: "UTC",
-        nextSprintNumber: 3,
+        sprintDuration: 2 as const,
       },
     })),
     workspaceMembers: vi.fn(async () => [membership]),
@@ -44,15 +41,8 @@ function fakeApi(overrides: Partial<NeramApi> = {}): NeramApi {
     removeWorkspaceMember: vi.fn(async () => undefined),
     deleteWorkspace: vi.fn(async () => "job_delete"),
     currentSprint: vi.fn(async () => null),
-    upcomingSprint: vi.fn(async () => null),
-    upcomingSprints: vi.fn(async () => []),
     backlogTasks: vi.fn(async () => []),
     sprintHistory: vi.fn(async () => ({
-      page: [],
-      isDone: true,
-      continueCursor: "",
-    })),
-    sprintAudit: vi.fn(async () => ({
       page: [],
       isDone: true,
       continueCursor: "",
@@ -60,11 +50,9 @@ function fakeApi(overrides: Partial<NeramApi> = {}): NeramApi {
     planSprintTasks: vi.fn(async () => undefined),
     removeSprintTasks: vi.fn(async () => undefined),
     updateSprintGoal: vi.fn(async () => undefined),
-    updateSprintCadence: vi.fn(async () => undefined),
-    scheduleSprint: vi.fn(async () => "sprint_new"),
-    renameSprint: vi.fn(async () => undefined),
-    unscheduleSprint: vi.fn(async () => undefined),
-    rolloverSprint: vi.fn(async () => "job_rollover"),
+    updateSprintDuration: vi.fn(async () => undefined),
+    startSprint: vi.fn(async () => "sprint_new"),
+    endSprint: vi.fn(async () => "job_close"),
     projects: vi.fn(async () => [
       {
         _id: "pa",
@@ -184,16 +172,13 @@ describe("neram mcp server", () => {
           "delete_workspace",
           "get_sprint",
           "list_sprint_tasks",
-          "list_upcoming_sprints",
           "sprint_history",
           "plan_sprint_tasks",
           "remove_sprint_tasks",
           "update_sprint_goal",
-          "update_sprint_cadence",
-          "schedule_sprint",
-          "rename_sprint",
-          "unschedule_sprint",
-          "rollover_sprint",
+          "update_sprint_duration",
+          "start_sprint",
+          "end_sprint",
         ])
       )
     } finally {
@@ -248,10 +233,10 @@ describe("neram mcp server", () => {
       expect(byName.get_workspace?.readOnlyHint).toBe(true)
       expect(byName.list_sprint_tasks?.readOnlyHint).toBe(true)
       expect(byName.plan_sprint_tasks?.idempotentHint).toBe(true)
-      expect(byName.update_sprint_cadence?.idempotentHint).toBe(true)
+      expect(byName.update_sprint_duration?.idempotentHint).toBe(true)
       expect(byName.remove_workspace_member?.destructiveHint).toBe(true)
       expect(byName.delete_workspace?.destructiveHint).toBe(true)
-      expect(byName.rollover_sprint?.destructiveHint).toBe(true)
+      expect(byName.end_sprint?.destructiveHint).toBe(true)
     } finally {
       await client.close()
       await server.close()

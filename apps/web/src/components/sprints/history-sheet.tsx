@@ -1,10 +1,8 @@
 "use client"
 
 import { usePaginatedQuery, useQuery } from "convex/react"
-import { useState } from "react"
 
 import { api } from "@neram/convex/api"
-import type { Id } from "@neram/convex/data-model"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -15,12 +13,8 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { Spinner } from "@/components/ui/spinner"
-import { cn } from "@/lib/utils"
 
-import { dateRange, InfoHint } from "./shared"
-
-const COUNTS_HINT =
-  "baseline: tasks at start · completed: finished · carried: moved to the next Sprint · added: added mid-Sprint · removed: returned to Backlog."
+import { dateRange } from "./shared"
 
 export function HistorySheet({
   open,
@@ -33,12 +27,9 @@ export function HistorySheet({
     <Sheet onOpenChange={onOpenChange} open={open}>
       <SheetContent className="w-full gap-0 sm:max-w-lg">
         <SheetHeader>
-          <SheetTitle className="flex items-center gap-1.5">
-            Sprint history
-            <InfoHint text={COUNTS_HINT} />
-          </SheetTitle>
+          <SheetTitle>Sprint history</SheetTitle>
           <SheetDescription>
-            Completed work and closed Sprint scope audits.
+            What the team committed to and completed.
           </SheetDescription>
         </SheetHeader>
         <HistoryContent />
@@ -53,17 +44,6 @@ function HistoryContent() {
     api.sprints.history,
     {},
     { initialNumItems: 10 }
-  )
-  const [selectedSprintId, setSelectedSprintId] =
-    useState<Id<"sprints"> | null>(null)
-  const audit = useQuery(
-    api.sprints.audit,
-    selectedSprintId
-      ? {
-          sprintId: selectedSprintId,
-          paginationOpts: { numItems: 100, cursor: null },
-        }
-      : "skip"
   )
   const completed =
     current?.tasks.filter((task) => task.status === "done") ?? []
@@ -86,7 +66,7 @@ function HistoryContent() {
 
   return (
     <div className="flex-1 overflow-y-auto px-6 pb-6">
-      <div className="grid gap-3">
+      <div className="grid gap-4">
         {completed.length > 0 ? (
           <section className="grid gap-2 border-b pb-4">
             <h3 className="text-sm font-medium">Completed this Sprint</h3>
@@ -102,74 +82,28 @@ function HistoryContent() {
             </div>
           </section>
         ) : null}
-        {results.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No closed Sprints yet.
-          </p>
-        ) : null}
         {results.map((sprint) => {
-          const isSelected = selectedSprintId === sprint._id
+          const committed = sprint.baselineCount ?? 0
+          const finished = sprint.completedCount ?? 0
           return (
-            <div
-              className={cn(
-                "grid gap-2 rounded-lg border p-3 transition-colors",
-                isSelected && "border-primary"
-              )}
-              key={sprint._id}
-            >
-              <button
-                className="grid gap-2 text-left"
-                onClick={() =>
-                  setSelectedSprintId(isSelected ? null : sprint._id)
-                }
-                type="button"
-              >
-                <span className="flex items-center justify-between gap-2">
-                  <span className="font-medium">Sprint {sprint.number}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {dateRange(sprint.startsAt, sprint.endsAt)}
-                  </span>
+            <article className="grid gap-2 border-b pb-4" key={sprint._id}>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm font-medium">
+                  {dateRange(sprint.startsAt, sprint.endsAt)}
                 </span>
-                <span className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                  <span>{sprint.baselineCount ?? 0} baseline</span>
-                  <span>{sprint.completedCount ?? 0} completed</span>
-                  <span>{sprint.carriedCount ?? 0} carried</span>
-                  <span>{sprint.addedCount ?? 0} added</span>
-                  <span>{sprint.removedCount ?? 0} removed</span>
-                </span>
-              </button>
-              {isSelected ? (
-                <div className="grid gap-1.5 border-t pt-2">
-                  {audit === undefined ? (
-                    <Spinner className="size-4" />
-                  ) : audit.page.length === 0 ? (
-                    <span className="text-xs text-muted-foreground">
-                      No scope changes recorded.
-                    </span>
-                  ) : (
-                    audit.page.map((entry) => (
-                      <div
-                        className="flex flex-wrap items-center gap-2 text-xs"
-                        key={entry._id}
-                      >
-                        <Badge variant="outline">
-                          {entry.origin.replace("_", " ")}
-                        </Badge>
-                        <span className="text-foreground">
-                          {entry.taskTitleSnapshot}
-                        </span>
-                        <span className="text-muted-foreground">
-                          {entry.projectNameSnapshot}
-                        </span>
-                        {entry.removedAt ? (
-                          <Badge variant="secondary">removed</Badge>
-                        ) : null}
-                      </div>
-                    ))
-                  )}
-                </div>
+                <Badge variant="secondary">
+                  {finished} of {committed}
+                </Badge>
+              </div>
+              {sprint.goal ? (
+                <p className="text-sm text-muted-foreground">{sprint.goal}</p>
               ) : null}
-            </div>
+              <p className="text-xs text-muted-foreground">
+                {finished === committed && committed > 0
+                  ? "All committed work completed"
+                  : `${Math.max(0, committed - finished)} unfinished`}
+              </p>
+            </article>
           )
         })}
         {status === "CanLoadMore" ? (

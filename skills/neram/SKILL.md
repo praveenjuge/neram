@@ -36,6 +36,9 @@ npx neram task add --project "Project name" --title "Follow up" --json
 npx neram task move --task-id TASK_ID --status inProgress --json
 npx neram task done --task-id TASK_ID --json
 npx neram project summary --project "Project name" --json
+npx neram sprint start --duration 2 --goal "Ship the cutover" --json
+npx neram sprint plan --task-id TASK_ID --json
+npx neram sprint end --confirm --json
 ```
 
 `neram whoami` reports identity and workspace totals (visible projects,
@@ -102,6 +105,11 @@ smoke-test result.
 - `summarize_project`: return compact project/task context for LLMs.
 - `workspace_status`: return the caller's identity and workspace totals
   (visible projects, owned/shared split, open tasks). No arguments.
+- `get_sprint`, `list_sprint_tasks`, and `sprint_history`: read the optional
+  active Sprint, Backlog, and simple committed/completed history.
+- `start_sprint`, `plan_sprint_tasks`, `remove_sprint_tasks`,
+  `update_sprint_goal`, `update_sprint_duration`, and `end_sprint`: manage the
+  one active focus window. New tasks always begin in Backlog.
 
 All tools return structured content and stable error codes. Prefer project and
 task IDs for automation; name/title resolution intentionally rejects ambiguous

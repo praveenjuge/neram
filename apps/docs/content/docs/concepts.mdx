@@ -3,31 +3,31 @@ title: Concepts
 description: Neram concepts — workspaces, Sprints, projects, tasks.
 ---
 
-How Neram models work: Organizations as tenants, Sprints as a recurring cadence, and a kanban board that stays in sync across web, CLI, and MCP.
+How Neram models work: Organizations as tenants, projects as the home for work, and one optional Sprint as a temporary focus list.
 
 ## Workspaces
 
 A workspace is a Clerk Organization. Every project, task, and Sprint belongs to one Organization. Members are Clerk users with roles `org:admin` or `org:member`. Switching workspaces reruns OAuth and replaces the stored token — reconnect local or hosted MCP afterward.
 
 :::note
-Canon: organization id + slug must both match for destructive operations (`remove-member`, `delete_workspace`, `rollover_sprint`). The confirmation prevents cross-org mistakes.
+Canon: organization id + slug must both match for destructive workspace operations (`remove-member`, `delete_workspace`). The confirmation prevents cross-org mistakes.
 :::
 
 ## Sprints
 
-Sprints are organization-wide, not per-project. They have `backlog`, `current`, and `upcoming`. The cadence (weeks + start weekday + timezone) controls when a new Sprint begins.
+Sprints are organization-wide and optional. A workspace has either one active Sprint or none. Tasks outside it stay in Backlog, and projects remain their permanent home.
 
 ```bash lineNumbers
-npx neram sprint cadence --weeks 2 --start-weekday 1 --timezone Asia/Kolkata
-npx neram sprint goal --sprint current --goal "Ship the cutover"
+npx neram sprint start --duration 2 --goal "Ship the cutover"
+npx neram sprint plan --task-id TASK_ID
 npx neram sprint current --json
 ```
 
-Use `sprint plan` and `sprint remove` to assign tasks to a Sprint. `sprint history` shows commitment and carryover. `rollover` is destructive and requires exact Organization confirmation.
+New tasks always begin in Backlog. Use `sprint plan` to focus existing work and `sprint remove` to return it. Starting work also joins the active Sprint automatically. When a Sprint ends, its committed/completed snapshot is saved and unfinished work returns to Backlog; the next Sprint starts empty.
 
 ## Tasks & Board
 
-Tasks belong to a project. They have `title`, optional `description`, `status` (`todo` / `inProgress` / `done`), `assignee`, `dueDate`, `sprint`, and kanban `position`. Moving a task between projects or statuses preserves identity; deleting is hard-delete.
+Tasks belong to a project. They have `title`, optional `description`, `status` (`todo` / `inProgress` / `done`), `assignee`, `dueDate`, optional active Sprint membership, and kanban `position`. Moving a task between projects or statuses preserves identity; deleting is hard-delete.
 
 ```bash lineNumbers
 npx neram task move --task-id TASK_ID --status inProgress --position 1.5

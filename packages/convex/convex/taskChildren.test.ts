@@ -396,12 +396,12 @@ test("project deletion drains task children and stats in scheduled batches", asy
   })
   // Create the active Sprint so the task actually lands in a Sprint and leaves
   // an entry to be marked removed on project deletion.
-  await alice.mutation(api.sprints.scheduleSprint, {})
+  await alice.mutation(api.sprints.start, {})
   const taskId = await alice.mutation(api.tasks.create, {
     projectId,
     title: "Ship",
-    sprint: "current",
   })
+  await alice.mutation(api.sprints.plan, { taskIds: [taskId] })
   await alice.mutation(api.subtasks.create, { taskId, title: "Child" })
   await alice.mutation(api.taskComments.create, {
     taskId,

@@ -1,8 +1,13 @@
 import * as z from "zod/v3"
 
 export const statusSchema = z.enum(["todo", "inProgress", "done"])
-export const sprintPlacementSchema = z.enum(["backlog", "current", "upcoming"])
-export const sprintRefSchema = z.enum(["current", "upcoming"])
+export const sprintPlacementSchema = z.enum(["backlog", "current"])
+export const sprintDurationSchema = z.union([
+  z.literal(1),
+  z.literal(2),
+  z.literal(4),
+  z.literal("open"),
+])
 export const organizationRoleSchema = z.enum(["org:admin", "org:member"])
 
 export const projectRefSchema = z.object({
@@ -44,7 +49,6 @@ export const schemas = {
     description: descriptionSchema.optional(),
     dueDate: dueDateSchema.optional(),
     assigneeSubject: z.string().optional(),
-    sprint: sprintPlacementSchema.default("backlog"),
   }),
   move_task: taskRefSchema.extend({
     status: statusSchema,
@@ -145,52 +149,31 @@ export const schemas = {
   }),
   delete_workspace: organizationConfirmation,
 
-  get_sprint: z.object({ sprint: sprintRefSchema.default("current") }),
+  get_sprint: z.object({}),
   list_sprint_tasks: z.object({
     sprint: sprintPlacementSchema.default("current"),
   }),
-  list_upcoming_sprints: z.object({}),
   sprint_history: z.object({
     cursor: z.string().nullable().optional(),
     pageSize: z.number().int().min(1).max(50).default(20),
-    sprintId: z.string().min(1).optional(),
   }),
   plan_sprint_tasks: z.object({
     taskIds: z.array(z.string().min(1)).min(1).max(1000),
-    sprint: sprintPlacementSchema.default("backlog"),
-    // Target a specific scheduled Sprint by id; overrides `sprint` when set.
-    sprintId: z.string().min(1).optional(),
   }),
   remove_sprint_tasks: z.object({
     taskIds: z.array(z.string().min(1)).min(1).max(1000),
-    sprint: sprintRefSchema.default("current"),
-    sprintId: z.string().min(1).optional(),
   }),
   update_sprint_goal: z.object({
-    sprint: sprintRefSchema.default("current"),
-    sprintId: z.string().min(1).optional(),
     goal: z.string().max(500).optional(),
   }),
-  update_sprint_cadence: z.object({
-    cadenceWeeks: z.number().int().min(1).max(8),
-    startWeekday: z.number().int().min(0).max(6),
-    timezone: z.string().min(1).max(100),
+  update_sprint_duration: z.object({
+    duration: sprintDurationSchema,
   }),
-  schedule_sprint: z.object({
-    name: z.string().max(80).optional(),
+  start_sprint: z.object({
     goal: z.string().max(500).optional(),
+    duration: sprintDurationSchema.optional(),
   }),
-  rename_sprint: z.object({
-    sprint: sprintRefSchema.default("current"),
-    sprintId: z.string().min(1).optional(),
-    name: z.string().max(80).optional(),
-  }),
-  unschedule_sprint: z.object({
-    sprintId: z.string().min(1),
-  }),
-  rollover_sprint: organizationConfirmation.extend({
-    reason: z.string().trim().min(1).max(500),
-  }),
+  end_sprint: z.object({ confirm: z.literal(true) }),
 }
 
 export const outputSchemas = {
@@ -200,7 +183,6 @@ export const outputSchemas = {
     projectName: z.string(),
     title: z.string(),
     status: statusSchema,
-    sprint: sprintPlacementSchema,
   }),
   move_task: z.object({ taskId: z.string(), status: statusSchema }),
   complete_task: z.object({ taskId: z.string(), status: statusSchema }),
@@ -255,21 +237,12 @@ export const outputSchemas = {
   delete_workspace: z.object({ jobId: z.string(), deleting: z.boolean() }),
   plan_sprint_tasks: z.object({
     taskIds: z.array(z.string()),
-    // Resolved target: "current" or a scheduled Sprint id.
-    sprint: z.string(),
   }),
   remove_sprint_tasks: z.object({
     taskIds: z.array(z.string()),
-    sprint: z.string(),
   }),
-  update_sprint_goal: z.object({ sprint: z.string() }),
-  update_sprint_cadence: z.object({
-    cadenceWeeks: z.number(),
-    startWeekday: z.number(),
-    timezone: z.string(),
-  }),
-  schedule_sprint: z.object({ sprintId: z.string(), scheduled: z.boolean() }),
-  rename_sprint: z.object({ sprint: z.string() }),
-  unschedule_sprint: z.object({ sprintId: z.string(), removed: z.boolean() }),
-  rollover_sprint: z.object({ jobId: z.string(), started: z.boolean() }),
+  update_sprint_goal: z.object({ updated: z.boolean() }),
+  update_sprint_duration: z.object({ duration: sprintDurationSchema }),
+  start_sprint: z.object({ sprintId: z.string(), started: z.boolean() }),
+  end_sprint: z.object({ jobId: z.string(), started: z.boolean() }),
 }

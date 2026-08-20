@@ -49,10 +49,7 @@ function fakeApi(overrides: Partial<NeramApi> = {}): NeramApi {
       organization,
       membership,
       settings: {
-        cadenceWeeks: 2,
-        startWeekday: 1,
-        timezone: "UTC",
-        nextSprintNumber: 3,
+        sprintDuration: 2 as const,
       },
     })),
     workspaceMembers: vi.fn(async () => [membership]),
@@ -65,15 +62,8 @@ function fakeApi(overrides: Partial<NeramApi> = {}): NeramApi {
     removeWorkspaceMember: vi.fn(async () => undefined),
     deleteWorkspace: vi.fn(async () => "job_delete"),
     currentSprint: vi.fn(async () => null),
-    upcomingSprint: vi.fn(async () => null),
-    upcomingSprints: vi.fn(async () => []),
     backlogTasks: vi.fn(async () => []),
     sprintHistory: vi.fn(async () => ({
-      page: [],
-      isDone: true,
-      continueCursor: "",
-    })),
-    sprintAudit: vi.fn(async () => ({
       page: [],
       isDone: true,
       continueCursor: "",
@@ -81,11 +71,9 @@ function fakeApi(overrides: Partial<NeramApi> = {}): NeramApi {
     planSprintTasks: vi.fn(async () => undefined),
     removeSprintTasks: vi.fn(async () => undefined),
     updateSprintGoal: vi.fn(async () => undefined),
-    updateSprintCadence: vi.fn(async () => undefined),
-    scheduleSprint: vi.fn(async () => "sprint_new"),
-    renameSprint: vi.fn(async () => undefined),
-    unscheduleSprint: vi.fn(async () => undefined),
-    rolloverSprint: vi.fn(async () => "job_rollover"),
+    updateSprintDuration: vi.fn(async () => undefined),
+    startSprint: vi.fn(async () => "sprint_new"),
+    endSprint: vi.fn(async () => "job_close"),
     projects: vi.fn(async () => [
       {
         _id: "pa",
@@ -178,7 +166,6 @@ describe("agent tools", () => {
       projectName: "Agent",
       title: "Review smoke",
       status: "todo",
-      sprint: "backlog",
     })
     expect(api.createTask).toHaveBeenCalledWith(
       expect.objectContaining({ projectId: "pa", title: "Review smoke" })
@@ -528,26 +515,20 @@ describe("Organization and Sprint tools", () => {
     })
   })
 
-  test("forwards idempotent planning and cadence changes", async () => {
+  test("forwards idempotent planning and duration changes", async () => {
     const api = fakeApi()
     await createTools(api).plan_sprint_tasks({
       taskIds: ["task_1", "task_2"],
-      sprint: "upcoming",
     })
     expect(api.planSprintTasks).toHaveBeenCalledWith({
       taskIds: ["task_1", "task_2"],
-      sprint: "upcoming",
     })
 
-    await createTools(api).update_sprint_cadence({
-      cadenceWeeks: 4,
-      startWeekday: 1,
-      timezone: "Asia/Kolkata",
+    await createTools(api).update_sprint_duration({
+      duration: 4,
     })
-    expect(api.updateSprintCadence).toHaveBeenCalledWith({
-      cadenceWeeks: 4,
-      startWeekday: 1,
-      timezone: "Asia/Kolkata",
+    expect(api.updateSprintDuration).toHaveBeenCalledWith({
+      duration: 4,
     })
   })
 })
@@ -570,7 +551,7 @@ test("decodes Convex errors across duplicated package boundaries", () => {
 
 test("normalizes validation failures into stable agent errors", async () => {
   const error = await createTools(fakeApi())
-    .plan_sprint_tasks({ taskIds: [], sprint: "current" })
+    .plan_sprint_tasks({ taskIds: [] })
     .catch((caught: unknown) => caught)
   expect(toAgentError(error)).toMatchObject({ code: "VALIDATION" })
 })

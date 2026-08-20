@@ -29,7 +29,7 @@ const INSTRUCTIONS = [
   "When a name matches more than one record the tool returns an AMBIGUOUS error whose details.matches lists the candidates — retry with one of those ids.",
   "Tool failures come back as isError results carrying { error: { code, message, details } } rather than protocol exceptions.",
   "delete_project purges every task in the project and requires an explicit projectId.",
-  "Workspace member removal, workspace deletion, and early Sprint rollover require the exact Organization id and slug plus confirm=true.",
+  "Workspace member removal and workspace deletion require the exact Organization id and slug plus confirm=true.",
   "OAuth tokens are bound to one Clerk Organization; reconnect after switching workspaces.",
 ].join(" ")
 
@@ -197,7 +197,7 @@ export function createNeramMcpServer(client: NeramApi) {
   register(
     "get_sprint",
     "Get Sprint",
-    "Return Current or Upcoming Sprint dates, goal, summary counts, and task count.",
+    "Return the optional active Sprint dates, goal, simple progress counts, and task count.",
     schemas.get_sprint,
     readOnly,
     (input) => tools.get_sprint(schemas.get_sprint.parse(input))
@@ -205,24 +205,15 @@ export function createNeramMcpServer(client: NeramApi) {
   register(
     "list_sprint_tasks",
     "List Sprint Tasks",
-    "List Backlog, Current, or Upcoming work with project and child-count context.",
+    "List Backlog or Current Sprint work with project and child-count context.",
     schemas.list_sprint_tasks,
     readOnly,
     (input) => tools.list_sprint_tasks(schemas.list_sprint_tasks.parse(input))
   )
   register(
-    "list_upcoming_sprints",
-    "List Upcoming Sprints",
-    "List every scheduled future Sprint (soonest first) with dates, goal, task count, and planned tasks. Use a returned sprintId to plan into a specific Sprint.",
-    schemas.list_upcoming_sprints,
-    readOnly,
-    (input) =>
-      tools.list_upcoming_sprints(schemas.list_upcoming_sprints.parse(input))
-  )
-  register(
     "sprint_history",
     "Sprint History",
-    "Page closed Sprints or inspect the append-only task audit for an explicit Sprint id.",
+    "Page closed Sprints with committed and completed counts.",
     schemas.sprint_history,
     readOnly,
     (input) => tools.sprint_history(schemas.sprint_history.parse(input))
@@ -231,7 +222,7 @@ export function createNeramMcpServer(client: NeramApi) {
   register(
     "capture_task",
     "Capture Task",
-    "Create a task in a project resolved by id or unambiguous name. Defaults to Backlog unless sprint is explicit.",
+    "Create a task in Backlog for a project resolved by id or unambiguous name.",
     schemas.capture_task,
     creates,
     (input) => tools.capture_task(schemas.capture_task.parse(input)),
@@ -448,8 +439,8 @@ export function createNeramMcpServer(client: NeramApi) {
   )
   register(
     "plan_sprint_tasks",
-    "Plan Sprint Tasks",
-    "Move tasks into Backlog, Current, Upcoming, or a specific scheduled Sprint (pass sprintId) while preserving Sprint audit truth.",
+    "Add Sprint Tasks",
+    "Add Backlog tasks to the one active Sprint.",
     schemas.plan_sprint_tasks,
     idempotent,
     (input) => tools.plan_sprint_tasks(schemas.plan_sprint_tasks.parse(input)),
@@ -458,7 +449,7 @@ export function createNeramMcpServer(client: NeramApi) {
   register(
     "remove_sprint_tasks",
     "Remove Sprint Tasks",
-    "Return Current, Upcoming, or a specific scheduled Sprint's tasks (pass sprintId) to Backlog; active work also returns to Todo.",
+    "Return active Sprint tasks to Backlog; in-progress work also returns to Todo.",
     schemas.remove_sprint_tasks,
     idempotent,
     (input) =>
@@ -468,7 +459,7 @@ export function createNeramMcpServer(client: NeramApi) {
   register(
     "update_sprint_goal",
     "Update Sprint Goal",
-    "Set or clear the goal of the Current, Upcoming, or a specific scheduled Sprint (pass sprintId).",
+    "Set or clear the goal of the active Sprint.",
     schemas.update_sprint_goal,
     idempotent,
     (input) =>
@@ -476,50 +467,32 @@ export function createNeramMcpServer(client: NeramApi) {
     outputSchemas.update_sprint_goal
   )
   register(
-    "update_sprint_cadence",
-    "Update Sprint Cadence",
-    "Set 1-8 week cadence, start weekday, and IANA timezone. Re-flows every scheduled Sprint's dates; never changes the active Sprint.",
-    schemas.update_sprint_cadence,
+    "update_sprint_duration",
+    "Update Sprint Duration",
+    "Set the default duration for the next Sprint to 1, 2, or 4 weeks, or open-ended.",
+    schemas.update_sprint_duration,
     idempotent,
     (input) =>
-      tools.update_sprint_cadence(schemas.update_sprint_cadence.parse(input)),
-    outputSchemas.update_sprint_cadence
+      tools.update_sprint_duration(schemas.update_sprint_duration.parse(input)),
+    outputSchemas.update_sprint_duration
   )
   register(
-    "schedule_sprint",
-    "Schedule Sprint",
-    "Create a Sprint (optionally named). With no active Sprint it becomes Current and starts now; otherwise it is scheduled after the last one using the active cadence.",
-    schemas.schedule_sprint,
+    "start_sprint",
+    "Start Sprint",
+    "Start the one optional Sprint with an empty focus list and an optional goal or duration override.",
+    schemas.start_sprint,
     creates,
-    (input) => tools.schedule_sprint(schemas.schedule_sprint.parse(input)),
-    outputSchemas.schedule_sprint
+    (input) => tools.start_sprint(schemas.start_sprint.parse(input)),
+    outputSchemas.start_sprint
   )
   register(
-    "rename_sprint",
-    "Rename Sprint",
-    "Rename the Current, Upcoming, or a specific scheduled Sprint (pass sprintId). Clearing the name restores the default 'Sprint {number}' label.",
-    schemas.rename_sprint,
-    idempotent,
-    (input) => tools.rename_sprint(schemas.rename_sprint.parse(input)),
-    outputSchemas.rename_sprint
-  )
-  register(
-    "unschedule_sprint",
-    "Unschedule Sprint",
-    "Remove a scheduled (upcoming) Sprint and return its planned work to the Backlog. The active Sprint cannot be removed.",
-    schemas.unschedule_sprint,
+    "end_sprint",
+    "End Sprint",
+    "Close the active Sprint and return unfinished work to Backlog. The next Sprint starts empty.",
+    schemas.end_sprint,
     destructive,
-    (input) => tools.unschedule_sprint(schemas.unschedule_sprint.parse(input)),
-    outputSchemas.unschedule_sprint
-  )
-  register(
-    "rollover_sprint",
-    "Rollover Sprint",
-    "Irreversibly close Current early with an audited reason and carry unfinished work forward. Requires exact Organization confirmation.",
-    schemas.rollover_sprint,
-    destructive,
-    (input) => tools.rollover_sprint(schemas.rollover_sprint.parse(input)),
-    outputSchemas.rollover_sprint
+    (input) => tools.end_sprint(schemas.end_sprint.parse(input)),
+    outputSchemas.end_sprint
   )
 
   server.server.onerror = (error) => {

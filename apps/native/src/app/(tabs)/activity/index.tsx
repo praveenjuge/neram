@@ -71,7 +71,11 @@ function activityLine(item: {
     return `${item.actorName} mentioned you on ${item.taskTitle}${item.commentExcerpt ? `: ${item.commentExcerpt}` : ""}`
   if (item.type === "comment.replied")
     return `${item.actorName} replied to you on ${item.taskTitle}${item.commentExcerpt ? `: ${item.commentExcerpt}` : ""}`
-  if (item.type === "sprint.started") return `${item.actorName} started a Sprint`
+  if (item.type === "sprint.started")
+    return `${item.actorName} started a Sprint`
+  if (item.type === "sprint.ended") return `${item.actorName} ended a Sprint`
+  if (item.type === "sprint.duration_changed")
+    return `${item.actorName} updated the default Sprint duration`
   if (item.type === "sprint.rolled_over")
     return `${item.actorName} rolled over a Sprint`
   if (item.type === "sprint.early_closed")

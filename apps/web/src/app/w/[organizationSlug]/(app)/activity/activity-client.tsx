@@ -48,6 +48,8 @@ const typeIcon: Record<ActivityItem["type"], LucideIcon> = {
   "comment.mentioned": AtSign,
   "comment.replied": Reply,
   "sprint.started": Play,
+  "sprint.ended": History,
+  "sprint.duration_changed": CalendarClock,
   "sprint.rolled_over": RotateCcw,
   "sprint.early_closed": RotateCcw,
   "sprint.cadence_changed": CalendarClock,
@@ -82,6 +84,10 @@ function describe(item: ActivityItem): string {
       return `replied to you on ${item.taskTitle ?? "a task"}`
     case "sprint.started":
       return `started Sprint ${item.sprintNumber ?? ""}`.trim()
+    case "sprint.ended":
+      return `ended Sprint ${item.sprintNumber ?? ""}`.trim()
+    case "sprint.duration_changed":
+      return "updated the default Sprint duration"
     case "sprint.rolled_over":
       return `rolled over Sprint ${item.sprintNumber ?? ""}`.trim()
     case "sprint.early_closed":

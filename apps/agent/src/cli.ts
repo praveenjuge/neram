@@ -279,11 +279,6 @@ task
   .requiredOption("-t, --title <title>")
   .option("-d, --description <description>")
   .option("--due <yyyy-mm-dd>")
-  .option(
-    "--sprint <backlog|current|upcoming>",
-    "Initial Sprint placement",
-    "backlog"
-  )
   .option("--json")
   .action((opts) =>
     wrap(opts, async () => {
@@ -294,7 +289,6 @@ task
         title: opts.title,
         description: opts.description,
         dueDate: opts.due,
-        sprint: opts.sprint,
       })
       emit(opts, formatCaptureTask(result), result)
     })

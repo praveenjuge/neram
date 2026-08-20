@@ -55,6 +55,9 @@ export const sprintEntryOrigin = v.union(
 export const organizationActivityType = v.union(
   activityType,
   v.literal("sprint.started"),
+  v.literal("sprint.ended"),
+  v.literal("sprint.duration_changed"),
+  // Legacy activity types remain readable while existing history is retained.
   v.literal("sprint.rolled_over"),
   v.literal("sprint.early_closed"),
   v.literal("sprint.cadence_changed")
@@ -91,9 +94,11 @@ export default defineSchema({
     // identity key; the denormalized name is shown on cards without a lookup.
     assigneeSubject: v.optional(v.string()),
     assigneeName: v.optional(v.string()),
-    // Sprint references describe only the task's live planning placement.
+    // A task can belong to the one active Sprint, or to the Backlog when unset.
     // Closed Sprint truth lives in sprintTaskEntries and is never rewritten.
     currentSprintId: v.optional(v.id("sprints")),
+    // Migration-only: removed by sprintMigration.cleanupUpcoming. New code
+    // never reads or writes future placement.
     upcomingSprintId: v.optional(v.id("sprints")),
     completedAt: v.optional(v.number()),
     // Fractional sort key for ordering within a column. New tasks append at the
@@ -189,6 +194,12 @@ export default defineSchema({
 
   organizationSettings: defineTable({
     organizationId: v.string(),
+    // Canonical duration for newly started Sprints. "open" has no end date.
+    sprintDuration: v.optional(
+      v.union(v.literal(1), v.literal(2), v.literal(4), v.literal("open"))
+    ),
+    // Legacy cadence fields stay schema-compatible until the production data
+    // cleanup has run; the product no longer exposes them.
     cadenceWeeks: v.number(),
     startWeekday: v.number(),
     timezone: v.string(),
@@ -210,7 +221,7 @@ export default defineSchema({
     goal: v.optional(v.string()),
     state: sprintState,
     startsAt: v.number(),
-    endsAt: v.number(),
+    endsAt: v.optional(v.number()),
     closedCutoffAt: v.optional(v.number()),
     closedAt: v.optional(v.number()),
     earlyCloseActorUserId: v.optional(v.string()),
