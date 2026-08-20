@@ -38,10 +38,6 @@
     {
       "source": "/manifest.webmanifest",
       "destination": "https://neram-theta.vercel.app/manifest.webmanifest"
-    },
-    {
-      "source": "/host-test/:path*",
-      "destination": "https://httpbin.org/headers"
     }
   ]
 }
