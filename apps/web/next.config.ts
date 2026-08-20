@@ -9,6 +9,7 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   deploymentId,
   experimental: {
+    outputHashSalt: deploymentId,
     turbopackFileSystemCacheForBuild: true,
     turbopackRustReactCompiler: true,
   },
