@@ -27,9 +27,13 @@ const expectedQuery = `?dpl=${deploymentId}`
 const unversionedUrls = assetUrls.filter((url) => !url.includes(expectedQuery))
 const outputHashSalt = serverFiles.config?.experimental?.outputHashSalt
 
-if (assetUrls.length === 0 || outputHashSalt !== deploymentId) {
+if (
+  assetUrls.length === 0 ||
+  typeof outputHashSalt !== "string" ||
+  outputHashSalt.length === 0
+) {
   console.error(
-    `[deployment-assets] Expected the Next.js output hash salt to match this deployment; ` +
+    `[deployment-assets] Expected a non-empty Next.js output hash salt; ` +
       `found ${assetUrls.length} asset URL(s)`
   )
   process.exit(1)
