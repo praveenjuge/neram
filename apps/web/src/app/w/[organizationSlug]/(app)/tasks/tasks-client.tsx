@@ -5,7 +5,7 @@ import { useMutation } from "convex/react"
 import type { FunctionReturnType } from "convex/server"
 import { useMemo, useState } from "react"
 import { toast } from "sonner"
-import { useRouter } from "next/navigation"
+import { useParams, useRouter, useSearchParams } from "next/navigation"
 
 import { api } from "@neram/convex/api"
 import type { Id } from "@neram/convex/data-model"
@@ -14,17 +14,23 @@ import {
   type Status,
 } from "@/components/project-board/board-shared"
 import { KanbanBoard } from "@/components/project-board/kanban-board"
+import { incompleteSubtasksToast } from "@/components/project-board/incomplete-subtasks-toast"
 import { NewTaskDialog } from "@/components/project-board/new-task-dialog"
+import { TaskDialog } from "@/components/project-board/task-dialog"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { parseDueDate } from "@/lib/dates"
 import { dataFromError, messageFromError } from "@/lib/errors"
 import { moveTaskOptimistic } from "@/lib/optimistic"
 import { cn } from "@/lib/utils"
+import { workspaceHref } from "@/lib/workspace"
 
 type Task = FunctionReturnType<typeof api.tasks.listAll>[number]
 
 type DueFilter = "overdue" | "dueSoon" | "noDueDate"
+
+type AssigneeView = "mine" | "unassigned" | "all"
 
 function startOfToday() {
   const date = new Date()
@@ -92,17 +98,54 @@ function FilterChip({
 
 export function TasksClient() {
   const router = useRouter()
-  // "Assigned to me" is the default view; turning it off loads every task
-  // across accessible projects. "Unassigned" is client-side and mutually
-  // exclusive with assigned-to-me so the chips stay coherent.
-  const [assignedToMe, setAssignedToMe] = useState(true)
-  const [unassigned, setUnassigned] = useState(false)
+  const params = useParams()
+  const organizationSlug =
+    typeof params.organizationSlug === "string" ? params.organizationSlug : ""
+  const tasksHref = workspaceHref(organizationSlug, "/tasks")
+  const searchParams = useSearchParams()
+  const urlTaskId = searchParams.get("task") as Id<"tasks"> | null
+
+  // Drive the dialog from local state so it opens instantly on click. The URL
+  // mirrors it for deep links and the back button, and state reconciles from
+  // the URL on back/forward (same approach as the project board).
+  const [openTaskId, setOpenTaskId] = useState<Id<"tasks"> | null>(urlTaskId)
+  const [syncedTaskId, setSyncedTaskId] = useState<Id<"tasks"> | null>(
+    urlTaskId
+  )
+  if (urlTaskId !== syncedTaskId) {
+    setSyncedTaskId(urlTaskId)
+    setOpenTaskId(urlTaskId)
+  }
+
+  function openTask(taskId: Id<"tasks">) {
+    setOpenTaskId(taskId)
+    const next = new URLSearchParams(searchParams.toString())
+    next.set("task", taskId)
+    next.delete("comment")
+    window.history.pushState(
+      { ...window.history.state, neramTasksModal: true },
+      "",
+      `${tasksHref}?${next.toString()}`
+    )
+  }
+
+  function closeTask() {
+    setOpenTaskId(null)
+    if (window.history.state?.neramTasksModal) {
+      router.back()
+      return
+    }
+    router.replace(tasksHref, { scroll: false })
+  }
+
+  // Which assignee slice is on the board; "mine" is the default view. "Mine"
+  // is served by the server, "Unassigned" and "All" load every task across
+  // accessible projects and filter client-side.
+  const [assigneeView, setAssigneeView] = useState<AssigneeView>("mine")
   const [dueFilters, setDueFilters] = useState<Set<DueFilter>>(() => new Set())
 
-  // When filtering unassigned-only we need the full set, not just mine.
-  const serverAssignedToMe = assignedToMe && !unassigned
   const tasks = useQuery(api.tasks.listAll, {
-    assignedToMe: serverAssignedToMe,
+    assignedToMe: assigneeView === "mine",
   })
 
   // Discover projectId from the cached listAll result so optimistic updates
@@ -126,33 +169,24 @@ export function TasksClient() {
     if (!tasks) return undefined
     const today = startOfToday()
     return tasks.filter((task) => {
-      if (unassigned && task.assigneeSubject) return false
+      if (assigneeView === "unassigned" && task.assigneeSubject) return false
       if (!matchesDueFilters(task, dueFilters, today)) return false
       return true
     })
-  }, [tasks, unassigned, dueFilters])
+  }, [tasks, assigneeView, dueFilters])
+
+  const hasActiveFilters = assigneeView !== "mine" || dueFilters.size > 0
+
+  function clearFilters() {
+    setAssigneeView("mine")
+    setDueFilters(new Set())
+  }
 
   function toggleDueFilter(filter: DueFilter) {
     setDueFilters((current) => {
       const next = new Set(current)
       if (next.has(filter)) next.delete(filter)
       else next.add(filter)
-      return next
-    })
-  }
-
-  function onAssignedToMe() {
-    setAssignedToMe((value) => {
-      const next = !value
-      if (next) setUnassigned(false)
-      return next
-    })
-  }
-
-  function onUnassigned() {
-    setUnassigned((value) => {
-      const next = !value
-      if (next) setAssignedToMe(false)
       return next
     })
   }
@@ -198,19 +232,15 @@ export function TasksClient() {
     try {
       await moveTask({ taskId, status, position })
     } catch (error) {
-      const data = dataFromError(error)
-      if (
-        data?.code === "INCOMPLETE_SUBTASKS" &&
-        window.confirm(
-          `${String(data.unfinishedCount)} subtasks are unfinished. Move this task to Done anyway?`
+      if (dataFromError(error)?.code === "INCOMPLETE_SUBTASKS") {
+        incompleteSubtasksToast(error, () =>
+          moveTask({
+            taskId,
+            status,
+            position,
+            confirmIncompleteSubtasks: true,
+          })
         )
-      ) {
-        await moveTask({
-          taskId,
-          status,
-          position,
-          confirmIncompleteSubtasks: true,
-        })
         return
       }
       toast.error(messageFromError(error, "Could not move the task."))
@@ -229,16 +259,57 @@ export function TasksClient() {
     <section className="mx-auto grid w-full max-w-7xl gap-5 p-5">
       <div className="grid gap-3">
         <div className="flex items-center justify-between gap-3">
-          <h1 className="font-heading text-lg font-medium">Tasks</h1>
-          <NewTaskDialog />
+          <h1 className="font-heading text-lg font-medium">
+            Tasks
+            {filteredTasks && hasActiveFilters ? (
+              <span className="ml-2 text-sm font-normal text-muted-foreground">
+                {filteredTasks.length} shown
+              </span>
+            ) : null}
+          </h1>
+          <div className="flex items-center gap-2">
+            {hasActiveFilters ? (
+              <Button
+                data-testid="clear-tasks-filters"
+                onClick={clearFilters}
+                size="sm"
+                variant="ghost"
+              >
+                Clear filters
+              </Button>
+            ) : null}
+            <NewTaskDialog />
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <FilterChip active={assignedToMe} onClick={onAssignedToMe}>
-            Assigned to me
-          </FilterChip>
-          <FilterChip active={unassigned} onClick={onUnassigned}>
-            Unassigned
-          </FilterChip>
+          <div
+            aria-label="Filter by assignee"
+            className="flex rounded-lg border bg-muted/40 p-0.5"
+            role="group"
+          >
+            {(
+              [
+                ["mine", "Assigned to me"],
+                ["unassigned", "Unassigned"],
+                ["all", "All"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                aria-pressed={assigneeView === value}
+                className={cn(
+                  "rounded-md px-3 py-1.5 text-sm transition-colors",
+                  assigneeView === value
+                    ? "bg-background font-medium text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+                key={value}
+                onClick={() => setAssigneeView(value)}
+                type="button"
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           <FilterChip
             active={dueFilters.has("overdue")}
             onClick={() => toggleDueFilter("overdue")}
@@ -261,16 +332,15 @@ export function TasksClient() {
       </div>
       <KanbanBoard
         onDrop={handleDrop}
-        onOpenTask={(taskId) => {
-          const task = tasks?.find((item) => item._id === taskId)
-          if (task) {
-            router.push(`/projects/${task.projectId}?task=${task._id}`, {
-              scroll: false,
-            })
-          }
-        }}
+        onOpenTask={openTask}
         showProject
         tasks={filteredTasks}
+      />
+      <TaskDialog
+        commentId={null}
+        onClose={closeTask}
+        onProjectChange={() => undefined}
+        taskId={openTaskId}
       />
     </section>
   )

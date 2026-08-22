@@ -7,8 +7,8 @@ import { FolderPlus, ListChecks, Pencil, Plus, Share2 } from "lucide-react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
 import { api } from "@neram/convex/api"
+import { NewTaskDialog } from "@/components/project-board/new-task-dialog"
 import {
-  AddTaskDialog,
   EditProjectDialog,
   NewProjectDialog,
   ShareProjectsDialog,
@@ -129,9 +129,8 @@ function ProjectRow({
         </div>
       </Link>
       <div className="flex shrink-0 items-center gap-0.5">
-        <AddTaskDialog
-          id={project._id}
-          name={project.name}
+        <NewTaskDialog
+          projectId={project._id}
           trigger={
             <DialogTrigger asChild>
               <Button

@@ -4,7 +4,7 @@ import { useQuery } from "convex-helpers/react/cache"
 import { useMutation } from "convex/react"
 import type { FunctionReturnType } from "convex/server"
 import { format } from "date-fns"
-import { Trash2 } from "lucide-react"
+import { MoreHorizontal, Trash2 } from "lucide-react"
 import { useRef, useState } from "react"
 import { toast } from "sonner"
 
@@ -13,10 +13,17 @@ import type { Id } from "@neram/convex/data-model"
 import { AssigneeSelect, UNASSIGNED } from "@/components/assignee-select"
 import { DueDatePicker } from "@/components/due-date-picker"
 import { ProjectSelect } from "@/components/project-select"
+import { incompleteSubtasksToast } from "@/components/project-board/incomplete-subtasks-toast"
 import { TaskComments } from "@/components/project-board/task-comments"
 import { TaskSubtasks } from "@/components/project-board/task-subtasks"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -291,18 +298,13 @@ function TaskMetadata({
     try {
       await move({ taskId: task._id, status })
     } catch (error) {
-      const data = dataFromError(error)
-      if (
-        data?.code === "INCOMPLETE_SUBTASKS" &&
-        window.confirm(
-          `${String(data.unfinishedCount)} subtasks are unfinished. Mark this task Done anyway?`
+      if (dataFromError(error)?.code === "INCOMPLETE_SUBTASKS") {
+        incompleteSubtasksToast(
+          error,
+          () =>
+            move({ taskId: task._id, status, confirmIncompleteSubtasks: true }),
+          "Could not change the status."
         )
-      ) {
-        await move({
-          taskId: task._id,
-          status,
-          confirmIncompleteSubtasks: true,
-        })
         return
       }
       toast.error(messageFromError(error, "Could not change the status."))
@@ -362,9 +364,32 @@ function TaskMetadata({
           }
           value={task.assigneeSubject ?? UNASSIGNED}
         />
-        <div className="grid gap-1 text-sm text-muted-foreground">
-          <span>Updated {format(task.updatedAt, "MMM d, yyyy")}</span>
-          <span>Created {format(task.createdAt, "MMM d, yyyy")}</span>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs text-muted-foreground">
+            Created {format(task.createdAt, "MMM d, yyyy")} · Updated{" "}
+            {format(task.updatedAt, "MMM d, yyyy")}
+          </p>
+          {!confirmDelete ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  aria-label="Task actions"
+                  size="icon-sm"
+                  variant="ghost"
+                >
+                  <MoreHorizontal />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive"
+                  onSelect={() => setConfirmDelete(true)}
+                >
+                  <Trash2 /> Delete task…
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null}
         </div>
         {confirmDelete ? (
           <div className="grid gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
@@ -401,15 +426,7 @@ function TaskMetadata({
               </Button>
             </div>
           </div>
-        ) : (
-          <Button
-            className="w-full"
-            onClick={() => setConfirmDelete(true)}
-            variant="destructive"
-          >
-            <Trash2 /> Delete task
-          </Button>
-        )}
+        ) : null}
       </div>
     </aside>
   )

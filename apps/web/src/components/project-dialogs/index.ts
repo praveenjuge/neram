@@ -1,4 +1,3 @@
-export { AddTaskDialog } from "./add-task-dialog"
 export { ArchiveProjectDialog } from "./archive-project-dialog"
 export { DeleteProjectDialog } from "./delete-project-dialog"
 export { EditProjectDialog } from "./edit-project-dialog"

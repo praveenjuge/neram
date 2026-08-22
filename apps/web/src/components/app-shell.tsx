@@ -20,8 +20,8 @@ import { type ReactNode, useState } from "react"
 
 import { api } from "@neram/convex/api"
 import { AppUserButton } from "@/components/theme-toggle"
+import { NewTaskDialog } from "@/components/project-board/new-task-dialog"
 import {
-  AddTaskDialog,
   ArchiveProjectDialog,
   EditProjectDialog,
   NewProjectDialog,
@@ -122,11 +122,10 @@ function ProjectActions({ project }: { project: SidebarProject }) {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <AddTaskDialog
-        id={project._id}
-        name={project.name}
+      <NewTaskDialog
         onOpenChange={onOpenChange}
         open={dialog === "add"}
+        projectId={project._id}
       />
       <EditProjectDialog
         color={project.color}

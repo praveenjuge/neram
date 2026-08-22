@@ -23,18 +23,14 @@ import Link from "next/link"
 import { useParams } from "next/navigation"
 
 import { api } from "@neram/convex/api"
+import { statusMeta } from "@/components/project-board/board-shared"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
+import { cn } from "@/lib/utils"
 import { workspaceHref } from "@/lib/workspace"
 
 type ActivityItem = FunctionReturnType<typeof api.activity.list>["page"][number]
-
-const statusLabel: Record<string, string> = {
-  todo: "Todo",
-  inProgress: "In Progress",
-  done: "Done",
-}
 
 const typeIcon: Record<ActivityItem["type"], LucideIcon> = {
   "task.created": Plus,
@@ -62,7 +58,8 @@ function describe(item: ActivityItem): string {
       return `added ${item.taskTitle ?? "a task"}`
     case "task.moved":
       return `moved ${item.taskTitle ?? "a task"} to ${
-        statusLabel[item.toStatus ?? ""] ?? "another column"
+        statusMeta[item.toStatus as keyof typeof statusMeta]?.label ??
+        "another column"
       }`
     case "task.assigned": {
       const who = item.assigneeName ?? "someone"
@@ -150,40 +147,38 @@ export function ActivityClient() {
         <EmptyState />
       ) : (
         <div className="grid gap-2">
-          <ul className="grid gap-2">
+          <ul className="divide-y divide-border">
             {results.map((item) => {
               const Icon = typeIcon[item.type] ?? History
               const taskId = "taskId" in item ? item.taskId : undefined
               const commentId = "commentId" in item ? item.commentId : undefined
               const commentExcerpt =
                 "commentExcerpt" in item ? item.commentExcerpt : undefined
-              const card = (
-                <Card
-                  className={
-                    taskId ? "transition-colors hover:bg-muted/40" : undefined
-                  }
-                  size="sm"
+              const row = (
+                <div
+                  className={cn(
+                    "-mx-2 flex items-start gap-3 rounded-lg px-2 py-3",
+                    taskId && "transition-colors hover:bg-muted/40"
+                  )}
                 >
-                  <CardContent className="flex items-start gap-3">
-                    <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground">
-                      <Icon className="size-4" />
-                    </span>
-                    <div className="min-w-0 space-y-0.5">
-                      <p className="text-sm">
-                        <span className="font-medium">{item.actorName}</span>{" "}
-                        {describe(item)}
+                  <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground">
+                    <Icon className="size-4" />
+                  </span>
+                  <div className="min-w-0 space-y-0.5">
+                    <p className="text-sm">
+                      <span className="font-medium">{item.actorName}</span>{" "}
+                      {describe(item)}
+                    </p>
+                    {commentExcerpt ? (
+                      <p className="line-clamp-1 text-sm text-muted-foreground">
+                        “{commentExcerpt}”
                       </p>
-                      {commentExcerpt ? (
-                        <p className="line-clamp-1 text-sm text-muted-foreground">
-                          “{commentExcerpt}”
-                        </p>
-                      ) : null}
-                      <p className="truncate text-sm text-muted-foreground">
-                        {activityContext(item)} · {relativeTime(item.createdAt)}
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
+                    ) : null}
+                    <p className="truncate text-sm text-muted-foreground">
+                      {activityContext(item)} · {relativeTime(item.createdAt)}
+                    </p>
+                  </div>
+                </div>
               )
               return (
                 <li key={item._id}>
@@ -191,10 +186,10 @@ export function ActivityClient() {
                     <Link
                       href={`${workspaceHref(organizationSlug, `/projects/${item.projectId}`)}?task=${taskId}${commentId ? `&comment=${commentId}` : ""}`}
                     >
-                      {card}
+                      {row}
                     </Link>
                   ) : (
-                    card
+                    row
                   )}
                 </li>
               )

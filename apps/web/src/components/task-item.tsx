@@ -1,10 +1,4 @@
-import {
-  CalendarClock,
-  Circle,
-  CircleCheck,
-  CircleDot,
-  type LucideIcon,
-} from "lucide-react"
+import { CalendarClock } from "lucide-react"
 
 import { formatDueDate } from "@/lib/dates"
 import { getProjectColorText } from "@/lib/project-colors"
@@ -12,15 +6,10 @@ import { ProjectIcon } from "@/lib/project-icons"
 import { cn } from "@/lib/utils"
 import { UserAvatar } from "@/components/user-avatar"
 
-export type TaskStatus = "todo" | "inProgress" | "done"
-
-// Single source of truth for how each status reads: the same icon + label is
-// reused on the board columns, the Tasks list, and anywhere a task shows.
-const statusMeta: Record<TaskStatus, { label: string; icon: LucideIcon }> = {
-  todo: { label: "Todo", icon: Circle },
-  inProgress: { label: "In Progress", icon: CircleDot },
-  done: { label: "Done", icon: CircleCheck },
-}
+import {
+  statusMeta,
+  type Status,
+} from "@/components/project-board/board-shared"
 
 /**
  * A task rendered as a single horizontal line, reused everywhere a task is
@@ -36,7 +25,7 @@ export function TaskItem({
   project,
   className,
 }: {
-  status: TaskStatus
+  status: Status
   title: string
   dueDate?: string
   assigneeName?: string | null

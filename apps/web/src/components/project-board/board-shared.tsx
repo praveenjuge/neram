@@ -1,16 +1,25 @@
 import type { FunctionReturnType } from "convex/server"
+import type { LucideIcon } from "lucide-react"
 import { Circle, CircleCheck, CircleDot } from "lucide-react"
 
 import { api } from "@neram/convex/api"
 import type { Id } from "@neram/convex/data-model"
 
-export const columns = [
-  { key: "todo", label: "Todo", icon: Circle },
-  { key: "inProgress", label: "In Progress", icon: CircleDot },
-  { key: "done", label: "Done", icon: CircleCheck },
-] as const
+const statuses = ["todo", "inProgress", "done"] as const
 
-export type Status = (typeof columns)[number]["key"]
+export type Status = (typeof statuses)[number]
+
+/** Single source of truth for how each status reads everywhere (columns, cards, selects). */
+export const statusMeta: Record<Status, { label: string; icon: LucideIcon }> = {
+  todo: { label: "Todo", icon: Circle },
+  inProgress: { label: "In Progress", icon: CircleDot },
+  done: { label: "Done", icon: CircleCheck },
+}
+
+export const columns = statuses.map((key) => ({
+  key,
+  ...statusMeta[key],
+}))
 
 /** A board card from a single-project `tasks.list` query. */
 export type Task = FunctionReturnType<typeof api.tasks.list>[number]

@@ -23,6 +23,7 @@ import {
   type Status,
 } from "@/components/project-board/board-shared"
 import { KanbanBoard } from "@/components/project-board/kanban-board"
+import { incompleteSubtasksToast } from "@/components/project-board/incomplete-subtasks-toast"
 import { NewTaskDialog } from "@/components/project-board/new-task-dialog"
 import { TaskDialog } from "@/components/project-board/task-dialog"
 
@@ -105,19 +106,15 @@ export function ProjectBoardClient({ projectId }: { projectId: string }) {
     try {
       await moveTask({ taskId, status, position })
     } catch (error) {
-      const data = dataFromError(error)
-      if (
-        data?.code === "INCOMPLETE_SUBTASKS" &&
-        window.confirm(
-          `${String(data.unfinishedCount)} subtasks are unfinished. Move this task to Done anyway?`
+      if (dataFromError(error)?.code === "INCOMPLETE_SUBTASKS") {
+        incompleteSubtasksToast(error, () =>
+          moveTask({
+            taskId,
+            status,
+            position,
+            confirmIncompleteSubtasks: true,
+          })
         )
-      ) {
-        await moveTask({
-          taskId,
-          status,
-          position,
-          confirmIncompleteSubtasks: true,
-        })
         return
       }
       toast.error(messageFromError(error, "Could not move the task."))
