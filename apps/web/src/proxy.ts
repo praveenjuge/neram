@@ -7,5 +7,5 @@ export default clerkMiddleware(() => {}, {
 })
 
 export const config = {
-  matcher: ["/w/:path*", "/w", "/__clerk/(.*)"],
+  matcher: ["/", "/w", "/w/:path*", "/__clerk/(.*)"],
 }
