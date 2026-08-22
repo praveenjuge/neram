@@ -12,7 +12,7 @@ import Link from "next/link"
 import { CodeBlock } from "@/components/code-block"
 import { CopyCommand } from "@/components/copy-command"
 import { SiteFooter } from "@/components/site-footer"
-import { SITE_URL, baseOptions } from "@/lib/layout.shared"
+import { SITE_URL, homeOptions } from "@/lib/layout.shared"
 import { HomeLayout } from "fumadocs-ui/layouts/home"
 
 export const metadata: Metadata = {
@@ -95,7 +95,7 @@ const structuredData = {
 
 export default function HomePage() {
   return (
-    <HomeLayout {...baseOptions()}>
+    <HomeLayout {...homeOptions()}>
       <main className="relative overflow-hidden">
         <div
           aria-hidden="true"
