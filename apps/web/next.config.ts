@@ -11,7 +11,9 @@ const nextConfig: NextConfig = {
   deploymentId,
   experimental: {
     outputHashSalt: deploymentId,
-    turbopackFileSystemCacheForBuild: true,
+    // Disabled: restoring this cache across deployments served a stale
+    // compiled globals.css (old font stack) after source changes.
+    turbopackFileSystemCacheForBuild: false,
     turbopackRustReactCompiler: true,
   },
   partialPrefetching: true,
