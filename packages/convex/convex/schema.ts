@@ -97,9 +97,6 @@ export default defineSchema({
     // A task can belong to the one active Sprint, or to the Backlog when unset.
     // Closed Sprint truth lives in sprintTaskEntries and is never rewritten.
     currentSprintId: v.optional(v.id("sprints")),
-    // Migration-only: removed by sprintMigration.cleanupUpcoming. New code
-    // never reads or writes future placement.
-    upcomingSprintId: v.optional(v.id("sprints")),
     completedAt: v.optional(v.number()),
     // Fractional sort key for ordering within a column. New tasks append at the
     // end; drag-to-reorder writes a value between its neighbors.
@@ -109,11 +106,6 @@ export default defineSchema({
   })
     .index("by_organization_and_updated_at", ["organizationId", "updatedAt"])
     .index("by_organization_and_current_sprint", [
-      "organizationId",
-      "currentSprintId",
-      "position",
-    ])
-    .index("by_organization_and_backlog", [
       "organizationId",
       "currentSprintId",
       "position",
@@ -186,17 +178,14 @@ export default defineSchema({
   organizationSettings: defineTable({
     organizationId: v.string(),
     // Canonical duration for newly started Sprints. "open" has no end date.
-    sprintDuration: v.optional(
-      v.union(v.literal(1), v.literal(2), v.literal(4), v.literal("open"))
+    sprintDuration: v.union(
+      v.literal(1),
+      v.literal(2),
+      v.literal(4),
+      v.literal("open")
     ),
-    // Optional during the legacy-data cleanup window; removed once prod rows
-    // no longer carry them. `configuredDuration` falls back from cadenceWeeks.
-    cadenceWeeks: v.optional(v.number()),
-    startWeekday: v.optional(v.number()),
-    timezone: v.optional(v.string()),
     nextSprintNumber: v.number(),
     currentSprintId: v.optional(v.id("sprints")),
-    upcomingSprintId: v.optional(v.id("sprints")),
     rolloverStatus: v.union(v.literal("idle"), v.literal("running")),
     activeRolloverJobId: v.optional(v.id("sprintRolloverJobs")),
     createdAt: v.number(),
@@ -215,14 +204,8 @@ export default defineSchema({
     endsAt: v.optional(v.number()),
     closedCutoffAt: v.optional(v.number()),
     closedAt: v.optional(v.number()),
-    earlyCloseActorUserId: v.optional(v.string()),
-    earlyCloseActorName: v.optional(v.string()),
-    earlyCloseReason: v.optional(v.string()),
     baselineCount: v.optional(v.number()),
     completedCount: v.optional(v.number()),
-    // Optional during the legacy-data cleanup window; removed once prod rows
-    // no longer carry it.
-    carriedCount: v.optional(v.number()),
     addedCount: v.optional(v.number()),
     removedCount: v.optional(v.number()),
     reopenedCount: v.optional(v.number()),
@@ -251,7 +234,6 @@ export default defineSchema({
     removedByName: v.optional(v.string()),
     removalReason: v.optional(v.string()),
     creditedCompletionAt: v.optional(v.number()),
-    carriedToSprintId: v.optional(v.id("sprints")),
     priorCompletionSprintId: v.optional(v.id("sprints")),
   })
     .index("by_sprint_and_added_at", ["sprintId", "addedAt"])
@@ -269,7 +251,6 @@ export default defineSchema({
     closingSprintId: v.id("sprints"),
     // Unset when the active Sprint ends with nothing scheduled after it: the
     // Sprint simply closes and the workspace has no active Sprint.
-    promotedSprintId: v.optional(v.id("sprints")),
     status: v.union(
       v.literal("running"),
       v.literal("completed"),
@@ -287,11 +268,7 @@ export default defineSchema({
     actorName: v.optional(v.string()),
     reason: v.optional(v.string()),
     baselineCount: v.number(),
-    completedCount: v.number(),
-    // Optional during the legacy-data cleanup window; removed once prod rows
-    // no longer carry it.
-    carriedCount: v.optional(v.number()),
-    addedCount: v.number(),
+    completedCount: v.number(),    addedCount: v.number(),
     removedCount: v.number(),
     reopenedCount: v.number(),
     error: v.optional(v.string()),
@@ -319,8 +296,7 @@ export default defineSchema({
     toStatus: v.optional(status),
     assigneeUserId: v.optional(v.string()),
     assigneeName: v.optional(v.string()),
-    detail: v.optional(v.string()),
-    createdAt: v.number(),
+    detail: v.optional(v.string()),    createdAt: v.number(),
   })
     .index("by_organization_and_created_at", ["organizationId", "createdAt"]),
 

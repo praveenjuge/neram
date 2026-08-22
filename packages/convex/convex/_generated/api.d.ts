@@ -19,7 +19,6 @@ import type * as organizationJobs from "../organizationJobs.js";
 import type * as organizationPagination from "../organizationPagination.js";
 import type * as organizations from "../organizations.js";
 import type * as projects from "../projects.js";
-import type * as sprintMigration from "../sprintMigration.js";
 import type * as sprintModel from "../sprintModel.js";
 import type * as sprintRollover from "../sprintRollover.js";
 import type * as sprintTime from "../sprintTime.js";
@@ -47,7 +46,6 @@ declare const fullApi: ApiFromModules<{
   organizationPagination: typeof organizationPagination;
   organizations: typeof organizations;
   projects: typeof projects;
-  sprintMigration: typeof sprintMigration;
   sprintModel: typeof sprintModel;
   sprintRollover: typeof sprintRollover;
   sprintTime: typeof sprintTime;

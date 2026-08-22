@@ -12,7 +12,6 @@ import {
   activeSprintId,
   addTaskToSprint,
   cleanGoal,
-  configuredDuration,
   ensureSettings,
   getSettings,
   MAX_SPRINT_TASKS,
@@ -117,7 +116,7 @@ export const backlog = query({
     const access = await requireOrganization(ctx)
     const rows = await ctx.db
       .query("tasks")
-      .withIndex("by_organization_and_backlog", (q) =>
+      .withIndex("by_organization_and_current_sprint", (q) =>
         q
           .eq("organizationId", access.organization.organizationId)
           .eq("currentSprintId", undefined)
@@ -295,7 +294,7 @@ export const start = mutation({
       })
     }
     const selectedDuration = validateDuration(
-      args.duration ?? configuredDuration(settings)
+      args.duration ?? settings.sprintDuration
     )
     const now = Date.now()
     const bounds = sprintBounds(now, selectedDuration)
@@ -311,7 +310,6 @@ export const start = mutation({
     await ctx.db.patch(settings._id, {
       sprintDuration: selectedDuration,
       currentSprintId: sprintId,
-      upcomingSprintId: undefined,
       nextSprintNumber: settings.nextSprintNumber + 1,
       rolloverStatus: "idle",
       updatedAt: now,
@@ -349,7 +347,7 @@ export const updateDuration = mutation({
       ctx,
       access.organization.organizationId
     )
-    if (configuredDuration(settings) === selectedDuration) return null
+    if (settings.sprintDuration === selectedDuration) return null
     const now = Date.now()
     await ctx.db.patch(settings._id, {
       sprintDuration: selectedDuration,

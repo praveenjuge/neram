@@ -107,7 +107,6 @@ async function closeTasks(ctx: MutationCtx, job: Doc<"sprintRolloverJobs">) {
     if (task?.currentSprintId === job.closingSprintId) {
       await ctx.db.patch(task._id, {
         currentSprintId: undefined,
-        upcomingSprintId: undefined,
         updatedAt: now,
       })
     }
@@ -154,7 +153,6 @@ async function finalize(ctx: MutationCtx, job: Doc<"sprintRolloverJobs">) {
   }
   await ctx.db.patch(settings._id, {
     currentSprintId: undefined,
-    upcomingSprintId: undefined,
     rolloverStatus: "idle",
     activeRolloverJobId: undefined,
     updatedAt: now,

@@ -14,7 +14,7 @@ import {
 } from "./_generated/server"
 import type { MutationCtx } from "./_generated/server"
 import { actor, requireOrganization, requireOrganizationAdmin } from "./model"
-import { configuredDuration, getSettings } from "./sprintModel"
+import { getSettings } from "./sprintModel"
 
 const role = v.union(v.literal("org:admin"), v.literal("org:member"))
 const memberFields = {
@@ -88,9 +88,7 @@ export const current = query({
     return {
       organization: access.organization,
       membership: access.membership,
-      settings: settings
-        ? { sprintDuration: configuredDuration(settings) }
-        : null,
+      settings: settings ? { sprintDuration: settings.sprintDuration } : null,
     }
   },
 })

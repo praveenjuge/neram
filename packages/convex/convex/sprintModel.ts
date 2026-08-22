@@ -3,7 +3,6 @@ import { ConvexError } from "convex/values"
 import type { Doc, Id } from "./_generated/dataModel"
 import type { MutationCtx, QueryCtx } from "./_generated/server"
 import type { Actor } from "./model"
-import type { SprintDuration } from "./sprintTime"
 
 export const MAX_SPRINT_TASKS = 1000
 type SprintActor = Pick<Actor, "userId" | "name">
@@ -41,27 +40,12 @@ export async function ensureSettings(
   const id = await ctx.db.insert("organizationSettings", {
     organizationId,
     sprintDuration: 2,
-    // Retained only for schema compatibility with pre-Focus deployments.
-    cadenceWeeks: 2,
-    startWeekday: 1,
-    timezone: "UTC",
     nextSprintNumber: 1,
     rolloverStatus: "idle",
     createdAt: now,
     updatedAt: now,
   })
   return (await ctx.db.get(id))!
-}
-
-export function configuredDuration(
-  settings: Doc<"organizationSettings">
-): SprintDuration {
-  if (settings.sprintDuration) return settings.sprintDuration
-  return settings.cadenceWeeks === 1 ||
-    settings.cadenceWeeks === 2 ||
-    settings.cadenceWeeks === 4
-    ? settings.cadenceWeeks
-    : 2
 }
 
 export async function activeSprintId(
@@ -150,7 +134,6 @@ export async function addTaskToSprint(
   })
   await ctx.db.patch(args.task._id, {
     currentSprintId: sprint._id,
-    upcomingSprintId: undefined,
     updatedAt: now,
   })
   return sprint
@@ -178,7 +161,6 @@ export async function removeTaskFromSprint(
   })
   await ctx.db.patch(args.task._id, {
     currentSprintId: undefined,
-    upcomingSprintId: undefined,
     updatedAt: now,
   })
 }
