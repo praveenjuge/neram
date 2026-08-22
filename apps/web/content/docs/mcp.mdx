@@ -1,0 +1,100 @@
+---
+title: MCP
+description: Neram MCP — local stdio and hosted Streamable HTTP, same tools.
+---
+
+Local stdio and hosted Streamable HTTP run the same Organization-scoped tools. Tool failures come back as `isError` results (not protocol exceptions) with stable error codes.
+
+## Local stdio
+
+Authenticate first with `neram login`. `neram mcp` fails fast with a friendly stderr message when you aren't logged in — it never auto-logs-in from startup.
+
+```bash
+npx neram login   # sign in first
+npx neram mcp     # stdio server; refreshes the token per request
+
+# print a client config without writing files (also: cursor, vscode)
+npx neram mcp install claude-code
+
+# Claude Code one-liner
+claude mcp add neram -- npx neram mcp
+```
+
+```json
+{
+  "mcpServers": {
+    "neram": {
+      "command": "npx",
+      "args": ["neram", "mcp"]
+    }
+  }
+}
+```
+
+## Hosted Streamable HTTP
+
+```bash
+# hosted Streamable HTTP; send a Clerk id_token
+curl -s https://neram.praveenjuge.com/mcp \
+  -H "Authorization: Bearer $NERAM_ID_TOKEN"
+```
+
+Send a Clerk OAuth `id_token` in `Authorization: Bearer`. The endpoint returns `401` without a bearer token; that is the expected unauthenticated smoke-test result. Public client config is at `/.well-known/neram-agent.json`.
+
+## Tools
+
+```bash
+# read-only
+daily_brief
+workspace_status
+get_workspace
+list_workspace_members
+get_sprint
+list_sprint_tasks
+sprint_history
+list_projects
+list_tasks
+get_task
+list_subtasks
+list_task_comments
+summarize_project
+recent_activity
+
+# mutations
+capture_task
+update_task
+move_task              # optional position for kanban order
+complete_task
+move_task_to_project
+delete_task
+create_subtask
+rename_subtask
+set_subtask_completed
+reorder_subtask
+delete_subtask
+create_comment
+reply_to_comment
+edit_comment
+delete_comment
+create_project
+update_project
+delete_project          # destructive — purges every task
+create_workspace
+invite_workspace_member
+update_workspace_member_role
+remove_workspace_member # destructive — exact Organization confirmation
+delete_workspace        # destructive — exact Organization confirmation
+plan_sprint_tasks
+remove_sprint_tasks
+update_sprint_goal
+update_sprint_duration
+start_sprint
+end_sprint              # destructive — unfinished work returns to Backlog
+
+# failures return isError results with:
+# { error: { code, message, details } }
+```
+
+### IDs vs names
+
+Prefer project and task ids for automation; name/title resolution intentionally rejects ambiguous matches with `AMBIGUOUS` and candidate ids in `details.matches`.

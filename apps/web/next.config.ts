@@ -1,3 +1,4 @@
+import { createMDX } from "fumadocs-mdx/next"
 import type { NextConfig } from "next"
 
 const deploymentId = process.env.VERCEL_DEPLOYMENT_ID?.replace(
@@ -28,19 +29,18 @@ const nextConfig: NextConfig = {
       source: "/.well-known/neram-agent.json",
       destination: "/api/agent-config",
     },
+    // Per-page markdown dumps, e.g. /docs/cli.md and /docs/cli.mdx
     {
-      source: "/",
-      destination: "/index.html",
+      source: "/docs/:path*.mdx",
+      destination: "/api/docs-source/mdx/:path*",
     },
     {
-      source: "/docs",
-      destination: "/docs/index.html",
-    },
-    {
-      source: "/docs/:path*",
-      destination: "/docs/:path*/index.html",
+      source: "/docs/:path*.md",
+      destination: "/api/docs-source/md/:path*",
     },
   ],
 }
 
-export default nextConfig
+const withMDX = createMDX()
+
+export default withMDX(nextConfig)

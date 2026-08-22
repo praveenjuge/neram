@@ -1,0 +1,20 @@
+{
+  "artifacts": {
+    "markdown": {
+      "pattern": "https://neram.praveenjuge.com/{route}.md"
+    },
+    "llmsFullTxt": "https://neram.praveenjuge.com/llms-full.txt",
+    "llmsTxt": "https://neram.praveenjuge.com/llms.txt",
+    "sitemap": "https://neram.praveenjuge.com/sitemap.xml"
+  },
+  "description": "Projects hold all work. One optional Sprint keeps humans and agents focused on what matters now.",
+  "generator": "@neram/web (next.js)",
+  "name": "Neram",
+  "site": "https://neram.praveenjuge.com",
+  "contentUsage": {
+    "search": true,
+    "ai-input": true,
+    "ai-train": true
+  },
+  "repository": "https://github.com/praveenjuge/neram"
+}

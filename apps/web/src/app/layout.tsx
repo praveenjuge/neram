@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next"
 import { GeistSans } from "geist/font/sans"
+import { GeistMono } from "geist/font/mono"
 import type { ReactNode } from "react"
+import { RootProvider } from "fumadocs-ui/provider/next"
 
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/sonner"
@@ -36,11 +38,17 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html className={GeistSans.variable} lang="en" suppressHydrationWarning>
-      <body className="text-sm antialiased">
+    <html
+      className={`${GeistSans.variable} ${GeistMono.variable}`}
+      lang="en"
+      suppressHydrationWarning
+    >
+      <body className="flex min-h-screen flex-col text-sm antialiased">
         <ThemeProvider>
           <TooltipProvider>
-            {children}
+            <RootProvider theme={{ enabled: false }}>
+              {children}
+            </RootProvider>
             <Toaster position="bottom-right" />
           </TooltipProvider>
         </ThemeProvider>

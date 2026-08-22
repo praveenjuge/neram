@@ -9,10 +9,7 @@ optional Sprint gives the workspace one shared focus list across projects.
 ```text
 apps/
   web/            Next.js App Router, React, and shadcn/ui — serves the public
-                  site (landing + /docs) by building Blume's static output into
-                  public/ (see scripts/sync-docs.mjs)
-  docs/           Blume (Astro) — the landing page + docs source, built into
-                  apps/web for the single Vercel project
+                  site (landing + /docs via Fumadocs) and the app at /w
   native/         Expo iOS app
 packages/
   convex/         Convex functions, generated API, and backend tests
@@ -39,7 +36,7 @@ bun run dev
 ```
 
 The production Vercel project uses `bun run deploy:web`, which deploys Convex
-and builds the composed Blume + Next.js site as one release.
+and builds the Next.js site (marketing + docs + app) as one release.
 
 ## Commands
 
