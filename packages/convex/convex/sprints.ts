@@ -14,12 +14,16 @@ import {
   cleanGoal,
   configuredDuration,
   ensureSettings,
+  getSettings,
   MAX_SPRINT_TASKS,
   removeTaskFromSprint,
 } from "./sprintModel"
 import { startSprintClose } from "./sprintRollover"
 import { sprintBounds, validateDuration } from "./sprintTime"
-import { taskCounts, taskStats } from "./taskModel"
+import {
+  publicTaskWithProject,
+  taskWithProjectValidator as task,
+} from "./taskModel"
 
 const duration = v.union(
   v.literal(1),
@@ -57,60 +61,6 @@ function publicSprint(sprintDoc: Doc<"sprints">) {
   }
 }
 
-const task = v.object({
-  _id: v.id("tasks"),
-  _creationTime: v.number(),
-  projectId: v.id("projects"),
-  projectName: v.string(),
-  projectIcon: v.optional(v.string()),
-  projectColor: v.optional(v.string()),
-  title: v.string(),
-  description: v.optional(v.string()),
-  dueDate: v.optional(v.string()),
-  status: v.union(
-    v.literal("todo"),
-    v.literal("inProgress"),
-    v.literal("done")
-  ),
-  assigneeSubject: v.optional(v.string()),
-  assigneeName: v.optional(v.string()),
-  currentSprintId: v.optional(v.id("sprints")),
-  completedAt: v.optional(v.number()),
-  position: v.number(),
-  createdAt: v.number(),
-  updatedAt: v.number(),
-  totalSubtasks: v.number(),
-  completedSubtasks: v.number(),
-  activeCommentCount: v.number(),
-})
-
-async function sprintTask(
-  ctx: Parameters<typeof requireOrganization>[0],
-  taskDoc: Doc<"tasks">,
-  project: Doc<"projects">
-) {
-  return {
-    _id: taskDoc._id,
-    _creationTime: taskDoc._creationTime,
-    projectId: taskDoc.projectId,
-    projectName: project.name,
-    projectIcon: project.icon,
-    projectColor: project.color,
-    title: taskDoc.title,
-    description: taskDoc.description,
-    dueDate: taskDoc.dueDate,
-    status: taskDoc.status,
-    assigneeSubject: taskDoc.assigneeSubject,
-    assigneeName: taskDoc.assigneeName,
-    currentSprintId: taskDoc.currentSprintId,
-    completedAt: taskDoc.completedAt,
-    position: taskDoc.position,
-    createdAt: taskDoc.createdAt,
-    updatedAt: taskDoc.updatedAt,
-    ...taskCounts(await taskStats(ctx, taskDoc._id)),
-  }
-}
-
 async function tasksWithProjects(
   ctx: Parameters<typeof requireOrganization>[0],
   rows: Array<Doc<"tasks">>
@@ -130,20 +80,10 @@ async function tasksWithProjects(
       if (project) projects.set(row.projectId, project)
     }
     if (project && project.archivedAt === undefined) {
-      result.push(await sprintTask(ctx, row, project))
+      result.push(await publicTaskWithProject(ctx, row, project))
     }
   }
   return result
-}
-
-async function settingsFor(
-  ctx: Parameters<typeof requireOrganization>[0],
-  organizationId: string
-) {
-  return await ctx.db
-    .query("organizationSettings")
-    .withIndex("by_organization", (q) => q.eq("organizationId", organizationId))
-    .unique()
 }
 
 export const current = query({
@@ -151,7 +91,7 @@ export const current = query({
   returns: v.union(v.null(), v.object({ sprint, tasks: v.array(task) })),
   handler: async (ctx) => {
     const access = await requireOrganization(ctx)
-    const settings = await settingsFor(ctx, access.organization.organizationId)
+    const settings = await getSettings(ctx, access.organization.organizationId)
     if (!settings?.currentSprintId) return null
     const currentSprint = await ctx.db.get(settings.currentSprintId)
     if (!currentSprint || currentSprint.state !== "current") return null

@@ -11,7 +11,7 @@
   "scripts": {
     "build": "turbo run build",
     "codegen": "turbo run codegen --filter=@neram/convex",
-    "deploy:web": "turbo run deploy --filter=@neram/convex",
+    "deploy:convex": "turbo run deploy --filter=@neram/convex",
     "dev": "turbo run dev",
     "docs:build": "turbo run build --filter=@neram/web",
     "docs:check": "turbo run check:docs --filter=@neram/web",

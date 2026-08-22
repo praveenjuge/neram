@@ -112,13 +112,7 @@ export async function resolveAssignee(
   ctx: QueryCtx | MutationCtx,
   project: Doc<"projects">,
   assigneeSubject: string
-): Promise<{
-  subject: string
-  userId: string
-  name: string
-  organizationId: string
-  organizationRole: "org:admin" | "org:member"
-}> {
+): Promise<{ subject: string; name: string }> {
   const membership = await ctx.db
     .query("organizationMembers")
     .withIndex("by_organization_and_user", (q) =>
@@ -133,13 +127,22 @@ export async function resolveAssignee(
       message: "Choose someone in this workspace.",
     })
   }
-  return {
-    subject: membership.userId,
-    userId: membership.userId,
-    name: membership.displayName,
-    organizationId: membership.organizationId,
-    organizationRole: membership.role,
+  return { subject: membership.userId, name: membership.displayName }
+}
+
+/**
+ * Trim a required text field and enforce 1..max characters. `label` feeds the
+ * error code (INVALID_<LABEL>) so each field keeps its stable client contract.
+ */
+export function boundedText(value: string, max: number, label: string) {
+  const trimmed = value.trim()
+  if (trimmed.length < 1 || trimmed.length > max) {
+    throw new ConvexError({
+      code: `INVALID_${label.toUpperCase()}`,
+      message: `Use 1 to ${max} characters.`,
+    })
   }
+  return trimmed
 }
 
 export type ProjectRole = "org:admin" | "org:member"

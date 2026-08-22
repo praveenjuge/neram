@@ -5,6 +5,7 @@ import { internal } from "./_generated/api"
 import type { Doc } from "./_generated/dataModel"
 import { internalMutation, mutation, query } from "./_generated/server"
 import {
+  boundedText,
   projectCounts,
   recordActivity,
   requireOrganization,
@@ -54,14 +55,7 @@ function summarize(project: Doc<"projects">, role: ProjectRole) {
 }
 
 function cleanName(name: string) {
-  const trimmed = name.trim()
-  if (trimmed.length < 1 || trimmed.length > 80) {
-    throw new ConvexError({
-      code: "INVALID_NAME",
-      message: "Use 1 to 80 characters.",
-    })
-  }
-  return trimmed
+  return boundedText(name, 80, "name")
 }
 
 function cleanIcon(icon: string) {

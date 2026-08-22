@@ -113,15 +113,9 @@ export default defineSchema({
       "currentSprintId",
       "position",
     ])
-    .index("by_organization_and_upcoming_sprint", [
-      "organizationId",
-      "upcomingSprintId",
-      "position",
-    ])
     .index("by_organization_and_backlog", [
       "organizationId",
       "currentSprintId",
-      "upcomingSprintId",
       "position",
     ])
     .index("by_project_position", ["projectId", "position"]),
@@ -170,9 +164,7 @@ export default defineSchema({
     deletingAt: v.optional(v.number()),
     deletedAt: v.optional(v.number()),
   })
-    .index("by_organization_id", ["organizationId"])
-    .index("by_slug", ["slug"])
-    .index("by_state", ["state"]),
+    .index("by_organization_id", ["organizationId"]),
 
   // Clerk is authoritative. This projection exists for reactive member lists
   // and transaction-time authorization, including denial of stale sessions.
@@ -189,8 +181,7 @@ export default defineSchema({
   })
     .index("by_organization", ["organizationId"])
     .index("by_organization_and_user", ["organizationId", "userId"])
-    .index("by_membership_id", ["membershipId"])
-    .index("by_user", ["userId"]),
+    .index("by_membership_id", ["membershipId"]),
 
   organizationSettings: defineTable({
     organizationId: v.string(),
@@ -198,11 +189,11 @@ export default defineSchema({
     sprintDuration: v.optional(
       v.union(v.literal(1), v.literal(2), v.literal(4), v.literal("open"))
     ),
-    // Legacy cadence fields stay schema-compatible until the production data
-    // cleanup has run; the product no longer exposes them.
-    cadenceWeeks: v.number(),
-    startWeekday: v.number(),
-    timezone: v.string(),
+    // Optional during the legacy-data cleanup window; removed once prod rows
+    // no longer carry them. `configuredDuration` falls back from cadenceWeeks.
+    cadenceWeeks: v.optional(v.number()),
+    startWeekday: v.optional(v.number()),
+    timezone: v.optional(v.string()),
     nextSprintNumber: v.number(),
     currentSprintId: v.optional(v.id("sprints")),
     upcomingSprintId: v.optional(v.id("sprints")),
@@ -229,6 +220,8 @@ export default defineSchema({
     earlyCloseReason: v.optional(v.string()),
     baselineCount: v.optional(v.number()),
     completedCount: v.optional(v.number()),
+    // Optional during the legacy-data cleanup window; removed once prod rows
+    // no longer carry it.
     carriedCount: v.optional(v.number()),
     addedCount: v.optional(v.number()),
     removedCount: v.optional(v.number()),
@@ -237,7 +230,6 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_organization_and_state", ["organizationId", "state"])
-    .index("by_organization_and_number", ["organizationId", "number"])
     .index("by_state_and_ends_at", ["state", "endsAt"]),
 
   // Rows are never deleted or reassigned to another Sprint. Lifecycle fields
@@ -263,7 +255,6 @@ export default defineSchema({
     priorCompletionSprintId: v.optional(v.id("sprints")),
   })
     .index("by_sprint_and_added_at", ["sprintId", "addedAt"])
-    .index("by_sprint_and_task", ["sprintId", "taskId"])
     .index("by_sprint_and_removed", ["sprintId", "removedAt"])
     .index("by_sprint_task_and_removed", ["sprintId", "taskId", "removedAt"])
     .index("by_organization_and_task", ["organizationId", "taskId"])
@@ -297,7 +288,9 @@ export default defineSchema({
     reason: v.optional(v.string()),
     baselineCount: v.number(),
     completedCount: v.number(),
-    carriedCount: v.number(),
+    // Optional during the legacy-data cleanup window; removed once prod rows
+    // no longer carry it.
+    carriedCount: v.optional(v.number()),
     addedCount: v.number(),
     removedCount: v.number(),
     reopenedCount: v.number(),
@@ -307,8 +300,7 @@ export default defineSchema({
     completedAt: v.optional(v.number()),
   })
     .index("by_organization_and_status", ["organizationId", "status"])
-    .index("by_status", ["status"])
-    .index("by_closing_sprint", ["closingSprintId"]),
+    .index("by_status", ["status"]),
 
   organizationActivity: defineTable({
     organizationId: v.string(),
@@ -328,11 +320,9 @@ export default defineSchema({
     assigneeUserId: v.optional(v.string()),
     assigneeName: v.optional(v.string()),
     detail: v.optional(v.string()),
-    legacyEventKey: v.optional(v.string()),
     createdAt: v.number(),
   })
-    .index("by_organization_and_created_at", ["organizationId", "createdAt"])
-    .index("by_legacy_event_key", ["legacyEventKey"]),
+    .index("by_organization_and_created_at", ["organizationId", "createdAt"]),
 
   organizationJobs: defineTable({
     organizationId: v.string(),

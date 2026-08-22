@@ -13,6 +13,7 @@ import {
   requireTaskAccess,
   taskCounts,
   taskStats,
+  touchTask,
 } from "./taskModel"
 
 const ROOT_PAGE_SIZE = 20
@@ -110,13 +111,6 @@ async function validateMentions(
     })
   }
   return ordered
-}
-
-async function touchTask(ctx: MutationCtx, task: Doc<"tasks">) {
-  const now = Date.now()
-  await ctx.db.patch(task._id, { updatedAt: now })
-  await ctx.db.patch(task.projectId, { updatedAt: now })
-  return now
 }
 
 export const list = query({

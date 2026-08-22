@@ -242,7 +242,7 @@ test("Sprint planning preserves tenant isolation", async () => {
   ).rejects.toThrow()
 })
 
-test("approved migration returns future work to Backlog and removes only future Sprint data", async () => {
+test("hygiene pass clears legacy fields and removes only future Sprint data", async () => {
   const { t, alice } = await setup()
   const currentId = await alice.mutation(api.sprints.start, {})
   const projectId = await alice.mutation(api.projects.create, {
@@ -287,6 +287,35 @@ test("approved migration returns future work to Backlog and removes only future 
       actorName: "Alice",
       addedAt: now,
     })
+    const settings = await ctx.db
+      .query("organizationSettings")
+      .withIndex("by_organization", (q) =>
+        q.eq("organizationId", "org_alpha")
+      )
+      .unique()
+    // Simulate a pre-Focus row that never stored an explicit duration.
+    await ctx.db.patch(settings!._id, {
+      sprintDuration: undefined,
+      cadenceWeeks: 1,
+      startWeekday: 1,
+      timezone: "UTC",
+    })
+    await ctx.db.insert("sprintRolloverJobs", {
+      organizationId: "org_alpha",
+      closingSprintId: currentId,
+      status: "completed" as const,
+      phase: "finalize" as const,
+      cutoffAt: now,
+      early: false,
+      baselineCount: 0,
+      completedCount: 0,
+      carriedCount: 0,
+      addedCount: 0,
+      removedCount: 0,
+      reopenedCount: 0,
+      createdAt: now,
+      updatedAt: now,
+    })
     return { futureId, futureTask }
   })
 
@@ -294,22 +323,36 @@ test("approved migration returns future work to Backlog and removes only future 
     (await alice.query(api.sprints.backlog, {})).map((task) => task._id)
   ).toContain(futureTask)
 
-  for (let index = 0; index < 4; index += 1) {
-    await alice.mutation(internal.sprintMigration.cleanupSprint, {
-      sprintId: futureId,
-    })
-  }
+  await alice.mutation(internal.migrations.run, {})
   const state = await t.run(async (ctx) => ({
     future: await ctx.db.get(futureId),
     current: await ctx.db.get(currentId),
     task: await ctx.db.get(futureTask),
+    settings: await ctx.db
+      .query("organizationSettings")
+      .withIndex("by_organization", (q) =>
+        q.eq("organizationId", "org_alpha")
+      )
+      .unique(),
     entries: await ctx.db
       .query("sprintTaskEntries")
       .withIndex("by_sprint_and_added_at", (q) => q.eq("sprintId", futureId))
       .take(10),
+    jobs: await (async () => {
+      const rows = []
+      for await (const row of ctx.db.query("sprintRolloverJobs")) rows.push(row)
+      return rows
+    })(),
   }))
   expect(state.future).toBeNull()
   expect(state.entries).toEqual([])
   expect(state.task?.upcomingSprintId).toBeUndefined()
   expect(state.current?.state).toBe("current")
+  expect(state.settings?.sprintDuration).toBe(1)
+  expect(state.settings?.cadenceWeeks).toBeUndefined()
+  expect(state.settings?.startWeekday).toBeUndefined()
+  expect(state.settings?.timezone).toBeUndefined()
+  for (const job of state.jobs) {
+    expect(job.carriedCount).toBeUndefined()
+  }
 })

@@ -35,7 +35,7 @@ Start development:
 bun run dev
 ```
 
-The production Vercel project uses `bun run deploy:web`, which deploys Convex
+The production Vercel project uses `bun run deploy:convex`, which deploys Convex
 and builds the Next.js site (marketing + docs + app) as one release.
 
 ## Commands

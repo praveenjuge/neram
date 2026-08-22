@@ -1,7 +1,7 @@
 import { ConvexError } from "convex/values"
 
 import type { Doc, Id } from "./_generated/dataModel"
-import type { MutationCtx } from "./_generated/server"
+import type { MutationCtx, QueryCtx } from "./_generated/server"
 import type { Actor } from "./model"
 import type { SprintDuration } from "./sprintTime"
 
@@ -21,15 +21,22 @@ export function cleanGoal(goal?: string) {
   return value
 }
 
+export async function getSettings(
+  ctx: MutationCtx | QueryCtx,
+  organizationId: string
+) {
+  return await ctx.db
+    .query("organizationSettings")
+    .withIndex("by_organization", (q) => q.eq("organizationId", organizationId))
+    .unique()
+}
+
 export async function ensureSettings(
   ctx: MutationCtx,
   organizationId: string,
   now = Date.now()
 ) {
-  const existing = await ctx.db
-    .query("organizationSettings")
-    .withIndex("by_organization", (q) => q.eq("organizationId", organizationId))
-    .unique()
+  const existing = await getSettings(ctx, organizationId)
   if (existing) return existing
   const id = await ctx.db.insert("organizationSettings", {
     organizationId,
@@ -80,10 +87,7 @@ async function activeEntry(
 }
 
 async function assertWritable(ctx: MutationCtx, organizationId: string) {
-  const settings = await ctx.db
-    .query("organizationSettings")
-    .withIndex("by_organization", (q) => q.eq("organizationId", organizationId))
-    .unique()
+  const settings = await getSettings(ctx, organizationId)
   if (settings?.rolloverStatus === "running") {
     throw new ConvexError({
       code: "SPRINT_CLOSING",

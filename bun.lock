@@ -130,9 +130,7 @@
       "version": "0.0.1",
       "dependencies": {
         "@clerk/backend": "^3.11.3",
-        "@date-fns/tz": "^1.5.0",
         "convex": "^1.41.0",
-        "convex-helpers": "^0.1.120",
         "date-fns": "^4.4.0",
         "svix": "^1.96.1",
       },

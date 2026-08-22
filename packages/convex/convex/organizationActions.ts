@@ -6,6 +6,7 @@ import { ConvexError, v } from "convex/values"
 import { internal } from "./_generated/api"
 import { action, env, internalAction } from "./_generated/server"
 import type { ActionCtx } from "./_generated/server"
+import { boundedText } from "./model"
 import { visitClerkMembershipPages } from "./organizationPagination"
 
 const PROJECTION_BATCH_SIZE = 100
@@ -21,14 +22,7 @@ function clerk() {
 }
 
 function cleanName(name: string) {
-  const value = name.trim()
-  if (value.length < 1 || value.length > 80) {
-    throw new ConvexError({
-      code: "INVALID_NAME",
-      message: "Use 1 to 80 characters.",
-    })
-  }
-  return value
+  return boundedText(name, 80, "name")
 }
 
 function cleanSlug(slug?: string) {

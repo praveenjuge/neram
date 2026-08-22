@@ -1,12 +1,13 @@
 import { ConvexError, v } from "convex/values"
 
-import type { Doc } from "./_generated/dataModel"
-import { mutation, query, type MutationCtx } from "./_generated/server"
+import { mutation, query } from "./_generated/server"
+import { boundedText } from "./model"
 import {
   patchTaskStats,
   requireTaskAccess,
   taskCounts,
   taskStats,
+  touchTask,
 } from "./taskModel"
 
 const MAX_SUBTASKS = 1000
@@ -22,24 +23,6 @@ const subtask = v.object({
   createdAt: v.number(),
   updatedAt: v.number(),
 })
-
-function cleanTitle(value: string) {
-  const title = value.trim()
-  if (title.length < 1 || title.length > 200) {
-    throw new ConvexError({
-      code: "INVALID_TITLE",
-      message: "Use 1 to 200 characters.",
-    })
-  }
-  return title
-}
-
-async function touch(ctx: MutationCtx, task: Doc<"tasks">) {
-  const now = Date.now()
-  await ctx.db.patch(task._id, { updatedAt: now })
-  await ctx.db.patch(task.projectId, { updatedAt: now })
-  return now
-}
 
 export const list = query({
   args: { taskId: v.id("tasks"), hideCompleted: v.optional(v.boolean()) },
@@ -64,10 +47,10 @@ export const create = mutation({
       .withIndex("by_task_position", (q) => q.eq("taskId", args.taskId))
       .order("desc")
       .first()
-    const now = await touch(ctx, task)
+    const now = await touchTask(ctx, task)
     const id = await ctx.db.insert("subtasks", {
       taskId: args.taskId,
-      title: cleanTitle(args.title),
+      title: boundedText(args.title, 200, "title"),
       completed: false,
       position: (last?.position ?? 0) + POSITION_GAP,
       createdAt: now,
@@ -96,9 +79,9 @@ export const rename = mutation({
       })
     }
     const { task } = await requireTaskAccess(ctx, current.taskId)
-    const now = await touch(ctx, task)
+    const now = await touchTask(ctx, task)
     await ctx.db.patch(args.subtaskId, {
-      title: cleanTitle(args.title),
+      title: boundedText(args.title, 200, "title"),
       updatedAt: now,
     })
     return null
@@ -118,7 +101,7 @@ export const setCompleted = mutation({
     }
     const { task } = await requireTaskAccess(ctx, current.taskId)
     if (current.completed === args.completed) return null
-    const now = await touch(ctx, task)
+    const now = await touchTask(ctx, task)
     await ctx.db.patch(args.subtaskId, {
       completed: args.completed,
       updatedAt: now,
@@ -181,7 +164,7 @@ export const reorder = mutation({
           : next
             ? next.position - POSITION_GAP
             : POSITION_GAP
-    const now = await touch(ctx, task)
+    const now = await touchTask(ctx, task)
     await ctx.db.patch(current._id, { position, updatedAt: now })
     return null
   },
@@ -199,7 +182,7 @@ export const remove = mutation({
       })
     }
     const { task } = await requireTaskAccess(ctx, current.taskId)
-    await touch(ctx, task)
+    await touchTask(ctx, task)
     await ctx.db.delete(args.subtaskId)
     const stats = await taskStats(ctx, current.taskId)
     const counts = taskCounts(stats)

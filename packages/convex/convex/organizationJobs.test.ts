@@ -3,9 +3,30 @@ import { convexTest } from "convex-test"
 import { expect, test } from "vitest"
 
 import { api, internal } from "./_generated/api"
+import type { Doc } from "./_generated/dataModel"
 import schema from "./schema"
 
 const modules = import.meta.glob("./**/*.ts")
+
+/** Stand-in for the removed `organizationJobs.running` debug query. */
+async function runningJob(
+  t: ReturnType<typeof convexTest>,
+  kind: "member_cleanup" | "workspace_deletion"
+) {
+  const jobs = await t.run(async (ctx) => {
+    const rows: Array<Doc<"organizationJobs">> = []
+    for await (const row of ctx.db.query("organizationJobs")) {
+      if (
+        row.organizationId === "org_acme" &&
+        row.status === "running"
+      ) {
+        rows.push(row)
+      }
+    }
+    return rows
+  })
+  return jobs.find((job) => job.kind === kind) ?? null
+}
 
 async function setup() {
   const t = convexTest(schema, modules)
@@ -153,10 +174,7 @@ test("member removal unassigns open work and preserves completed attribution", a
     organizationId: "org_acme",
     userId: "user_member",
   })
-  const job = await t.query(internal.organizationJobs.running, {
-    organizationId: "org_acme",
-    kind: "member_cleanup",
-  })
+  const job = await runningJob(t, "member_cleanup")
   expect(job).not.toBeNull()
   await t.mutation(internal.organizationJobs.cleanupMember, { jobId: job!._id })
 
@@ -190,10 +208,7 @@ test("coordinated external deletion drains task children before the Organization
     organizationId: "org_acme",
   })
   for (let attempt = 0; attempt < 30; attempt += 1) {
-    const job = await t.query(internal.organizationJobs.running, {
-      organizationId: "org_acme",
-      kind: "workspace_deletion",
-    })
+    const job = await runningJob(t, "workspace_deletion")
     if (!job) break
     if (job.phase === "clerk") {
       await t.mutation(internal.organizationJobs.finishWorkspaceDeletion, {
@@ -206,6 +221,8 @@ test("coordinated external deletion drains task children before the Organization
       jobId: job._id,
     })
   }
+  // The tasks phase drains children via the shared scheduled purger; drive it.
+  await t.mutation(internal.tasks.purgeTaskData, { taskId })
 
   const remaining = await t.run(async (ctx) => ({
     organizations: await ctx.db.query("organizations").take(10),

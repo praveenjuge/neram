@@ -14,7 +14,7 @@ import {
 } from "./_generated/server"
 import type { MutationCtx } from "./_generated/server"
 import { actor, requireOrganization, requireOrganizationAdmin } from "./model"
-import { configuredDuration } from "./sprintModel"
+import { configuredDuration, getSettings } from "./sprintModel"
 
 const role = v.union(v.literal("org:admin"), v.literal("org:member"))
 const memberFields = {
@@ -81,12 +81,10 @@ export const current = query({
   }),
   handler: async (ctx) => {
     const access = await requireOrganization(ctx)
-    const settings = await ctx.db
-      .query("organizationSettings")
-      .withIndex("by_organization", (q) =>
-        q.eq("organizationId", access.organization.organizationId)
-      )
-      .unique()
+    const settings = await getSettings(
+      ctx,
+      access.organization.organizationId
+    )
     return {
       organization: access.organization,
       membership: access.membership,

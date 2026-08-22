@@ -5,6 +5,7 @@ import type { Doc } from "./_generated/dataModel"
 import { internalMutation, mutation, query } from "./_generated/server"
 import {
   actor,
+  boundedText,
   projectCounts,
   recordActivity,
   requireProjectAccess,
@@ -16,55 +17,18 @@ import { accessibleProjects } from "./projects"
 import { status } from "./schema"
 import { applyStatusSprintRules, markTaskEntriesRemoved } from "./sprintModel"
 import {
+  publicTask,
+  publicTaskWithProject,
+  taskValidator as task,
   taskCounts,
   taskStats,
+  taskWithProjectValidator,
   unfinishedSubtasks,
-  type TaskCounts,
 } from "./taskModel"
 
 // Upper bound for a single board load. A kanban board renders every card, so we
 // don't paginate, but we cap the read so the query stays bounded as data grows.
 const MAX_TASKS = 1000
-
-const task = v.object({
-  _id: v.id("tasks"),
-  _creationTime: v.number(),
-  projectId: v.id("projects"),
-  title: v.string(),
-  description: v.optional(v.string()),
-  dueDate: v.optional(v.string()),
-  status,
-  assigneeSubject: v.optional(v.string()),
-  assigneeName: v.optional(v.string()),
-  currentSprintId: v.optional(v.id("sprints")),
-  completedAt: v.optional(v.number()),
-  position: v.number(),
-  createdAt: v.number(),
-  updatedAt: v.number(),
-  totalSubtasks: v.number(),
-  completedSubtasks: v.number(),
-  activeCommentCount: v.number(),
-})
-
-function publicTask(taskDoc: Doc<"tasks">, counts: TaskCounts) {
-  return {
-    _id: taskDoc._id,
-    _creationTime: taskDoc._creationTime,
-    projectId: taskDoc.projectId,
-    title: taskDoc.title,
-    description: taskDoc.description,
-    dueDate: taskDoc.dueDate,
-    status: taskDoc.status,
-    assigneeSubject: taskDoc.assigneeSubject,
-    assigneeName: taskDoc.assigneeName,
-    currentSprintId: taskDoc.currentSprintId,
-    completedAt: taskDoc.completedAt,
-    position: taskDoc.position,
-    createdAt: taskDoc.createdAt,
-    updatedAt: taskDoc.updatedAt,
-    ...counts,
-  }
-}
 
 async function taskResult(
   ctx: Parameters<typeof taskStats>[0],
@@ -85,14 +49,7 @@ async function projectTaskCounts(
 }
 
 function cleanTitle(title: string) {
-  const trimmed = title.trim()
-  if (trimmed.length < 1 || trimmed.length > 120) {
-    throw new ConvexError({
-      code: "INVALID_TITLE",
-      message: "Use 1 to 120 characters.",
-    })
-  }
-  return trimmed
+  return boundedText(title, 120, "title")
 }
 
 // Description is free-form and optional. Trim it, drop it when empty, and cap
@@ -162,29 +119,6 @@ export const get = query({
 
 // Each task in the cross-project Tasks list carries its project's display
 // fields so the page can show where the task lives without a second lookup.
-const taskWithProject = v.object({
-  _id: v.id("tasks"),
-  _creationTime: v.number(),
-  projectId: v.id("projects"),
-  projectName: v.string(),
-  projectIcon: v.optional(v.string()),
-  projectColor: v.optional(v.string()),
-  title: v.string(),
-  description: v.optional(v.string()),
-  dueDate: v.optional(v.string()),
-  status,
-  assigneeSubject: v.optional(v.string()),
-  assigneeName: v.optional(v.string()),
-  currentSprintId: v.optional(v.id("sprints")),
-  completedAt: v.optional(v.number()),
-  position: v.number(),
-  createdAt: v.number(),
-  updatedAt: v.number(),
-  totalSubtasks: v.number(),
-  completedSubtasks: v.number(),
-  activeCommentCount: v.number(),
-})
-
 // Tasks across every project in the active Organization, flattened
 // into a single list. When `assignedToMe` is true (the default), only tasks
 // assigned to the caller are returned. We read each project's board with the
@@ -194,36 +128,20 @@ export const listAll = query({
   args: {
     assignedToMe: v.optional(v.boolean()),
   },
-  returns: v.array(taskWithProject),
+  returns: v.array(taskWithProjectValidator),
   handler: async (ctx, args) => {
     const { subject } = await actor(ctx)
     const onlyMine = args.assignedToMe ?? true
     const projects = await accessibleProjects(ctx)
-    const results: Array<
-      Awaited<ReturnType<typeof taskResult>> & {
-        projectName: string
-        projectIcon?: string
-        projectColor?: string
-      }
-    > = []
+    const results: Array<Awaited<ReturnType<typeof publicTaskWithProject>>> = []
     for (const { project } of projects) {
-      const [tasks, counts] = await Promise.all([
-        ctx.db
-          .query("tasks")
-          .withIndex("by_project_position", (q) =>
-            q.eq("projectId", project._id)
-          )
-          .take(MAX_TASKS),
-        projectTaskCounts(ctx, project._id),
-      ])
+      const tasks = await ctx.db
+        .query("tasks")
+        .withIndex("by_project_position", (q) => q.eq("projectId", project._id))
+        .take(MAX_TASKS)
       for (const taskDoc of tasks) {
         if (onlyMine && taskDoc.assigneeSubject !== subject) continue
-        results.push({
-          ...publicTask(taskDoc, counts.get(taskDoc._id) ?? taskCounts(null)),
-          projectName: project.name,
-          projectIcon: project.icon,
-          projectColor: project.color,
-        })
+        results.push(await publicTaskWithProject(ctx, taskDoc, project))
       }
     }
     results.sort((a, b) => b.updatedAt - a.updatedAt)

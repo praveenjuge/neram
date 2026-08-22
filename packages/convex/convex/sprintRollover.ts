@@ -4,7 +4,7 @@ import { internal } from "./_generated/api"
 import type { Doc } from "./_generated/dataModel"
 import { internalMutation } from "./_generated/server"
 import type { MutationCtx } from "./_generated/server"
-import { ensureSettings } from "./sprintModel"
+import { ensureSettings, getSettings } from "./sprintModel"
 
 const BATCH_SIZE = 100
 
@@ -60,7 +60,6 @@ export async function startSprintClose(ctx: MutationCtx, args: StartCloseArgs) {
     actorName: args.actorName,
     baselineCount: 0,
     completedCount: 0,
-    carriedCount: 0,
     addedCount: 0,
     removedCount: 0,
     reopenedCount: 0,
@@ -126,12 +125,7 @@ async function closeTasks(ctx: MutationCtx, job: Doc<"sprintRolloverJobs">) {
 }
 
 async function finalize(ctx: MutationCtx, job: Doc<"sprintRolloverJobs">) {
-  const settings = await ctx.db
-    .query("organizationSettings")
-    .withIndex("by_organization", (q) =>
-      q.eq("organizationId", job.organizationId)
-    )
-    .unique()
+  const settings = await getSettings(ctx, job.organizationId)
   const sprint = await ctx.db.get(job.closingSprintId)
   if (!settings || !sprint)
     throw new Error("Sprint close references are missing")
@@ -143,7 +137,6 @@ async function finalize(ctx: MutationCtx, job: Doc<"sprintRolloverJobs">) {
       closedAt: now,
       baselineCount: job.baselineCount,
       completedCount: job.completedCount,
-      carriedCount: 0,
       addedCount: job.addedCount,
       removedCount: job.removedCount,
       reopenedCount: job.reopenedCount,
@@ -196,12 +189,7 @@ export const scheduled = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const now = Date.now()
-    const settings = await ctx.db
-      .query("organizationSettings")
-      .withIndex("by_organization", (q) =>
-        q.eq("organizationId", args.organizationId)
-      )
-      .unique()
+    const settings = await getSettings(ctx, args.organizationId)
     const sprint = await ctx.db.get(args.sprintId)
     if (
       settings?.currentSprintId === args.sprintId &&
