@@ -217,18 +217,29 @@ const mcp = program
 mcp.action(() =>
   wrap({}, async () => {
     // Defer auth to tool-call time. Starting the stdio server must never exit
-    // or fail the handshake over a missing session — MCP clients treat a
-    // closed connection as "server down" and park it. Instead we serve a
-    // healthy JSON-RPC peer and let the first real tool call surface
-    // UNAUTHENTICATED as an isError result (see runStdioMcp).
+    // or fail the handshake over a missing session, an expired token, or an
+    // unreachable token endpoint — MCP clients treat a closed connection as
+    // "server down" and park it. Instead we serve a healthy JSON-RPC peer and
+    // let the first real tool call surface UNAUTHENTICATED as an isError
+    // result (see runStdioMcp).
     const config = await loadPublicConfig()
     const session = await authClientSession()
+    // A session's id token is bound to the deployment it was issued for. Always
+    // target that deployment for authenticated calls, even if an environment
+    // override (NERAM_CONVEX_URL) points elsewhere — sending a session JWT to a
+    // different Convex deployment would leak credentials to the wrong target.
+    const convexUrl = session.convexUrl ?? config.convexUrl
+    if (session.session && config.convexUrl !== convexUrl) {
+      process.stderr.write(
+        `neram mcp: warning - the configured Convex target (${config.convexUrl}) differs from the deployment this session is bound to (${convexUrl}); using the session target for authenticated calls.\n`
+      )
+    }
     const getToken =
       session.getToken ??
       (async () => {
         throw new AgentError("UNAUTHENTICATED", "Run `neram login` first.")
       })
-    await runStdioMcp(config.convexUrl, getToken)
+    await runStdioMcp(convexUrl, getToken)
   })
 )
 mcp
