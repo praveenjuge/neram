@@ -292,36 +292,76 @@ async function refresh(session: Session) {
   return next
 }
 
-export async function authClient(): Promise<{
-  client: NeramApi
-  session: Session
-}> {
+/**
+ * Load a stored session and hand back a token provider without touching the
+ * network. Unlike {@link authClient} this never throws for a missing session —
+ * and critically it never refreshes eagerly, so starting a process (e.g. the
+ * MCP stdio server) cannot fail over an expired session, a revoked refresh
+ * token, or an unreachable token endpoint. All of those surface at use time on
+ * the first token resolution, as UNAUTHENTICATED.
+ */
+export async function authClientSession(): Promise<
+  | {
+      session: Session
+      getToken: () => Promise<string>
+      /** The Convex deployment this session's id token is bound to. */
+      convexUrl: string
+    }
+  | { session: null; getToken: null; convexUrl: null }
+> {
   const stored = await readSession()
-  if (!stored)
-    throw new AgentError("UNAUTHENTICATED", "Run `neram login` first.")
-  const session = await refresh(stored)
-  requireOrganizationClaims(session.idToken)
+  if (!stored) return { session: null, getToken: null, convexUrl: null }
   // Cache the session in the closure so the hot path (token still comfortably
   // valid) returns synchronously without touching disk, keyring, or the
   // network. Only when the token nears expiry do we re-read the latest stored
-  // session (another process may have already refreshed it) and refresh. This
-  // keeps a one-shot CLI call cheap and lets the long-lived MCP process survive
-  // token expiry for as long as a refresh token exists. When no refresh token
-  // is available the stale token surfaces the usual UNAUTHENTICATED error.
-  let current = session
+  // session (another process may have already refreshed it) and refresh —
+  // lazily, on the first call that actually needs a token.
+  let current = stored
   const provider = async () => {
     if (current.expiresAt - Date.now() > REFRESH_WINDOW_MS)
       return current.idToken
     const latest = await readSession()
     if (!latest)
       throw new AgentError("UNAUTHENTICATED", "Run `neram login` first.")
-    current = await refresh(latest)
+    current = latest
+    try {
+      current = await refresh(current)
+    } catch (error) {
+      const err =
+        error instanceof AgentError
+          ? error
+          : new AgentError("AUTH_FAILED", String(error))
+      throw new AgentError(
+        "UNAUTHENTICATED",
+        `Unable to refresh Neram session (${err.code}). Run "neram login" to sign in.`,
+        { reason: err.code, message: err.message }
+      )
+    }
+    if (current.expiresAt - Date.now() <= 0)
+      throw new AgentError(
+        "UNAUTHENTICATED",
+        "Neram session expired. Run `neram login` to sign in again."
+      )
     requireOrganizationClaims(current.idToken)
     return current.idToken
   }
   return {
-    client: createConvexApi(session.config.convexUrl, provider),
-    session,
+    session: stored,
+    getToken: provider,
+    convexUrl: stored.config.convexUrl,
+  }
+}
+
+export async function authClient(): Promise<{
+  client: NeramApi
+  session: Session
+}> {
+  const current = await authClientSession()
+  if (!current.session || !current.getToken || !current.convexUrl)
+    throw new AgentError("UNAUTHENTICATED", "Run `neram login` first.")
+  return {
+    client: createConvexApi(current.convexUrl, current.getToken),
+    session: current.session,
   }
 }
 

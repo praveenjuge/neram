@@ -11,11 +11,13 @@ import type {
 } from "@modelcontextprotocol/sdk/server/zod-compat.js"
 
 import {
+  createConvexApi,
   createTools,
   outputSchemas,
   schemas,
   toAgentError,
   type NeramApi,
+  type TokenProvider,
 } from "./agent.js"
 import { packageVersion } from "./version.js"
 
@@ -501,8 +503,21 @@ export function createNeramMcpServer(client: NeramApi) {
   return server
 }
 
-export async function runStdioMcp(client: NeramApi) {
-  const server = createNeramMcpServer(client)
+/**
+ * Start the stdio MCP server.
+ *
+ * Auth is deliberately deferred: the server starts and completes the MCP
+ * `initialize` handshake even when no session exists, because the token
+ * provider is only resolved at tool-call time (see `createConvexApi`). A
+ * missing or expired session therefore surfaces as an `isError` tool result on
+ * the first real call — never as a process exit that makes the client see a
+ * closed connection and park the server.
+ */
+export async function runStdioMcp(
+  convexUrl: string,
+  getToken: TokenProvider
+): Promise<void> {
+  const server = createNeramMcpServer(createConvexApi(convexUrl, getToken))
   await server.connect(new StdioServerTransport())
 }
 

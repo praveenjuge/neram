@@ -6,7 +6,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js"
 import { describe, expect, test, vi } from "vitest"
 
-import { AgentError, type NeramApi } from "../src/agent.js"
+import { AgentError, createConvexApi, type NeramApi } from "../src/agent.js"
 import { createNeramMcpServer } from "../src/mcp.js"
 
 function fakeApi(overrides: Partial<NeramApi> = {}): NeramApi {
@@ -295,6 +295,37 @@ describe("neram mcp server", () => {
         .text
       expect(JSON.parse(text)).toMatchObject({
         error: { code: "FORBIDDEN", message: "Nope." },
+      })
+    } finally {
+      await client.close()
+      await server.close()
+    }
+  })
+
+  test("starts and lists tools without auth; auth failure is an isError result", async () => {
+    // Regression: `neram mcp` used to exit before the handshake when no
+    // session existed, so MCP clients saw a closed connection and parked the
+    // server. Auth must be deferred to tool-call time so the server always
+    // serves a healthy JSON-RPC peer.
+    const api = createConvexApi("https://example.invalid", () => {
+      throw new AgentError("UNAUTHENTICATED", "Run `neram login` first.")
+    })
+    const { server, client } = await connect(api)
+    try {
+      // initialize + tools/list succeed without ever touching auth.
+      const { tools } = await client.listTools()
+      expect(tools.length).toBeGreaterThan(0)
+
+      // The first real call surfaces UNAUTHENTICATED as an isError result.
+      const result = await client.callTool({
+        name: "list_projects",
+        arguments: {},
+      })
+      expect(result.isError).toBe(true)
+      const text = (result.content as Array<{ type: string; text: string }>)[0]
+        .text
+      expect(JSON.parse(text)).toMatchObject({
+        error: { code: "UNAUTHENTICATED" },
       })
     } finally {
       await client.close()
