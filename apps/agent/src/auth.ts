@@ -292,13 +292,18 @@ async function refresh(session: Session) {
   return next
 }
 
-export async function authClient(): Promise<{
-  client: NeramApi
-  session: Session
-}> {
+/**
+ * Load the stored session and hand back a token provider that stays fresh for
+ * the life of the process (see the refresh notes below). Unlike {@link
+ * authClient} this never touches the network by itself and never throws for a
+ * missing session — callers choose when (or whether) to surface that.
+ */
+export async function authClientSession(): Promise<
+  | { session: Session; getToken: () => Promise<string> }
+  | { session: null; getToken: null }
+> {
   const stored = await readSession()
-  if (!stored)
-    throw new AgentError("UNAUTHENTICATED", "Run `neram login` first.")
+  if (!stored) return { session: null, getToken: null }
   const session = await refresh(stored)
   requireOrganizationClaims(session.idToken)
   // Cache the session in the closure so the hot path (token still comfortably
@@ -319,9 +324,19 @@ export async function authClient(): Promise<{
     requireOrganizationClaims(current.idToken)
     return current.idToken
   }
+  return { session, getToken: provider }
+}
+
+export async function authClient(): Promise<{
+  client: NeramApi
+  session: Session
+}> {
+  const current = await authClientSession()
+  if (!current.session || !current.getToken)
+    throw new AgentError("UNAUTHENTICATED", "Run `neram login` first.")
   return {
-    client: createConvexApi(session.config.convexUrl, provider),
-    session,
+    client: createConvexApi(current.session.config.convexUrl, current.getToken),
+    session: current.session,
   }
 }
 
