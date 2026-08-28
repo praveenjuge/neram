@@ -62,7 +62,11 @@ export default function NotFound() {
         <ul className="mt-2 list-inside list-disc space-y-1 text-muted-foreground">
           {recoveryTargets.map(({ href, label, ...target }) => (
             <li key={href}>
-              <Link href={href} className="underline underline-offset-4">
+              <Link
+                href={href}
+                prefetch={false}
+                className="underline underline-offset-4"
+              >
                 {label}
               </Link>
               {"description" in target && <> — {target.description}</>}
