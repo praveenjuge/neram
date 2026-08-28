@@ -1,5 +1,48 @@
 import Link from "next/link"
 
+import { SITE_URL } from "@/lib/layout.shared"
+
+const recoveryTargets = [
+  { href: "/", label: "Home", description: "overview and getting started" },
+  {
+    href: "/docs",
+    label: "Documentation",
+    agentLabel: "Docs",
+    description: "CLI, MCP, concepts and reference",
+  },
+  {
+    href: "/sitemap.xml",
+    label: "Sitemap",
+    description: "all indexed pages",
+  },
+  {
+    href: "/llms.txt",
+    label: "llms.txt",
+    agentLabel: "Site index",
+    description: "site index for agents",
+  },
+  {
+    href: "/llms-full.txt",
+    label: "llms-full.txt",
+    agentLabel: "Full dump",
+    description: "full documentation dump",
+  },
+  { href: "/robots.txt", label: "robots.txt", agentLabel: "Robots" },
+] as const
+
+const agentRecoveryText = `# 404 — Not Found (${new URL(SITE_URL).host})
+
+This path does not exist.
+
+Try:
+${recoveryTargets
+  .map(
+    ({ href, label, ...target }) =>
+      `- ${"agentLabel" in target ? target.agentLabel : label}: ${SITE_URL}${href}`
+  )
+  .join("\n")}
+`
+
 export default function NotFound() {
   return (
     <main className="mx-auto flex min-h-svh max-w-2xl flex-col justify-center gap-6 p-6 text-sm">
@@ -17,62 +60,21 @@ export default function NotFound() {
       <section>
         <h2 className="text-sm font-semibold">Where to go next</h2>
         <ul className="mt-2 list-inside list-disc space-y-1 text-muted-foreground">
-          <li>
-            <Link href="/" className="underline underline-offset-4">
-              Home
-            </Link>{" "}
-            — overview and getting started
-          </li>
-          <li>
-            <Link href="/docs" className="underline underline-offset-4">
-              Documentation
-            </Link>{" "}
-            — CLI, MCP, concepts and reference
-          </li>
-          <li>
-            <Link href="/sitemap.xml" className="underline underline-offset-4">
-              Sitemap
-            </Link>{" "}
-            — all indexed pages
-          </li>
-          <li>
-            <Link href="/llms.txt" className="underline underline-offset-4">
-              llms.txt
-            </Link>{" "}
-            — site index for agents
-          </li>
-          <li>
-            <Link
-              href="/llms-full.txt"
-              className="underline underline-offset-4"
-            >
-              llms-full.txt
-            </Link>{" "}
-            — full documentation dump
-          </li>
-          <li>
-            <Link href="/robots.txt" className="underline underline-offset-4">
-              robots.txt
-            </Link>
-          </li>
+          {recoveryTargets.map(({ href, label, ...target }) => (
+            <li key={href}>
+              <Link href={href} className="underline underline-offset-4">
+                {label}
+              </Link>
+              {"description" in target && <> — {target.description}</>}
+            </li>
+          ))}
         </ul>
       </section>
 
       <section>
         <h2 className="text-sm font-semibold">Recovery for agents</h2>
         <pre className="mt-2 overflow-auto rounded-md border bg-muted/40 p-3 text-xs leading-5">
-          {`# 404 — Not Found (neram.praveenjuge.com)
-
-This path does not exist.
-
-Try:
-- Home: https://neram.praveenjuge.com/
-- Docs: https://neram.praveenjuge.com/docs
-- Sitemap: https://neram.praveenjuge.com/sitemap.xml
-- Site index: https://neram.praveenjuge.com/llms.txt
-- Full dump: https://neram.praveenjuge.com/llms-full.txt
-- Robots: https://neram.praveenjuge.com/robots.txt
-`}
+          {agentRecoveryText}
         </pre>
       </section>
 
