@@ -282,34 +282,24 @@ export function TasksClient() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div
-            aria-label="Filter by assignee"
-            className="flex rounded-lg border bg-muted/40 p-0.5"
-            role="group"
+          <FilterChip
+            active={assigneeView === "mine"}
+            onClick={() => setAssigneeView("mine")}
           >
-            {(
-              [
-                ["mine", "Assigned to me"],
-                ["unassigned", "Unassigned"],
-                ["all", "All"],
-              ] as const
-            ).map(([value, label]) => (
-              <button
-                aria-pressed={assigneeView === value}
-                className={cn(
-                  "rounded-md px-3 py-1.5 text-sm transition-colors",
-                  assigneeView === value
-                    ? "bg-background font-medium text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-                key={value}
-                onClick={() => setAssigneeView(value)}
-                type="button"
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+            Assigned to me
+          </FilterChip>
+          <FilterChip
+            active={assigneeView === "unassigned"}
+            onClick={() => setAssigneeView("unassigned")}
+          >
+            Unassigned
+          </FilterChip>
+          <FilterChip
+            active={assigneeView === "all"}
+            onClick={() => setAssigneeView("all")}
+          >
+            All
+          </FilterChip>
           <FilterChip
             active={dueFilters.has("overdue")}
             onClick={() => toggleDueFilter("overdue")}
