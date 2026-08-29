@@ -1,9 +1,10 @@
 "use client"
 
-import { CalendarClock, History, MoreHorizontal } from "lucide-react"
+import { CalendarClock, History, MoreHorizontal, Plus } from "lucide-react"
 import { useState } from "react"
 
 import { Button } from "@/components/ui/button"
+import { DialogTrigger } from "@/components/ui/dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { TooltipProvider } from "@/components/ui/tooltip"
+import { NewTaskDialog } from "@/components/project-board/new-task-dialog"
 import { CurrentSprint } from "@/components/sprints/current-sprint"
 import { DurationDialog } from "@/components/sprints/duration-dialog"
 import { HistorySheet } from "@/components/sprints/history-sheet"
@@ -30,25 +32,36 @@ export function SprintsClient() {
               The work that matters now.
             </p>
           </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                aria-label="More Focus options"
-                size="icon"
-                variant="ghost"
-              >
-                <MoreHorizontal />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => setDialog("history")}>
-                <History /> History
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setDialog("duration")}>
-                <CalendarClock /> Default duration
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <div className="flex items-center gap-2">
+            <NewTaskDialog
+              trigger={
+                <DialogTrigger asChild>
+                  <Button>
+                    <Plus /> Add task
+                  </Button>
+                </DialogTrigger>
+              }
+            />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  aria-label="More Focus options"
+                  size="icon"
+                  variant="ghost"
+                >
+                  <MoreHorizontal />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => setDialog("history")}>
+                  <History /> History
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setDialog("duration")}>
+                  <CalendarClock /> Default duration
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
         <CurrentSprint />
       </section>

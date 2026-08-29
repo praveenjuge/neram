@@ -16,10 +16,11 @@ import {
   Pencil,
   Plus,
 } from "lucide-react"
-import { type ReactNode, useState } from "react"
+import { type ReactNode, useEffect, useState } from "react"
 
 import { api } from "@neram/convex/api"
 import { AppUserButton } from "@/components/theme-toggle"
+import { Button } from "@/components/ui/button"
 import { NewTaskDialog } from "@/components/project-board/new-task-dialog"
 import {
   ArchiveProjectDialog,
@@ -345,6 +346,47 @@ function AppSidebar() {
   )
 }
 
+function GlobalAddTask() {
+  const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.defaultPrevented) return
+      if (event.metaKey || event.ctrlKey || event.altKey) return
+      const target = event.target as HTMLElement | null
+      const tag = target?.tagName
+      const isTyping =
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        tag === "SELECT" ||
+        target?.isContentEditable
+      if (isTyping) return
+      if (event.key.toLowerCase() === "c" && !open) {
+        event.preventDefault()
+        setOpen(true)
+      }
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [open])
+
+  return (
+    <>
+      <NewTaskDialog onOpenChange={setOpen} open={open} />
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-end p-4 md:p-6">
+        <Button
+          aria-label="Add task"
+          className="pointer-events-auto shadow-lg md:hidden"
+          onClick={() => setOpen(true)}
+          size="lg"
+        >
+          <Plus /> Add task
+        </Button>
+      </div>
+    </>
+  )
+}
+
 export function AppLayout({ children }: { children: ReactNode }) {
   return (
     <SidebarProvider>
@@ -356,6 +398,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         </div>
         {children}
       </SidebarInset>
+      <GlobalAddTask />
     </SidebarProvider>
   )
 }

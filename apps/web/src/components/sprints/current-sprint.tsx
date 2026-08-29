@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery } from "convex/react"
 import { differenceInCalendarDays } from "date-fns"
-import { ListPlus, Play, Square } from "lucide-react"
+import { ListPlus, Play, Plus, Square } from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"
 
@@ -13,6 +13,7 @@ import {
   type Status,
 } from "@/components/project-board/board-shared"
 import { KanbanBoard } from "@/components/project-board/kanban-board"
+import { NewTaskDialog } from "@/components/project-board/new-task-dialog"
 import { TaskDialog } from "@/components/project-board/task-dialog"
 import { Button } from "@/components/ui/button"
 import {
@@ -91,6 +92,15 @@ export function CurrentSprint() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <NewTaskDialog
+              trigger={
+                <DialogTrigger asChild>
+                  <Button size="sm" variant="outline">
+                    <Plus className="size-3.5" /> Add task
+                  </Button>
+                </DialogTrigger>
+              }
+            />
             <BacklogSheet />
             <EndSprintButton unfinished={openTasks.length} />
           </div>
@@ -125,7 +135,18 @@ export function CurrentSprint() {
               ? "Choose a few Backlog tasks to focus on."
               : "Everything in this Sprint is complete."}
           </p>
-          <BacklogSheet />
+          <div className="flex flex-wrap justify-center gap-2">
+            <NewTaskDialog
+              trigger={
+                <DialogTrigger asChild>
+                  <Button size="sm">
+                    <Plus className="size-3.5" /> Add task
+                  </Button>
+                </DialogTrigger>
+              }
+            />
+            <BacklogSheet />
+          </div>
         </div>
       ) : (
         <KanbanBoard
@@ -161,7 +182,18 @@ function EmptyFocus() {
           Start an optional Sprint with an empty focus list. Your projects and
           Backlog keep working even when no Sprint is active.
         </p>
-        <StartSprintDialog trigger={<Button>Start a Sprint</Button>} />
+        <div className="flex flex-wrap justify-center gap-2">
+          <NewTaskDialog
+            trigger={
+              <DialogTrigger asChild>
+                <Button size="sm" variant="outline">
+                  <Plus className="size-3.5" /> Add task
+                </Button>
+              </DialogTrigger>
+            }
+          />
+          <StartSprintDialog trigger={<Button>Start a Sprint</Button>} />
+        </div>
       </div>
     </div>
   )

@@ -157,7 +157,12 @@ export function ProjectBoardClient({ projectId }: { projectId: string }) {
         </h1>
         <NewTaskDialog projectId={projectIdArg} />
       </div>
-      <KanbanBoard onDrop={handleDrop} onOpenTask={openTask} tasks={tasks} />
+      <KanbanBoard
+        onDrop={handleDrop}
+        onOpenTask={openTask}
+        projectId={projectIdArg}
+        tasks={tasks}
+      />
       <TaskDialog
         commentId={commentId}
         onClose={closeTask}

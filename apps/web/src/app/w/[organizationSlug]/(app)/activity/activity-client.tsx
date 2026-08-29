@@ -24,8 +24,10 @@ import { useParams } from "next/navigation"
 
 import { api } from "@neram/convex/api"
 import { statusMeta } from "@/components/project-board/board-shared"
+import { NewTaskDialog } from "@/components/project-board/new-task-dialog"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { DialogTrigger } from "@/components/ui/dialog"
 import { Spinner } from "@/components/ui/spinner"
 import { cn } from "@/lib/utils"
 import { workspaceHref } from "@/lib/workspace"
@@ -138,7 +140,18 @@ export function ActivityClient() {
 
   return (
     <section className="mx-auto grid w-full max-w-3xl gap-6 p-5">
-      <h1 className="font-heading text-lg font-medium">Activity</h1>
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="font-heading text-lg font-medium">Activity</h1>
+        <NewTaskDialog
+          trigger={
+            <DialogTrigger asChild>
+              <Button>
+                <Plus /> Add task
+              </Button>
+            </DialogTrigger>
+          }
+        />
+      </div>
       {status === "LoadingFirstPage" ? (
         <div className="grid min-h-[40vh] place-items-center">
           <Spinner className="size-6 text-muted-foreground" />

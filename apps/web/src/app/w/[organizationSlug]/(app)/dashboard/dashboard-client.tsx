@@ -44,6 +44,15 @@ export function DashboardClient() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-heading text-lg font-medium">Projects</h1>
         <div className="flex items-center gap-2">
+          <NewTaskDialog
+            trigger={
+              <DialogTrigger asChild>
+                <Button variant="outline">
+                  <Plus /> Add task
+                </Button>
+              </DialogTrigger>
+            }
+          />
           {organization?.membership.role === "org:admin" ? (
             <ShareProjectsDialog
               trigger={
@@ -185,6 +194,15 @@ function EmptyState() {
             Create your first project to open a kanban board.
           </p>
         </div>
+        <NewProjectDialog
+          trigger={
+            <DialogTrigger asChild>
+              <Button>
+                <FolderPlus /> New project
+              </Button>
+            </DialogTrigger>
+          }
+        />
       </CardContent>
     </Card>
   )

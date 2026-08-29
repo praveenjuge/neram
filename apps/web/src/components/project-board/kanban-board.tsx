@@ -2,10 +2,13 @@
 
 import { Fragment, useState } from "react"
 import type { ReactNode } from "react"
+import { Plus } from "lucide-react"
 
 import type { Id } from "@neram/convex/data-model"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { DialogTrigger } from "@/components/ui/dialog"
 
 import {
   columns,
@@ -14,6 +17,7 @@ import {
   type Status,
 } from "./board-shared"
 import { TaskCard } from "./task-card"
+import { NewTaskDialog } from "./new-task-dialog"
 
 export function KanbanBoard({
   tasks,
@@ -22,6 +26,7 @@ export function KanbanBoard({
   showProject = false,
   visibleStatuses,
   renderTaskAction,
+  projectId,
 }: {
   tasks: BoardTask[]
   onDrop: (
@@ -36,6 +41,8 @@ export function KanbanBoard({
   visibleStatuses?: Status[]
   /** Optional per-card action rendered separately from the card's open target. */
   renderTaskAction?: (task: BoardTask) => ReactNode
+  /** Pin new-task creation to this project (project board). Omit for global picker. */
+  projectId?: Id<"projects">
 }) {
   const [draggingId, setDraggingId] = useState<Id<"tasks"> | null>(null)
   const [overColumn, setOverColumn] = useState<Status | null>(null)
@@ -137,6 +144,20 @@ export function KanbanBoard({
                   Nothing here yet.
                 </p>
               ) : null}
+              <NewTaskDialog
+                projectId={projectId}
+                trigger={
+                  <DialogTrigger asChild>
+                    <Button
+                      className="w-full justify-start gap-1.5 text-muted-foreground hover:text-foreground"
+                      size="sm"
+                      variant="ghost"
+                    >
+                      <Plus className="size-3.5" /> Add task
+                    </Button>
+                  </DialogTrigger>
+                }
+              />
               <div
                 aria-hidden
                 className="min-h-8 flex-1"

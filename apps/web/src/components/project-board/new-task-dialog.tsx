@@ -29,9 +29,10 @@ import { Textarea } from "@/components/ui/textarea"
 
 /**
  * The one task-create dialog, shared by every surface:
- * - Pass `projectId` to pin the target project (dashboard rows, sidebar menu,
- *   a project board) — the project picker is hidden.
- * - Omit it to let the user pick a project (global Tasks board).
+ * - Pass `projectId` to default the picker to that project (project board,
+ *   dashboard rows, sidebar menu) — the picker remains visible so the user
+ *   can move the task to another project.
+ * - Omit it for a fully global picker (Tasks board, Focus, Activity, FAB).
  * Opening works uncontrolled with a `trigger`, or controlled via `open` +
  * `onOpenChange` (the sidebar's dropdown menu).
  */
@@ -67,6 +68,8 @@ export function NewTaskDialog({
   // Clear the form each time the dialog opens. Runs during render on the
   // open-state transition so it also covers controlled opens (the sidebar's
   // dropdown), where the Dialog's own onOpenChange never fires.
+  // The picker always defaults to the page's project when provided, but
+  // remains editable so the user can move the task elsewhere.
   const [prevOpen, setPrevOpen] = useState(open)
   if (open !== prevOpen) {
     setPrevOpen(open)
@@ -133,19 +136,16 @@ export function NewTaskDialog({
         <DialogHeader>
           <DialogTitle>New task</DialogTitle>
           <DialogDescription>
-            New tasks start in the Todo column
-            {projectId ? "" : " of the chosen project"}.
+            New tasks start in the Todo column of the chosen project.
           </DialogDescription>
         </DialogHeader>
         <form className="grid gap-4" onSubmit={onSubmit}>
-          {!projectId ? (
-            <ProjectSelect
-              enabled={open}
-              id="task-project"
-              onChange={setSelectedProjectId}
-              value={effectiveProjectId}
-            />
-          ) : null}
+          <ProjectSelect
+            enabled={open}
+            id="task-project"
+            onChange={setSelectedProjectId}
+            value={effectiveProjectId}
+          />
           <div className="grid gap-2">
             <Label htmlFor="task-title">Title</Label>
             <Input
@@ -204,7 +204,11 @@ export function NewTaskDialog({
                 Cancel
               </Button>
             </DialogClose>
-            <Button data-testid="create-task-button" type="submit">
+            <Button
+              data-testid="create-task-button"
+              disabled={!effectiveProjectId}
+              type="submit"
+            >
               <Plus /> Add task
             </Button>
           </DialogFooter>
