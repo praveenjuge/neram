@@ -7,11 +7,11 @@ Local stdio and hosted Streamable HTTP run the same Organization-scoped tools. T
 
 ## Local stdio
 
-Authenticate first with `neram login`. `neram mcp` fails fast with a friendly stderr message when you aren't logged in — it never auto-logs-in from startup.
+Sign in with `neram login` so tool calls can reach your workspace. `neram mcp` starts and completes the handshake even when you aren't logged in — it never auto-logs-in from startup. The first tool call then returns an `isError` result with `UNAUTHENTICATED`.
 
 ```bash
 npx neram login   # sign in first
-npx neram mcp     # stdio server; refreshes the token per request
+npx neram mcp     # stdio server; handshake even without a session
 
 # print a client config without writing files (also: cursor, vscode)
 npx neram mcp install claude-code
@@ -39,7 +39,7 @@ curl -s https://neram.praveenjuge.com/mcp \
   -H "Authorization: Bearer $NERAM_ID_TOKEN"
 ```
 
-Send a Clerk OAuth `id_token` in `Authorization: Bearer`. The endpoint returns `401` without a bearer token; that is the expected unauthenticated smoke-test result. Public client config is at `/.well-known/neram-agent.json`.
+Send a Clerk OAuth `id_token` in `Authorization: Bearer <id_token>`. The endpoint returns `401` without a bearer token; that is the expected unauthenticated smoke-test result. Public client config is at `/.well-known/neram-agent.json`.
 
 ## Tools
 

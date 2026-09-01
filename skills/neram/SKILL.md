@@ -64,14 +64,15 @@ Use Neram MCP when an agent needs structured workspace tools. The local stdio
 server and hosted Streamable HTTP endpoint are backed by the same canonical tool
 implementation.
 
-Authenticate before starting local stdio:
+Sign in before calling tools:
 
 ```bash
 npx neram login
 ```
 
-`neram mcp` fails fast with a friendly stderr message when you aren't logged in
-(run `neram login`, then `neram mcp`); it never auto-logs-in from startup.
+`neram mcp` starts and completes the handshake even when you aren't logged in,
+so clients do not park the server. The first tool call returns
+`UNAUTHENTICATED` (run `neram login`); it never auto-logs-in from startup.
 
 Client configuration:
 
