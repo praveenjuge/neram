@@ -127,6 +127,10 @@ const ERROR_HINTS: Record<string, string> = {
   NOT_FOUND: "Double-check the project or task name and try again.",
   FORBIDDEN: "You don't have access to do that.",
   VALIDATION: "Check the command arguments and try again.",
+  INCOMPLETE_SUBTASKS:
+    "Re-run with --confirm-incomplete-subtasks to mark it done anyway.",
+  CASCADE_CONFIRMATION_REQUIRED:
+    "Re-run with --confirm-cascade to delete the task and its children.",
 }
 
 /** Compact, human-friendly error: what failed plus a likely next command. */
