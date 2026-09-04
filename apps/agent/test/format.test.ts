@@ -103,6 +103,18 @@ describe("human formatting", () => {
     })
     expect(text).toContain("Run `neram login` first.")
     expect(text).toContain("Run `neram login` to sign in.")
+    expect(
+      formatError({
+        code: "INCOMPLETE_SUBTASKS",
+        message: "1 subtask is unfinished.",
+      })
+    ).toContain("--confirm-incomplete-subtasks")
+    expect(
+      formatError({
+        code: "CASCADE_CONFIRMATION_REQUIRED",
+        message: "Confirm deletion of this task and its children.",
+      })
+    ).toContain("--confirm-cascade")
     // Unknown codes fall back to just the message.
     expect(formatError({ code: "WEIRD", message: "Boom." })).toBe("Boom.")
   })

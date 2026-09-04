@@ -50,10 +50,12 @@ npx neram task add --project "Project name" --title "Follow up" --due 2026-02-01
 npx neram task move --task-id TASK_ID --status inProgress
 npx neram task move --task-id TASK_ID --status inProgress --position 1.5  # kanban order
 npx neram task done --task-id TASK_ID
+npx neram task done --task-id TASK_ID --confirm-incomplete-subtasks
 npx neram task update --task-id TASK_ID --title "New title" --clear-assignee
 npx neram task update --project "Project name" --task-title "Old title" --title "New title"
 npx neram task move-to --task-id TASK_ID --to-project "Other project"
 npx neram task rm --task-id TASK_ID
+npx neram task rm --task-id TASK_ID --confirm-cascade
 ```
 
 ## Projects
@@ -97,3 +99,5 @@ npx neram sprint end --confirm
 ### Notes
 
 `neram task move` accepts an optional `--position` for kanban order. Sprints are organization-wide and optional; a workspace can have only one active Sprint.
+
+Completing a task with unfinished subtasks returns `INCOMPLETE_SUBTASKS` unless you pass `--confirm-incomplete-subtasks` (also accepted by `task move --status done`). Deleting a task that still has subtasks or comments returns `CASCADE_CONFIRMATION_REQUIRED` unless you pass `--confirm-cascade`.
