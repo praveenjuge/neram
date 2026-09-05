@@ -245,12 +245,115 @@ mcp.action(() =>
 mcp
   .command("install [client]")
   .description(
-    "Print setup instructions for an MCP client (claude-code, cursor, vscode)"
+    "Print setup instructions for an MCP client (claude-code, cursor, vscode, opencode, goose)"
   )
-  .action((client?: string) => {
-    // Print-only: never writes to any client config file.
-    console.log(formatMcpInstall(client))
-  })
+  .option("--write", "Write the snippet into the client config file")
+  .option("--merge", "Merge with existing config instead of overwriting")
+  .option("--json")
+  .action((client?: string, opts?: { write?: boolean; merge?: boolean; json?: boolean }) =>
+    wrap(opts ?? {}, async () => {
+      const { writeMcpInstall } = await import("./mcp-install.js")
+      if (opts?.write) {
+        const result = await writeMcpInstall(client, { merge: opts.merge })
+        emit(opts ?? {}, result.human, result.json)
+        return
+      }
+      // Print-only by default: never writes to any client config file.
+      const text = formatMcpInstall(client)
+      if (opts?.json) console.log(JSON.stringify({ ok: true, client: client ?? "generic", instructions: text }, null, 2))
+      else console.log(text)
+    })
+  )
+
+mcp
+  .command("serve")
+  .description("Serve Streamable HTTP locally (for Inspector testing)")
+  .option("--port <n>", "Port to listen on.", "3030")
+  .option("--json")
+  .action((opts) =>
+    wrap(opts, async () => {
+      const { createServer } = await import("node:http")
+      const { readFile } = await import("node:fs/promises")
+      const config = await loadPublicConfig()
+      const session = await authClientSession()
+      const convexUrl = session.convexUrl ?? config.convexUrl
+      const { createConvexApi } = await import("./agent.js")
+      const { handleHttpMcp } = await import("./mcp.js")
+      const getToken =
+        session.getToken ??
+        (async () => {
+          throw new AgentError("UNAUTHENTICATED", "Run `neram login` first.")
+        })
+      const client = createConvexApi(convexUrl, getToken)
+      const port = Number.parseInt(opts.port, 10)
+      const server = createServer((req, res) => {
+        let raw = ""
+        req.on("data", (chunk) => (raw += chunk))
+        req.on("end", () => {
+          try {
+            ;(req as { body?: unknown }).body = raw ? JSON.parse(raw) : undefined
+          } catch {
+            ;(req as { body?: unknown }).body = undefined
+          }
+          void handleHttpMcp(req as never, res as never, client)
+        })
+      })
+      await new Promise<void>((resolve) => server.listen(port, resolve))
+      const url = `http://127.0.0.1:${port}/mcp`
+      emit(
+        opts,
+        `Neram MCP Streamable HTTP listening on ${url}\nTest: npx @modelcontextprotocol/inspector --cli ${url} --transport http --method tools/list`,
+        { ok: true, url, transport: "streamable-http", stateless: true }
+      )
+      void readFile
+    })
+  )
+
+mcp
+  .command("list")
+  .description("List MCP tools, resources, and prompts (no client needed)")
+  .option("--json")
+  .action((opts) =>
+    wrap(opts, async () => {
+      const { Client } = await import("@modelcontextprotocol/sdk/client/index.js")
+      const { InMemoryTransport } = await import("@modelcontextprotocol/sdk/inMemory.js")
+      const { createNeramMcpServer } = await import("./mcp.js")
+      const config = await loadPublicConfig()
+      const session = await authClientSession()
+      const { createConvexApi } = await import("./agent.js")
+      const api = createConvexApi(
+        session.convexUrl ?? config.convexUrl,
+        session.getToken ??
+          (async () => {
+            throw new AgentError("UNAUTHENTICATED", "Run `neram login` first.")
+          })
+      )
+      const server = createNeramMcpServer(api)
+      const [ct, st] = InMemoryTransport.createLinkedPair()
+      const client = new Client({ name: "neram-cli", version: packageVersion() })
+      await Promise.all([server.connect(st), client.connect(ct)])
+      try {
+        const [{ tools }, { resources }, { prompts }] = await Promise.all([
+          client.listTools(),
+          client.listResources().catch(() => ({ resources: [] })),
+          client.listPrompts().catch(() => ({ prompts: [] })),
+        ])
+        const payload = {
+          tools: tools.map((t) => t.name),
+          resources: (resources as unknown[]).map((r) => (r as { uri: string }).uri ?? (r as { name: string }).name),
+          prompts: (prompts as unknown[]).map((p) => (p as { name: string }).name),
+        }
+        emit(
+          opts,
+          [...payload.tools, "", `Resources: ${payload.resources.join(", ")}`, `Prompts: ${payload.prompts.join(", ")}`].join("\n"),
+          payload
+        )
+      } finally {
+        await client.close()
+        await server.close()
+      }
+    })
+  )
 
 program
   .command("daily")

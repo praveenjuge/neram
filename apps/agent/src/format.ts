@@ -491,7 +491,7 @@ export function formatDoctor(report: DoctorReport) {
 }
 
 // --- MCP install ----------------------------------------------------------
-// The command and config snippets are static; `mcp install` only prints them.
+// Print-only by default; `mcp install --write` writes via mcp-install.ts.
 const MCP_COMMAND = { command: "npx", args: ["neram", "mcp"] } as const
 
 function serverSnippet(key: "mcpServers" | "servers") {
@@ -527,10 +527,22 @@ export function formatMcpInstall(client?: string) {
       "Add to .vscode/mcp.json:",
       serverSnippet("servers"),
     ],
+    opencode: [
+      bold("OpenCode"),
+      "Add to ~/.config/opencode/mcp.json:",
+      serverSnippet("mcpServers"),
+    ],
+    goose: [
+      bold("Goose"),
+      "Add to ~/.config/goose/mcp.json:",
+      serverSnippet("mcpServers"),
+    ],
     generic: [
       bold("MCP client"),
       "Add this server to your client's MCP configuration:",
       serverSnippet("mcpServers"),
+      "",
+      dim("Write it directly: npx neram mcp install <client> --write [--merge]"),
     ],
   }
   const block = blocks[target] ?? [

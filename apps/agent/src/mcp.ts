@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
+import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js"
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js"
@@ -25,13 +25,19 @@ type JsonObject = Record<string, unknown>
 type Shape = { shape: Record<string, unknown> }
 
 // Short guidance surfaced to the calling agent alongside the tool list.
+// Aligned with MCP 2026-07-28: stateless, header-routed, cacheable lists.
+// Destructive tools confirm via explicit args; when the client supports
+// Multi Round-Trip Requests the server may elicit confirmation mid-call
+// instead of requiring the flag up front.
 const INSTRUCTIONS = [
-  "Neram workspace tools for AI agents.",
+  "Neram workspace tools for AI agents. Protocol: MCP 2026-07-28 (stateless Streamable HTTP, Mcp-Method/Mcp-Name headers, server/discover).",
   "Resolve a project or task by its id whenever you know it; otherwise pass an unambiguous name.",
-  "When a name matches more than one record the tool returns an AMBIGUOUS error whose details.matches lists the candidates — retry with one of those ids.",
+  "When a name matches more than one record the tool returns an AMBIGUOUS error whose details.matches lists the candidates — retry with one of those ids. Use completion on project/taskTitle args to discover valid values.",
+  "Read-only context is also available as resources (neram://workspace/status, neram://sprint/current, neram://projects, neram://brief/daily) and templates (neram://project/{id}, neram://task/{id}); reusable workflows are exposed as prompts (plan-sprint, daily-standup, project-retro, triage-capture).",
   "Tool failures come back as isError results carrying { error: { code, message, details } } rather than protocol exceptions.",
   "delete_project purges every task in the project and requires an explicit projectId.",
-  "Workspace member removal and workspace deletion require the exact Organization id and slug plus confirm=true.",
+  "Workspace member removal and workspace deletion require the exact Organization id and slug plus confirm=true. Destructive calls (delete_project, delete_workspace, end_sprint, delete_task with children) may elicit confirmation via MRTR input_required when the client declares support; otherwise pass the confirm flag.",
+  "Long-running calls (delete_workspace, end_sprint, delete_project, summarize_project scans) may return a task handle when the client declares io.modelcontextprotocol/tasks; poll with tasks/get.",
   "OAuth tokens are bound to one Clerk Organization; reconnect after switching workspaces.",
 ].join(" ")
 
@@ -113,7 +119,8 @@ export function createNeramMcpServer(client: NeramApi) {
     "Compact daily execution digest with open work, assigned tasks, recent activity, and next actions.",
     schemas.daily_brief,
     readOnly,
-    (input) => tools.daily_brief(schemas.daily_brief.parse(input))
+    (input) => tools.daily_brief(schemas.daily_brief.parse(input)),
+    outputSchemas.daily_brief
   )
   register(
     "workspace_status",
@@ -121,7 +128,8 @@ export function createNeramMcpServer(client: NeramApi) {
     "Return the caller's Neram identity, active Organization, project count, and open task count.",
     schemas.workspace_status,
     readOnly,
-    (input) => tools.workspace_status(schemas.workspace_status.parse(input))
+    (input) => tools.workspace_status(schemas.workspace_status.parse(input)),
+    outputSchemas.workspace_status
   )
   register(
     "list_projects",
@@ -129,7 +137,8 @@ export function createNeramMcpServer(client: NeramApi) {
     "List every project the caller can see with role and task counts, most recently updated first.",
     schemas.list_projects,
     readOnly,
-    (input) => tools.list_projects(schemas.list_projects.parse(input))
+    (input) => tools.list_projects(schemas.list_projects.parse(input)),
+    outputSchemas.list_projects
   )
   register(
     "list_tasks",
@@ -137,7 +146,8 @@ export function createNeramMcpServer(client: NeramApi) {
     "List a project's tasks (resolved by id or unambiguous name), optionally filtered by status.",
     schemas.list_tasks,
     readOnly,
-    (input) => tools.list_tasks(schemas.list_tasks.parse(input))
+    (input) => tools.list_tasks(schemas.list_tasks.parse(input)),
+    outputSchemas.list_tasks
   )
   register(
     "get_task",
@@ -145,7 +155,8 @@ export function createNeramMcpServer(client: NeramApi) {
     "Get one authorized task by its stable id, including subtask progress and active comment count.",
     schemas.get_task,
     readOnly,
-    (input) => tools.get_task(schemas.get_task.parse(input))
+    (input) => tools.get_task(schemas.get_task.parse(input)),
+    outputSchemas.get_task
   )
   register(
     "list_subtasks",
@@ -153,7 +164,8 @@ export function createNeramMcpServer(client: NeramApi) {
     "List a task's subtasks in canonical manual order.",
     schemas.list_subtasks,
     readOnly,
-    (input) => tools.list_subtasks(schemas.list_subtasks.parse(input))
+    (input) => tools.list_subtasks(schemas.list_subtasks.parse(input)),
+    outputSchemas.list_subtasks
   )
   register(
     "list_task_comments",
@@ -161,7 +173,8 @@ export function createNeramMcpServer(client: NeramApi) {
     "Page root comments or one direct-reply branch oldest first.",
     schemas.list_task_comments,
     readOnly,
-    (input) => tools.list_task_comments(schemas.list_task_comments.parse(input))
+    (input) => tools.list_task_comments(schemas.list_task_comments.parse(input)),
+    outputSchemas.list_task_comments
   )
   register(
     "summarize_project",
@@ -169,7 +182,8 @@ export function createNeramMcpServer(client: NeramApi) {
     "Return compact project, task, and count context for an LLM.",
     schemas.summarize_project,
     readOnly,
-    (input) => tools.summarize_project(schemas.summarize_project.parse(input))
+    (input) => tools.summarize_project(schemas.summarize_project.parse(input)),
+    outputSchemas.summarize_project
   )
   register(
     "recent_activity",
@@ -177,7 +191,8 @@ export function createNeramMcpServer(client: NeramApi) {
     "Return the caller's recent activity feed across every accessible project, newest first.",
     schemas.recent_activity,
     readOnly,
-    (input) => tools.recent_activity(schemas.recent_activity.parse(input))
+    (input) => tools.recent_activity(schemas.recent_activity.parse(input)),
+    outputSchemas.recent_activity
   )
   register(
     "get_workspace",
@@ -185,7 +200,8 @@ export function createNeramMcpServer(client: NeramApi) {
     "Return the Clerk Organization bound to the current OAuth token, projected membership, and Sprint settings.",
     schemas.get_workspace,
     readOnly,
-    (input) => tools.get_workspace(schemas.get_workspace.parse(input))
+    (input) => tools.get_workspace(schemas.get_workspace.parse(input)),
+    outputSchemas.get_workspace
   )
   register(
     "list_workspace_members",
@@ -194,7 +210,8 @@ export function createNeramMcpServer(client: NeramApi) {
     schemas.list_workspace_members,
     readOnly,
     (input) =>
-      tools.list_workspace_members(schemas.list_workspace_members.parse(input))
+      tools.list_workspace_members(schemas.list_workspace_members.parse(input)),
+    outputSchemas.list_workspace_members
   )
   register(
     "get_sprint",
@@ -202,7 +219,8 @@ export function createNeramMcpServer(client: NeramApi) {
     "Return the optional active Sprint dates, goal, simple progress counts, and task count.",
     schemas.get_sprint,
     readOnly,
-    (input) => tools.get_sprint(schemas.get_sprint.parse(input))
+    (input) => tools.get_sprint(schemas.get_sprint.parse(input)),
+    outputSchemas.get_sprint
   )
   register(
     "list_sprint_tasks",
@@ -210,7 +228,8 @@ export function createNeramMcpServer(client: NeramApi) {
     "List Backlog or Current Sprint work with project and child-count context.",
     schemas.list_sprint_tasks,
     readOnly,
-    (input) => tools.list_sprint_tasks(schemas.list_sprint_tasks.parse(input))
+    (input) => tools.list_sprint_tasks(schemas.list_sprint_tasks.parse(input)),
+    outputSchemas.list_sprint_tasks
   )
   register(
     "sprint_history",
@@ -218,7 +237,8 @@ export function createNeramMcpServer(client: NeramApi) {
     "Page closed Sprints with committed and completed counts.",
     schemas.sprint_history,
     readOnly,
-    (input) => tools.sprint_history(schemas.sprint_history.parse(input))
+    (input) => tools.sprint_history(schemas.sprint_history.parse(input)),
+    outputSchemas.sprint_history
   )
 
   register(
@@ -497,6 +517,171 @@ export function createNeramMcpServer(client: NeramApi) {
     outputSchemas.end_sprint
   )
 
+  // --- Resources (MCP 2026-07-28 server concepts) ---------------------------
+  // Read-only, application-driven context. Same canonical implementation as
+  // the tools above so stdio and Streamable HTTP stay in sync.
+  const resourceText = (payload: unknown, uri: string) => ({
+    contents: [
+      {
+        uri,
+        mimeType: "application/json",
+        text: JSON.stringify(payload, null, 2),
+      },
+    ],
+  })
+  server.registerResource(
+    "workspace-status",
+    "neram://workspace/status",
+    {
+      title: "Workspace Status",
+      description:
+        "Caller identity, active Organization, project count, and open task count.",
+      mimeType: "application/json",
+    },
+    async (uri) => resourceText(await tools.workspace_status({}), uri.href)
+  )
+  server.registerResource(
+    "sprint-current",
+    "neram://sprint/current",
+    {
+      title: "Current Sprint",
+      description: "Active Sprint dates, goal, progress counts, and task count.",
+      mimeType: "application/json",
+    },
+    async (uri) => resourceText(await tools.get_sprint({}), uri.href)
+  )
+  server.registerResource(
+    "projects",
+    "neram://projects",
+    {
+      title: "Projects",
+      description: "Every visible project with role and task counts.",
+      mimeType: "application/json",
+    },
+    async (uri) => resourceText(await tools.list_projects({}), uri.href)
+  )
+  server.registerResource(
+    "daily-brief",
+    "neram://brief/daily",
+    {
+      title: "Daily Brief",
+      description: "Compact daily execution digest with next actions.",
+      mimeType: "application/json",
+    },
+    async (uri) =>
+      resourceText(await tools.daily_brief({ projectLimit: 8 }), uri.href)
+  )
+  server.registerResource(
+    "project",
+    new ResourceTemplate("neram://project/{id}", { list: undefined }),
+    {
+      title: "Project",
+      description: "Compact project, task, and count context by project id.",
+      mimeType: "application/json",
+    },
+    async (uri, { id }) =>
+      resourceText(
+        await tools.summarize_project({ projectId: String(id) }),
+        uri.href
+      )
+  )
+  server.registerResource(
+    "task",
+    new ResourceTemplate("neram://task/{id}", { list: undefined }),
+    {
+      title: "Task",
+      description: "One task with subtask progress and comment count.",
+      mimeType: "application/json",
+    },
+    async (uri, { id }) =>
+      resourceText(await tools.get_task({ taskId: String(id) }), uri.href)
+  )
+
+  // --- Prompts (reusable agent workflows) ------------------------------------
+  server.registerPrompt(
+    "plan-sprint",
+    {
+      title: "Plan Sprint",
+      description:
+        "Triage Backlog into the active Sprint: review backlog, pick focus tasks, set a goal.",
+      argsSchema: {},
+    },
+    async () => ({
+      messages: [
+        {
+          role: "user" as const,
+          content: {
+            type: "text" as const,
+            text: [
+              "Plan the active Neram sprint.",
+              "1. Call list_sprint_tasks with sprint=current and sprint=backlog.",
+              "2. Pick focus tasks from Backlog; call plan_sprint_tasks.",
+              "3. Set a concise goal with update_sprint_goal.",
+              "Prefer task ids; if a name is ambiguous, retry with the candidate id from details.matches.",
+            ].join(" "),
+          },
+        },
+      ],
+    })
+  )
+  server.registerPrompt(
+    "daily-standup",
+    {
+      title: "Daily Standup",
+      description: "Summarize assigned work, open tasks, and next actions.",
+      argsSchema: {},
+    },
+    async () => ({
+      messages: [
+        {
+          role: "user" as const,
+          content: {
+            type: "text" as const,
+            text: "Call daily_brief, then summarize assignedOpenTasks, openTasks due soon, and suggestedNextActions in 5 bullets.",
+          },
+        },
+      ],
+    })
+  )
+  server.registerPrompt(
+    "project-retro",
+    {
+      title: "Project Retro",
+      description: "Review a project: counts, done vs open, stale work.",
+      argsSchema: {},
+    },
+    async () => ({
+      messages: [
+        {
+          role: "user" as const,
+          content: {
+            type: "text" as const,
+            text: "Call summarize_project for the target project (by id when known), then report counts, completed vs open, and the 3 stalest open tasks.",
+          },
+        },
+      ],
+    })
+  )
+  server.registerPrompt(
+    "triage-capture",
+    {
+      title: "Triage Capture",
+      description: "Capture a task into the right project with title and due date.",
+      argsSchema: {},
+    },
+    async () => ({
+      messages: [
+        {
+          role: "user" as const,
+          content: {
+            type: "text" as const,
+            text: "Call list_projects, pick the unambiguous target project, then capture_task with a verb-led title under 120 chars.",
+          },
+        },
+      ],
+    })
+  )
+
   server.server.onerror = (error) => {
     console.error(toAgentError(error).message)
   }
@@ -521,20 +706,77 @@ export async function runStdioMcp(
   await server.connect(new StdioServerTransport())
 }
 
+/**
+ * Validate 2026-07-28 Streamable HTTP routing headers when present.
+ * Gateways route on Mcp-Method/Mcp-Name without body inspection; a mismatch
+ * between headers and the JSON-RPC body must be rejected so a `tools/call`
+ * for project A can never execute as project B.
+ */
+function mcpHeaderMismatch(
+  headers: { get(name: string): string | null } | Record<string, unknown>,
+  body: unknown
+): string | null {
+  const get =
+    typeof (headers as { get?: unknown }).get === "function"
+      ? (name: string) =>
+          (headers as { get(n: string): string | null }).get(name)
+      : (name: string) => {
+          const v = (headers as Record<string, unknown>)[
+            name.toLowerCase()
+          ] as unknown
+          return typeof v === "string" ? v : null
+        }
+  const headerMethod = get("mcp-method")
+  const headerName = get("mcp-name")
+  if (!headerMethod && !headerName) return null
+  const payload = (body ?? {}) as {
+    method?: unknown
+    params?: { name?: unknown }
+  }
+  if (
+    headerMethod &&
+    typeof payload.method === "string" &&
+    headerMethod !== payload.method
+  ) {
+    return `Mcp-Method "${headerMethod}" does not match body method "${payload.method}".`
+  }
+  const bodyName =
+    typeof payload.params?.name === "string" ? payload.params.name : null
+  if (headerName && bodyName && headerName !== bodyName) {
+    return `Mcp-Name "${headerName}" does not match body tool "${bodyName}".`
+  }
+  return null
+}
+
 export async function handleHttpMcp(
-  req: IncomingMessage & { body?: unknown },
+  req: IncomingMessage & { body?: unknown; headers: Record<string, unknown> },
   res: ServerResponse,
   client: NeramApi
 ) {
   if (req.method !== "POST") {
-    res.writeHead(405, { "content-type": "application/json" })
+    res.writeHead(405, {
+      allow: "POST",
+      "content-type": "application/json",
+    })
     res.end(
       JSON.stringify({
         error: {
           code: "METHOD_NOT_ALLOWED",
-          message: "Use POST for MCP Streamable HTTP.",
+          message:
+            "Use POST for MCP Streamable HTTP (2026-07-28, stateless; no session).",
         },
       })
+    )
+    return
+  }
+  const mismatch = mcpHeaderMismatch(
+    req.headers as Record<string, unknown>,
+    req.body
+  )
+  if (mismatch) {
+    res.writeHead(400, { "content-type": "application/json" })
+    res.end(
+      JSON.stringify({ error: { code: "HEADER_MISMATCH", message: mismatch } })
     )
     return
   }
@@ -568,10 +810,27 @@ export async function handleFetchMcp(
       {
         error: {
           code: "METHOD_NOT_ALLOWED",
-          message: "Use POST for MCP Streamable HTTP.",
+          message:
+            "Use POST for MCP Streamable HTTP (2026-07-28, stateless; no session).",
         },
       },
-      { status: 405 }
+      { headers: { allow: "POST" }, status: 405 }
+    )
+  }
+  let body: unknown
+  try {
+    body = await request.clone().json()
+  } catch {
+    body = undefined
+  }
+  const mismatch = mcpHeaderMismatch(
+    { get: (name: string) => request.headers.get(name) },
+    body
+  )
+  if (mismatch) {
+    return Response.json(
+      { error: { code: "HEADER_MISMATCH", message: mismatch } },
+      { status: 400 }
     )
   }
 

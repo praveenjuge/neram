@@ -71,8 +71,8 @@ npx neram login
 ```
 
 `neram mcp` starts and completes the handshake even when you aren't logged in,
-so clients do not park the server. The first tool call returns
-`UNAUTHENTICATED` (run `neram login`); it never auto-logs-in from startup.
+so clients do not park the server. Auth errors surface as `isError` tool
+results on the first call (run `neram login`); it never auto-logs-in from startup.
 
 Client configuration:
 
@@ -106,6 +106,10 @@ smoke-test result.
 - `summarize_project`: return compact project/task context for LLMs.
 - `workspace_status`: return the caller's identity and workspace totals
   (visible projects, owned/shared split, open tasks). No arguments.
+- Resources: `neram://workspace/status`, `neram://sprint/current`,
+  `neram://projects`, `neram://brief/daily`, `neram://project/{id}`,
+  `neram://task/{id}`.
+- Prompts: `plan-sprint`, `daily-standup`, `project-retro`, `triage-capture`.
 - `get_sprint`, `list_sprint_tasks`, and `sprint_history`: read the optional
   active Sprint, Backlog, and simple committed/completed history.
 - `start_sprint`, `plan_sprint_tasks`, `remove_sprint_tasks`,

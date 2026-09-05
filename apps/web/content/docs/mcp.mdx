@@ -1,20 +1,27 @@
 ---
 title: MCP
-description: Neram MCP — local stdio and hosted Streamable HTTP, same tools.
+description: Neram MCP — local stdio and hosted Streamable HTTP, same tools. MCP 2026-07-28.
 ---
 
-Local stdio and hosted Streamable HTTP run the same Organization-scoped tools. Tool failures come back as `isError` results (not protocol exceptions) with stable error codes.
+Local stdio and hosted Streamable HTTP run the same Organization-scoped tools. Protocol: **MCP 2026-07-28** (stateless Streamable HTTP, `Mcp-Method`/`Mcp-Name` routing headers, `server/discover`). Tool failures come back as `isError` results (not protocol exceptions) with stable error codes.
 
 ## Local stdio
 
-Sign in with `neram login` so tool calls can reach your workspace. `neram mcp` starts and completes the handshake even when you aren't logged in — it never auto-logs-in from startup. The first tool call then returns an `isError` result with `UNAUTHENTICATED`.
+Sign in with `neram login` so tool calls can reach your workspace. `neram mcp` starts and completes the handshake even when you aren't logged in — it never auto-logs-in from startup and never exits over auth. The first tool call then returns an `isError` result with `UNAUTHENTICATED`; the server refreshes the token per request.
 
 ```bash
 npx neram login   # sign in first
 npx neram mcp     # stdio server; handshake even without a session
+npx neram mcp list --json  # list tools, resources, prompts without a client
 
-# print a client config without writing files (also: cursor, vscode)
+# print a client config without writing files (also: cursor, vscode, opencode, goose)
 npx neram mcp install claude-code
+
+# write it directly (opt-in; default stays print-only)
+npx neram mcp install cursor --write --merge
+
+# local Streamable HTTP for Inspector testing
+npx neram mcp serve --port 3030
 
 # Claude Code one-liner
 claude mcp add neram -- npx neram mcp
@@ -39,7 +46,34 @@ curl -s https://neram.praveenjuge.com/mcp \
   -H "Authorization: Bearer $NERAM_ID_TOKEN"
 ```
 
-Send a Clerk OAuth `id_token` in `Authorization: Bearer <id_token>`. The endpoint returns `401` without a bearer token; that is the expected unauthenticated smoke-test result. Public client config is at `/.well-known/neram-agent.json`.
+Send a Clerk OAuth `id_token` in `Authorization: Bearer <id_token>`. The endpoint returns `401` without a bearer token (with `WWW-Authenticate: Bearer resource_metadata=".../.well-known/oauth-protected-resource", scope="..."` per RFC 9728); that is the expected unauthenticated smoke-test result. `GET /mcp` is an unauthenticated discovery probe. Public client config is at `/.well-known/neram-agent.json`; protected-resource metadata at `/.well-known/oauth-protected-resource`.
+
+## Resources
+
+```bash
+# static (application-driven context)
+neram://workspace/status
+neram://sprint/current
+neram://projects
+neram://brief/daily
+
+# templates
+neram://project/{id}
+neram://task/{id}
+```
+
+## Prompts
+
+```bash
+plan-sprint      # triage Backlog into the active Sprint
+daily-standup    # assigned work + next actions in 5 bullets
+project-retro    # counts, done vs open, stalest work
+triage-capture   # capture into the right project
+```
+
+## Destructive confirmations
+
+`delete_project`, `delete_workspace`, `end_sprint`, and `delete_task` with children keep their explicit `confirm*` args for CLI/scripts. MCP clients that declare Multi Round-Trip Request support may instead be elicited for confirmation mid-call (`input_required`); clients without MRTR keep passing the flag.
 
 ## Tools
 

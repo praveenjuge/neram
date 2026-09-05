@@ -332,4 +332,53 @@ describe("neram mcp server", () => {
       await server.close()
     }
   })
+
+  test("exposes resources, prompts, and output schemas", async () => {
+    const { server, client } = await connect(fakeApi())
+    try {
+      const { resources } = await client.listResources()
+      expect(resources.map((r) => r.uri)).toEqual(
+        expect.arrayContaining([
+          "neram://workspace/status",
+          "neram://sprint/current",
+          "neram://projects",
+          "neram://brief/daily",
+        ])
+      )
+      const { resourceTemplates } = await client.listResourceTemplates()
+      expect(resourceTemplates.map((t) => t.uriTemplate)).toEqual(
+        expect.arrayContaining(["neram://project/{id}", "neram://task/{id}"])
+      )
+      const { prompts } = await client.listPrompts()
+      expect(prompts.map((p) => p.name)).toEqual(
+        expect.arrayContaining([
+          "plan-sprint",
+          "daily-standup",
+          "project-retro",
+          "triage-capture",
+        ])
+      )
+      const { tools } = await client.listTools()
+      const byName = Object.fromEntries(tools.map((t) => [t.name, t]))
+      expect(byName.daily_brief.outputSchema).toBeDefined()
+      expect(byName.list_projects.outputSchema).toBeDefined()
+      expect(byName.get_task.outputSchema).toBeDefined()
+    } finally {
+      await client.close()
+      await server.close()
+    }
+  })
+
+  test("reads a static resource without auth-gated tools/list failing", async () => {
+    const { server, client } = await connect(fakeApi())
+    try {
+      const result = await client.readResource({
+        uri: "neram://projects",
+      })
+      expect(result.contents.length).toBeGreaterThan(0)
+    } finally {
+      await client.close()
+      await server.close()
+    }
+  })
 })

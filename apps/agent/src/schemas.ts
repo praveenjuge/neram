@@ -177,6 +177,64 @@ export const schemas = {
 }
 
 export const outputSchemas = {
+  daily_brief: z.object({
+    projects: z.number(),
+    assignedOpenTasks: z.array(z.object({}).passthrough()),
+    openTasks: z.array(z.object({}).passthrough()),
+    recentActivity: z.array(z.object({}).passthrough()),
+    suggestedNextActions: z.array(z.object({}).passthrough()),
+  }),
+  workspace_status: z.object({
+    identity: z.object({}).passthrough(),
+    organization: z.object({}).passthrough(),
+    workspace: z.object({}).passthrough(),
+  }),
+  list_projects: z.object({
+    projects: z.array(z.object({}).passthrough()),
+  }),
+  list_tasks: z.object({
+    project: z.object({}).passthrough(),
+    tasks: z.array(z.object({}).passthrough()),
+  }),
+  get_task: z.object({}).passthrough(),
+  list_subtasks: z.object({
+    taskId: z.string(),
+    subtasks: z.array(z.object({}).passthrough()),
+  }),
+  list_task_comments: z.object({
+    taskId: z.string(),
+    parentCommentId: z.string().optional(),
+    comments: z.array(z.object({}).passthrough()),
+    cursor: z.string().nullable(),
+  }),
+  summarize_project: z.object({
+    project: z.object({}).passthrough(),
+    tasks: z.array(z.object({}).passthrough()),
+    counts: z.object({
+      todo: z.number(),
+      inProgress: z.number(),
+      done: z.number(),
+    }),
+  }),
+  recent_activity: z.object({
+    activity: z.array(z.object({}).passthrough()),
+  }),
+  get_workspace: z.object({}).passthrough(),
+  list_workspace_members: z.object({
+    members: z.array(z.object({}).passthrough()),
+  }),
+  get_sprint: z.object({
+    sprint: z.object({}).passthrough().nullable(),
+    taskCount: z.number(),
+  }),
+  list_sprint_tasks: z.object({}).passthrough(),
+  sprint_history: z.object({
+    sprints: z.array(z.object({}).passthrough()).optional(),
+    page: z.array(z.object({}).passthrough()).optional(),
+    isDone: z.boolean().optional(),
+    cursor: z.string().nullable().optional(),
+    continueCursor: z.string().optional(),
+  }).passthrough(),
   capture_task: z.object({
     taskId: z.string(),
     projectId: z.string(),
