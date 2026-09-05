@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 
 import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js"
+import { z } from "zod/v3"
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js"
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js"
@@ -36,8 +37,7 @@ const INSTRUCTIONS = [
   "Read-only context is also available as resources (neram://workspace/status, neram://sprint/current, neram://projects, neram://brief/daily) and templates (neram://project/{id}, neram://task/{id}); reusable workflows are exposed as prompts (plan-sprint, daily-standup, project-retro, triage-capture).",
   "Tool failures come back as isError results carrying { error: { code, message, details } } rather than protocol exceptions.",
   "delete_project purges every task in the project and requires an explicit projectId.",
-  "Workspace member removal and workspace deletion require the exact Organization id and slug plus confirm=true. Destructive calls (delete_project, delete_workspace, end_sprint, delete_task with children) may elicit confirmation via MRTR input_required when the client declares support; otherwise pass the confirm flag.",
-  "Long-running calls (delete_workspace, end_sprint, delete_project, summarize_project scans) may return a task handle when the client declares io.modelcontextprotocol/tasks; poll with tasks/get.",
+  "Workspace member removal and workspace deletion require the exact Organization id and slug plus confirm=true. Destructive calls (delete_project, delete_workspace, end_sprint, delete_task with children) require their explicit confirm flags; pass them, do not ask the server to confirm mid-call.",
   "OAuth tokens are bound to one Clerk Organization; reconnect after switching workspaces.",
 ].join(" ")
 
@@ -647,16 +647,31 @@ export function createNeramMcpServer(client: NeramApi) {
     "project-retro",
     {
       title: "Project Retro",
-      description: "Review a project: counts, done vs open, stale work.",
-      argsSchema: {},
+      description:
+        "Review a project by id or unambiguous name: counts, done vs open, stale work.",
+      argsSchema: {
+        projectId: z.string().optional().describe("Exact project id (preferred)."),
+        project: z
+          .string()
+          .optional()
+          .describe("Unambiguous project name when the id is unknown."),
+      },
     },
-    async () => ({
+    async ({ projectId, project }) => ({
       messages: [
         {
           role: "user" as const,
           content: {
             type: "text" as const,
-            text: "Call summarize_project for the target project (by id when known), then report counts, completed vs open, and the 3 stalest open tasks.",
+            text: [
+              "Call summarize_project for the target project,",
+              projectId
+                ? `using projectId "${projectId}"`
+                : project
+                  ? `using project "${project}"`
+                  : "using its id (preferred) or unambiguous name",
+              "then report counts, completed vs open, and the 3 stalest open tasks.",
+            ].join(" "),
           },
         },
       ],

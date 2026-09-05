@@ -1,5 +1,5 @@
 import { homedir } from "node:os"
-import { join } from "node:path"
+import { dirname, join } from "node:path"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 
 type WriteOptions = { merge?: boolean }
@@ -43,8 +43,15 @@ export async function writeMcpInstall(
       string,
       unknown
     >
-  } catch {
-    existing = {}
+  } catch (error) {
+    // Only a missing file starts from empty. A malformed or unreadable
+    // config must never be silently replaced — the user could lose settings.
+    if ((error as NodeJS.ErrnoException)?.code === "ENOENT") {
+      existing = {}
+    } else {
+      const human = `Refusing to overwrite ${path}: existing config is unreadable (${(error as Error)?.message ?? error}). Fix or back it up, then re-run.`
+      return { human, json: { ok: false, client: target, path, error: human } }
+    }
   }
   const key = target === "vscode" ? "servers" : "mcpServers"
   const current = (existing[key] as Record<string, unknown> | undefined) ?? {}
@@ -56,8 +63,7 @@ export async function writeMcpInstall(
     ...existing,
     [key]: { ...current, neram: snippet() },
   }
-  const dir = path.split("/").slice(0, -1).join("/")
-  await mkdir(dir, { recursive: true })
+  await mkdir(dirname(path), { recursive: true })
   await writeFile(path, JSON.stringify(next, null, 2) + "\n")
   const human = `Wrote neram MCP server to ${path} (${key}.neram). Sign in first: npx neram login`
   return { human, json: { ok: true, client: target, path, key } }

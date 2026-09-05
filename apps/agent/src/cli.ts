@@ -273,7 +273,6 @@ mcp
   .action((opts) =>
     wrap(opts, async () => {
       const { createServer } = await import("node:http")
-      const { readFile } = await import("node:fs/promises")
       const config = await loadPublicConfig()
       const session = await authClientSession()
       const convexUrl = session.convexUrl ?? config.convexUrl
@@ -286,10 +285,36 @@ mcp
         })
       const client = createConvexApi(convexUrl, getToken)
       const port = Number.parseInt(opts.port, 10)
+      if (!Number.isInteger(port) || port < 1 || port > 65535) {
+        throw new AgentError("VALIDATION", "Port must be 1-65535.")
+      }
+      // Cap request bodies so a peer cannot exhaust the CLI process memory.
+      const MAX_BODY_BYTES = 1_000_000
       const server = createServer((req, res) => {
+        let bytes = 0
         let raw = ""
-        req.on("data", (chunk) => (raw += chunk))
+        let rejected = false
+        req.on("data", (chunk: Buffer) => {
+          if (rejected) return
+          bytes += chunk.length
+          if (bytes > MAX_BODY_BYTES) {
+            rejected = true
+            res.writeHead(413, { "content-type": "application/json" })
+            res.end(
+              JSON.stringify({
+                error: {
+                  code: "PAYLOAD_TOO_LARGE",
+                  message: `Request body exceeds ${MAX_BODY_BYTES} bytes.`,
+                },
+              })
+            )
+            req.destroy()
+            return
+          }
+          raw += chunk
+        })
         req.on("end", () => {
+          if (rejected) return
           try {
             ;(req as { body?: unknown }).body = raw ? JSON.parse(raw) : undefined
           } catch {
@@ -298,14 +323,17 @@ mcp
           void handleHttpMcp(req as never, res as never, client)
         })
       })
-      await new Promise<void>((resolve) => server.listen(port, resolve))
+      // Bind loopback only: this server carries the user's session-backed
+      // client, so it must never accept non-loopback peers.
+      await new Promise<void>((resolve) =>
+        server.listen(port, "127.0.0.1", resolve)
+      )
       const url = `http://127.0.0.1:${port}/mcp`
       emit(
         opts,
         `Neram MCP Streamable HTTP listening on ${url}\nTest: npx @modelcontextprotocol/inspector --cli ${url} --transport http --method tools/list`,
         { ok: true, url, transport: "streamable-http", stateless: true }
       )
-      void readFile
     })
   )
 

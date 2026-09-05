@@ -73,7 +73,7 @@ triage-capture   # capture into the right project
 
 ## Destructive confirmations
 
-`delete_project`, `delete_workspace`, `end_sprint`, and `delete_task` with children keep their explicit `confirm*` args for CLI/scripts. MCP clients that declare Multi Round-Trip Request support may instead be elicited for confirmation mid-call (`input_required`); clients without MRTR keep passing the flag.
+`delete_project`, `delete_workspace`, `end_sprint`, and `delete_task` with children require their explicit `confirm*` args. Pass the flags; the server does not elicit mid-call confirmation or return task handles (MRTR/tasks support is deferred).
 
 ## Tools
 
