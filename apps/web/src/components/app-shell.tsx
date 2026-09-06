@@ -144,26 +144,30 @@ function ProjectActions({ project }: { project: SidebarProject }) {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <NewTaskDialog
-        onOpenChange={onOpenChange}
-        open={dialog === "add"}
-        projectId={project._id}
-      />
-      <EditProjectDialog
-        color={project.color}
-        icon={project.icon}
-        id={project._id}
-        name={project.name}
-        onOpenChange={onOpenChange}
-        open={dialog === "edit"}
-        role={project.role}
-      />
-      {project.role === "org:admin" ? (
+      {dialog === "add" ? (
+        <NewTaskDialog
+          onOpenChange={onOpenChange}
+          open
+          projectId={project._id}
+        />
+      ) : null}
+      {dialog === "edit" ? (
+        <EditProjectDialog
+          color={project.color}
+          icon={project.icon}
+          id={project._id}
+          name={project.name}
+          onOpenChange={onOpenChange}
+          open
+          role={project.role}
+        />
+      ) : null}
+      {dialog === "archive" && project.role === "org:admin" ? (
         <ArchiveProjectDialog
           id={project._id}
           name={project.name}
           onOpenChange={onOpenChange}
-          open={dialog === "archive"}
+          open
         />
       ) : null}
     </>
@@ -393,7 +397,7 @@ function GlobalAddTask() {
 
   return (
     <>
-      <NewTaskDialog onOpenChange={setOpen} open={open} />
+      {open ? <NewTaskDialog onOpenChange={setOpen} open /> : null}
       <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-end p-4 md:p-6">
         <Button
           aria-label="Add task"
