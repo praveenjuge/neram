@@ -15,7 +15,7 @@ import { ProjectIcon } from "@/lib/project-icons"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { DialogTrigger } from "@/components/ui/dialog"
-import { Spinner } from "@/components/ui/spinner"
+import { DashboardSkeleton } from "@/components/route-skeleton"
 import {
   Tooltip,
   TooltipContent,
@@ -45,9 +45,7 @@ export function ArchivedClient() {
         </p>
       </div>
       {status === "LoadingFirstPage" ? (
-        <div className="grid min-h-[40vh] place-items-center">
-          <Spinner className="size-6 text-muted-foreground" />
-        </div>
+        <DashboardSkeleton />
       ) : results.length === 0 ? (
         <EmptyState />
       ) : (

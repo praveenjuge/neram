@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { DialogTrigger } from "@/components/ui/dialog"
-import { Spinner } from "@/components/ui/spinner"
+import { DashboardSkeleton } from "@/components/route-skeleton"
 import { workspaceHref } from "@/lib/workspace"
 import {
   Tooltip,
@@ -76,9 +76,7 @@ export function DashboardClient() {
         </div>
       </div>
       {projects === undefined ? (
-        <div className="grid min-h-[40vh] place-items-center">
-          <Spinner className="size-6 text-muted-foreground" />
-        </div>
+        <DashboardSkeleton />
       ) : projects.length === 0 ? (
         <EmptyState />
       ) : (

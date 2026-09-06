@@ -15,7 +15,7 @@ import { dataFromError, messageFromError } from "@/lib/errors"
 import { moveTaskOptimistic } from "@/lib/optimistic"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { Spinner } from "@/components/ui/spinner"
+import { BoardSkeleton } from "@/components/route-skeleton"
 import { workspaceHref } from "@/lib/workspace"
 
 import {
@@ -123,9 +123,13 @@ export function ProjectBoardClient({ projectId }: { projectId: string }) {
 
   if (project === undefined || tasks === undefined) {
     return (
-      <div className="grid min-h-[60vh] place-items-center">
-        <Spinner className="size-6 text-muted-foreground" />
-      </div>
+      <section className="mx-auto grid w-full max-w-7xl gap-5 p-5">
+        <div
+          className="h-7 w-40 animate-pulse rounded bg-muted"
+          aria-hidden="true"
+        />
+        <BoardSkeleton />
+      </section>
     )
   }
 
