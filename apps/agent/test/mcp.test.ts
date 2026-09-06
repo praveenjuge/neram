@@ -369,6 +369,37 @@ describe("neram mcp server", () => {
     }
   })
 
+  test("mcp list aggregation includes resource templates", async () => {
+    // Mirrors the `neram mcp list` action in cli.ts: it must surface
+    // uriTemplates (neram://project/{id}, neram://task/{id}) alongside
+    // static resources, not just tools/resources/prompts.
+    const { server, client } = await connect(fakeApi())
+    try {
+      const [{ tools }, { resources }, { resourceTemplates }, { prompts }] =
+        await Promise.all([
+          client.listTools(),
+          client.listResources().catch(() => ({ resources: [] })),
+          client
+            .listResourceTemplates()
+            .catch(() => ({ resourceTemplates: [] })),
+          client.listPrompts().catch(() => ({ prompts: [] })),
+        ])
+      expect(tools.length).toBeGreaterThan(0)
+      expect(resources.map((r) => r.uri)).toEqual(
+        expect.arrayContaining(["neram://projects"])
+      )
+      expect(resourceTemplates.map((t) => t.uriTemplate)).toEqual(
+        expect.arrayContaining(["neram://project/{id}", "neram://task/{id}"])
+      )
+      expect(prompts.map((p) => p.name)).toEqual(
+        expect.arrayContaining(["plan-sprint"])
+      )
+    } finally {
+      await client.close()
+      await server.close()
+    }
+  })
+
   test("reads a static resource without auth-gated tools/list failing", async () => {
     const { server, client } = await connect(fakeApi())
     try {

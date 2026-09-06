@@ -43,6 +43,16 @@ MCP tool failures return `isError: true` with `content: [{ type: "text", text: J
 
 Public CLI config is at `/.well-known/neram-agent.json`. It exposes `convexUrl`, `clerkFrontendApiUrl`, and `oauthClientId`. Override only for local dev with `NERAM_CONVEX_URL`, `NERAM_CLERK_FRONTEND_API_URL`, `NERAM_CLERK_OAUTH_CLIENT_ID`.
 
+## Local MCP inspection
+
+```bash
+npx neram mcp list --json      # tools, resources, resource templates, prompts — no client needed
+npx neram mcp serve --port 3030  # loopback-only Streamable HTTP for Inspector testing
+npx neram mcp install cursor --write --merge  # opt-in write; print-only by default
+```
+
+`mcp serve` binds `127.0.0.1` only and caps request bodies. `mcp install` prints the client snippet without writing files unless `--write` is passed; it refuses to overwrite malformed or unreadable configs, and re-running without `--merge` will not clobber an existing `neram` entry.
+
 ## Skills
 
 The `neram` skill (`skills/neram/SKILL.md`, grouped as "Neram" in `skills.sh.json`) teaches an agent to use the CLI and MCP surfaces above instead of browser automation.

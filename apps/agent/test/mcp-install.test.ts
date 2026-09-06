@@ -4,7 +4,7 @@ import { join } from "node:path"
 
 import { afterEach, describe, expect, test, vi } from "vitest"
 
-import { writeMcpInstall } from "../src/mcp-install.js"
+import { writeMcpInstall, parentDir } from "../src/mcp-install.js"
 
 afterEach(() => {
   vi.unstubAllEnvs()
@@ -33,5 +33,16 @@ describe("mcp install writer", () => {
       readFileSync(join(dir, ".config", "opencode", "mcp.json"), "utf8")
     ) as { mcpServers: { neram: { command: string } } }
     expect(saved.mcpServers.neram.command).toBe("npx")
+  })
+
+  test("parentDir splits backslash-separated (Windows) paths", () => {
+    // Regression lock for the dirname() fix: the old
+    // `path.split("/").slice(0, -1).join("/")` never split a Windows path
+    // (it yields ""), so mkdir never received the real parent directory.
+    const windowsPath = "C:\\Users\\ada\\.cursor\\mcp.json"
+    expect(windowsPath.split("/").slice(0, -1).join("/")).toBe("")
+    expect(parentDir(windowsPath)).toBe("C:/Users/ada/.cursor")
+    // POSIX paths keep working.
+    expect(parentDir("/home/ada/.cursor/mcp.json")).toBe("/home/ada/.cursor")
   })
 })
