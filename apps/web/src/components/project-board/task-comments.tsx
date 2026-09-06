@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils"
 import { messageFromError } from "@/lib/errors"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover"
+import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { UserAvatar } from "@/components/user-avatar"
 import { useOrganizationMembers } from "@/lib/use-organization-members"
@@ -96,9 +97,7 @@ function CommentBranch({
   )
   const isRoot = !parentCommentId
   if (status === "LoadingFirstPage") {
-    return isRoot ? (
-      <p className="text-sm text-muted-foreground">Loading comments…</p>
-    ) : null
+    return isRoot ? <Spinner className="size-4 text-muted-foreground" /> : null
   }
   if (results.length === 0) {
     return isRoot ? (
@@ -289,10 +288,7 @@ function LinkedThread({
     }, 80)
     return () => window.clearTimeout(timer)
   }, [result, targetCommentId])
-  if (!result)
-    return (
-      <p className="text-sm text-muted-foreground">Loading linked thread…</p>
-    )
+  if (!result) return <Spinner className="size-4 text-muted-foreground" />
   if (result.taskId !== taskId) {
     return (
       <p className="text-sm text-muted-foreground">
@@ -346,10 +342,7 @@ function OlderAncestry({
     startCommentId,
     limit: 100,
   })
-  if (!result)
-    return (
-      <p className="text-sm text-muted-foreground">Loading older ancestry…</p>
-    )
+  if (!result) return <Spinner className="size-4 text-muted-foreground" />
   return (
     <>
       {result.nextCommentId ? (

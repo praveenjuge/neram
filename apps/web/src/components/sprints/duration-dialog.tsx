@@ -6,6 +6,7 @@ import { useState } from "react"
 
 import { api } from "@neram/convex/api"
 import { Button } from "@/components/ui/button"
+import { Spinner } from "@/components/ui/spinner"
 import {
   Dialog,
   DialogContent,
@@ -47,7 +48,7 @@ export function DurationDialog({
           </DialogDescription>
         </DialogHeader>
         {context === undefined ? (
-          <p className="text-sm text-muted-foreground">Loading settings…</p>
+          <Spinner className="size-4 text-muted-foreground" />
         ) : (
           <DurationForm
             initial={initial}

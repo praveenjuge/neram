@@ -11,6 +11,7 @@ import type { Id } from "@neram/convex/data-model"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
+import { Spinner } from "@/components/ui/spinner"
 import { messageFromError } from "@/lib/errors"
 import { cn } from "@/lib/utils"
 
@@ -56,10 +57,10 @@ export function TaskSubtasks({ taskId }: { taskId: Id<"tasks"> }) {
             <SubtaskRow key={row._id} row={row} />
           ))}
         </ul>
+      ) : rows ? (
+        <p className="px-1 text-sm text-muted-foreground">No subtasks yet.</p>
       ) : (
-        <p className="px-1 text-sm text-muted-foreground">
-          {rows ? "No subtasks yet." : "Loading subtasks…"}
-        </p>
+        <Spinner className="size-4 text-muted-foreground" />
       )}
     </section>
   )

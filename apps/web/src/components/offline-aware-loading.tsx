@@ -1,18 +1,9 @@
-"use client"
-
-import { useOffline } from "next/offline"
-
 import { Spinner } from "@/components/ui/spinner"
 
-export function OfflineAwareLoading({ label = "Loading" }: { label?: string }) {
-  const isOffline = useOffline()
-
+export function OfflineAwareLoading() {
   return (
-    <div className="grid flex-1 place-items-center gap-2 p-6 text-center">
+    <div className="grid flex-1 place-items-center p-6">
       <Spinner className="size-6 text-muted-foreground" />
-      <p className="text-xs text-muted-foreground">
-        {isOffline ? "Waiting for connection…" : label}
-      </p>
     </div>
   )
 }
