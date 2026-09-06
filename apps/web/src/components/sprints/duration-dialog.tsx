@@ -48,7 +48,7 @@ export function DurationDialog({
           </DialogDescription>
         </DialogHeader>
         {context === undefined ? (
-          <Spinner className="size-4 text-muted-foreground" />
+          <Spinner aria-label="Loading settings" className="size-4 text-muted-foreground" />
         ) : (
           <DurationForm
             initial={initial}
