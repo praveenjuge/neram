@@ -369,31 +369,25 @@ describe("neram mcp server", () => {
     }
   })
 
-  test("mcp list aggregation includes resource templates", async () => {
-    // Mirrors the `neram mcp list` action in cli.ts: it must surface
-    // uriTemplates (neram://project/{id}, neram://task/{id}) alongside
-    // static resources, not just tools/resources/prompts.
+  test("mcp list surfaces resource templates in both output formats", async () => {
+    // Runs the real `neram mcp list` aggregation (buildMcpList, shared with
+    // cli.ts) against an in-memory server, checking the JSON payload and the
+    // human text so either format regressing fails this test.
+    const { buildMcpList } = await import("../src/mcp-list.js")
     const { server, client } = await connect(fakeApi())
     try {
-      const [{ tools }, { resources }, { resourceTemplates }, { prompts }] =
-        await Promise.all([
-          client.listTools(),
-          client.listResources().catch(() => ({ resources: [] })),
-          client
-            .listResourceTemplates()
-            .catch(() => ({ resourceTemplates: [] })),
-          client.listPrompts().catch(() => ({ prompts: [] })),
-        ])
-      expect(tools.length).toBeGreaterThan(0)
-      expect(resources.map((r) => r.uri)).toEqual(
+      const { payload, human } = await buildMcpList(client)
+      expect(payload.tools.length).toBeGreaterThan(0)
+      expect(payload.resources).toEqual(
         expect.arrayContaining(["neram://projects"])
       )
-      expect(resourceTemplates.map((t) => t.uriTemplate)).toEqual(
+      expect(payload.resourceTemplates).toEqual(
         expect.arrayContaining(["neram://project/{id}", "neram://task/{id}"])
       )
-      expect(prompts.map((p) => p.name)).toEqual(
+      expect(payload.prompts).toEqual(
         expect.arrayContaining(["plan-sprint"])
       )
+      expect(human).toContain("Resource templates: neram://project/{id}")
     } finally {
       await client.close()
       await server.close()

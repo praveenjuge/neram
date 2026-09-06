@@ -361,36 +361,9 @@ mcp
       const client = new Client({ name: "neram-cli", version: packageVersion() })
       await Promise.all([server.connect(st), client.connect(ct)])
       try {
-        const [{ tools }, { resources }, { resourceTemplates }, { prompts }] =
-          await Promise.all([
-            client.listTools(),
-            client.listResources().catch(() => ({ resources: [] })),
-            client
-              .listResourceTemplates()
-              .catch(() => ({ resourceTemplates: [] })),
-            client.listPrompts().catch(() => ({ prompts: [] })),
-          ])
-        const payload = {
-          tools: tools.map((t) => t.name),
-          resources: (resources as unknown[]).map((r) => (r as { uri: string }).uri ?? (r as { name: string }).name),
-          resourceTemplates: (resourceTemplates as unknown[]).map(
-            (t) =>
-              (t as { uriTemplate: string }).uriTemplate ??
-              (t as { name: string }).name
-          ),
-          prompts: (prompts as unknown[]).map((p) => (p as { name: string }).name),
-        }
-        emit(
-          opts,
-          [
-            ...payload.tools,
-            "",
-            `Resources: ${payload.resources.join(", ")}`,
-            `Resource templates: ${payload.resourceTemplates.join(", ")}`,
-            `Prompts: ${payload.prompts.join(", ")}`,
-          ].join("\n"),
-          payload
-        )
+        const { buildMcpList } = await import("./mcp-list.js")
+        const { payload, human } = await buildMcpList(client)
+        emit(opts, human, payload)
       } finally {
         await client.close()
         await server.close()
