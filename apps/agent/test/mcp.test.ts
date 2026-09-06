@@ -437,13 +437,16 @@ describe("neram mcp server", () => {
     expect(passed.status).toBe(200)
   })
 
-  test("acks notification-only batches without a response body", async () => {
+  test("acks well-formed notification-only batches without a body", async () => {
     const { handleFetchMcp } = await import("../src/mcp.js")
     const api = fakeApi()
+    // Mismatched routing headers on a well-formed notification batch take
+    // the empty 202 path (there is no id to correlate an error with).
     const notifications = new Request("https://mcp.test/mcp", {
       method: "POST",
       headers: {
         "content-type": "application/json",
+        accept: "application/json, text/event-stream",
         "mcp-method": "tools/call",
         "mcp-name": "workspace_status",
       },
@@ -452,9 +455,34 @@ describe("neram mcp server", () => {
       ]),
     })
     const acked = await handleFetchMcp(notifications, api)
-    // Per JSON-RPC, notifications receive no response: 202 with empty body,
-    // even when routing headers disagree with the notification method.
+    // Per JSON-RPC, notifications receive no response: 202 with empty body.
     expect(acked.status).toBe(202)
     expect(await acked.text()).toBe("")
+  })
+
+  test("rejects malformed id-less bodies instead of acking them", async () => {
+    const { handleFetchMcp } = await import("../src/mcp.js")
+    const api = fakeApi()
+    const malformed = new Request("https://mcp.test/mcp", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "mcp-method": "tools/call",
+        "mcp-name": "header-target",
+      },
+      body: JSON.stringify({ params: { name: "body-target" } }),
+    })
+    const rejected = await handleFetchMcp(malformed, api)
+    expect(rejected.status).toBe(400)
+    const payload = (await rejected.json()) as {
+      jsonrpc: string
+      id: null
+      error: { code: number }
+    }
+    expect(payload).toMatchObject({
+      jsonrpc: "2.0",
+      id: null,
+      error: { code: -32000 },
+    })
   })
 })

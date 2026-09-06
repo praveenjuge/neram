@@ -775,12 +775,17 @@ function mcpHeaderMismatch(
   return null
 }
 
-/** JSON-RPC notifications carry no id and must receive no response body. */
+/** JSON-RPC notifications carry no id and must receive no response body. Only
+ * well-formed notifications (jsonrpc "2.0" + string method, no id) take the
+ * empty-response path — malformed id-less payloads fall through to rejection
+ * so clients can diagnose the invalid request. */
 function isNotificationOnlyBody(body: unknown): boolean {
   const isNotification = (element: unknown) =>
     element !== null &&
     typeof element === "object" &&
-    !("id" in element)
+    !("id" in element) &&
+    (element as { jsonrpc?: unknown }).jsonrpc === "2.0" &&
+    typeof (element as { method?: unknown }).method === "string"
   if (Array.isArray(body)) {
     return body.length > 0 && body.every(isNotification)
   }
