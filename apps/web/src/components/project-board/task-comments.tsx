@@ -97,7 +97,12 @@ function CommentBranch({
   )
   const isRoot = !parentCommentId
   if (status === "LoadingFirstPage") {
-    return isRoot ? <Spinner aria-label="Loading comments" className="size-4 text-muted-foreground" /> : null
+    return isRoot ? (
+      <Spinner
+        aria-label="Loading comments"
+        className="size-4 text-muted-foreground"
+      />
+    ) : null
   }
   if (results.length === 0) {
     return isRoot ? (
@@ -288,7 +293,13 @@ function LinkedThread({
     }, 80)
     return () => window.clearTimeout(timer)
   }, [result, targetCommentId])
-  if (!result) return <Spinner aria-label="Loading linked thread" className="size-4 text-muted-foreground" />
+  if (!result)
+    return (
+      <Spinner
+        aria-label="Loading linked thread"
+        className="size-4 text-muted-foreground"
+      />
+    )
   if (result.taskId !== taskId) {
     return (
       <p className="text-sm text-muted-foreground">
@@ -342,7 +353,13 @@ function OlderAncestry({
     startCommentId,
     limit: 100,
   })
-  if (!result) return <Spinner aria-label="Loading older comments" className="size-4 text-muted-foreground" />
+  if (!result)
+    return (
+      <Spinner
+        aria-label="Loading older comments"
+        className="size-4 text-muted-foreground"
+      />
+    )
   return (
     <>
       {result.nextCommentId ? (

@@ -60,7 +60,10 @@ export function TaskSubtasks({ taskId }: { taskId: Id<"tasks"> }) {
       ) : rows ? (
         <p className="px-1 text-sm text-muted-foreground">No subtasks yet.</p>
       ) : (
-        <Spinner aria-label="Loading subtasks" className="size-4 text-muted-foreground" />
+        <Spinner
+          aria-label="Loading subtasks"
+          className="size-4 text-muted-foreground"
+        />
       )}
     </section>
   )
