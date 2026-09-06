@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils"
 import { messageFromError } from "@/lib/errors"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover"
+import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { UserAvatar } from "@/components/user-avatar"
 import { useOrganizationMembers } from "@/lib/use-organization-members"
@@ -97,7 +98,10 @@ function CommentBranch({
   const isRoot = !parentCommentId
   if (status === "LoadingFirstPage") {
     return isRoot ? (
-      <p className="text-sm text-muted-foreground">Loading comments…</p>
+      <Spinner
+        aria-label="Loading comments"
+        className="size-4 text-muted-foreground"
+      />
     ) : null
   }
   if (results.length === 0) {
@@ -291,7 +295,10 @@ function LinkedThread({
   }, [result, targetCommentId])
   if (!result)
     return (
-      <p className="text-sm text-muted-foreground">Loading linked thread…</p>
+      <Spinner
+        aria-label="Loading linked thread"
+        className="size-4 text-muted-foreground"
+      />
     )
   if (result.taskId !== taskId) {
     return (
@@ -348,7 +355,10 @@ function OlderAncestry({
   })
   if (!result)
     return (
-      <p className="text-sm text-muted-foreground">Loading older ancestry…</p>
+      <Spinner
+        aria-label="Loading older comments"
+        className="size-4 text-muted-foreground"
+      />
     )
   return (
     <>
