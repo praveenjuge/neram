@@ -1,9 +1,5 @@
-import { Spinner } from "@/components/ui/spinner"
+import { OfflineAwareLoading } from "@/components/offline-aware-loading"
 
 export default function AppLoading() {
-  return (
-    <div className="grid flex-1 place-items-center p-6">
-      <Spinner className="size-6 text-muted-foreground" />
-    </div>
-  )
+  return <OfflineAwareLoading label="Loading…" />
 }

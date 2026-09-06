@@ -4,6 +4,7 @@ import { RootProvider } from "fumadocs-ui/provider/next"
 
 import { ThemeProvider } from "@/components/theme-provider"
 import { LazyToaster } from "@/components/lazy-toaster"
+import { OfflineBanner } from "@/components/offline-banner"
 import { TooltipProvider } from "@/components/ui/tooltip"
 
 import "./globals.css"
@@ -38,6 +39,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <body className="flex min-h-screen flex-col text-sm antialiased">
+        <OfflineBanner />
         <ThemeProvider>
           <TooltipProvider>
             <RootProvider theme={{ enabled: false }}>{children}</RootProvider>

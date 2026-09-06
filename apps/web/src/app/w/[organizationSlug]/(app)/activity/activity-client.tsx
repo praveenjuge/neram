@@ -28,7 +28,7 @@ import { NewTaskDialog } from "@/components/project-board/new-task-dialog"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { DialogTrigger } from "@/components/ui/dialog"
-import { Spinner } from "@/components/ui/spinner"
+import { ActivitySkeleton } from "@/components/route-skeleton"
 import { cn } from "@/lib/utils"
 import { workspaceHref } from "@/lib/workspace"
 
@@ -153,9 +153,7 @@ export function ActivityClient() {
         />
       </div>
       {status === "LoadingFirstPage" ? (
-        <div className="grid min-h-[40vh] place-items-center">
-          <Spinner className="size-6 text-muted-foreground" />
-        </div>
+        <ActivitySkeleton />
       ) : results.length === 0 ? (
         <EmptyState />
       ) : (

@@ -19,7 +19,7 @@ import { NewTaskDialog } from "@/components/project-board/new-task-dialog"
 import { TaskDialog } from "@/components/project-board/task-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Spinner } from "@/components/ui/spinner"
+import { BoardSkeleton } from "@/components/route-skeleton"
 import { parseDueDate } from "@/lib/dates"
 import { dataFromError, messageFromError } from "@/lib/errors"
 import { moveTaskOptimistic } from "@/lib/optimistic"
@@ -249,9 +249,12 @@ export function TasksClient() {
 
   if (filteredTasks === undefined) {
     return (
-      <div className="grid min-h-[60vh] place-items-center">
-        <Spinner className="size-6 text-muted-foreground" />
-      </div>
+      <section className="mx-auto grid w-full max-w-7xl gap-5 p-5">
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="font-heading text-lg font-medium">Tasks</h1>
+        </div>
+        <BoardSkeleton />
+      </section>
     )
   }
 

@@ -10,6 +10,11 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   deploymentId,
   experimental: {
+    // Testing API for the instant() Playwright helper. Next warns against
+    // user-facing prod, so expose it on preview/CI builds only; next dev
+    // enables it automatically. VERCEL_ENV reaches this file via turbo
+    // passThroughEnv.
+    exposeTestingApiInProductionBuild: process.env.VERCEL_ENV !== "production",
     optimizePackageImports: [
       "@clerk/nextjs",
       "@clerk/ui",
@@ -23,10 +28,16 @@ const nextConfig: NextConfig = {
       "sonner",
     ],
     outputHashSalt: deploymentId,
-    // Disabled: restoring this cache across deployments served a stale
-    // compiled globals.css (old font stack) after source changes.
+    // Turbopack FS build cache stays off: restoring .next/cache across
+    // deploys once served a stale compiled globals.css (old font stack).
+    // Next 16.3 hardened this cache on Vercel's own sites, so re-enable
+    // only after verifying CSS output with check-deployment-assets.mjs.
+    // prefetchInlining is default-on in 16.3, so no config needed here.
     turbopackFileSystemCacheForBuild: false,
     turbopackRustReactCompiler: true,
+    // Network resilience: pending navigations/prefetches/Server Actions
+    // wait and retry on reconnect instead of throwing when offline.
+    useOffline: true,
   },
   partialPrefetching: true,
   poweredByHeader: false,
