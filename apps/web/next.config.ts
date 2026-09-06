@@ -10,7 +10,11 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   deploymentId,
   experimental: {
-    exposeTestingApiInProductionBuild: true,
+    // Testing API for the instant() Playwright helper. Next warns against
+    // user-facing prod, so expose it on preview/CI builds only; next dev
+    // enables it automatically. VERCEL_ENV reaches this file via turbo
+    // passThroughEnv.
+    exposeTestingApiInProductionBuild: process.env.VERCEL_ENV !== "production",
     optimizePackageImports: [
       "@clerk/nextjs",
       "@clerk/ui",
