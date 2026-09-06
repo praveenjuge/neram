@@ -369,6 +369,31 @@ describe("neram mcp server", () => {
     }
   })
 
+  test("mcp list surfaces resource templates in both output formats", async () => {
+    // Runs the real `neram mcp list` aggregation (buildMcpList, shared with
+    // cli.ts) against an in-memory server, checking the JSON payload and the
+    // human text so either format regressing fails this test.
+    const { buildMcpList } = await import("../src/mcp-list.js")
+    const { server, client } = await connect(fakeApi())
+    try {
+      const { payload, human } = await buildMcpList(client)
+      expect(payload.tools.length).toBeGreaterThan(0)
+      expect(payload.resources).toEqual(
+        expect.arrayContaining(["neram://projects"])
+      )
+      expect(payload.resourceTemplates).toEqual(
+        expect.arrayContaining(["neram://project/{id}", "neram://task/{id}"])
+      )
+      expect(payload.prompts).toEqual(
+        expect.arrayContaining(["plan-sprint"])
+      )
+      expect(human).toContain("Resource templates: neram://project/{id}")
+    } finally {
+      await client.close()
+      await server.close()
+    }
+  })
+
   test("reads a static resource without auth-gated tools/list failing", async () => {
     const { server, client } = await connect(fakeApi())
     try {

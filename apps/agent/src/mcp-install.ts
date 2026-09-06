@@ -29,6 +29,23 @@ function snippet(client: string) {
     : { command: "npx", args: ["neram", "mcp"] }
 }
 
+/**
+ * Parent directory of a client config path on any platform.
+ *
+ * Config paths are built with `join()` from `homedir()`, so on Windows they
+ * are backslash-separated. A naive `path.split("/")` never splits those and
+ * `mkdir` would receive the wrong directory. Only Windows-shaped paths
+ * (drive-letter or UNC prefixes) are normalized: a literal backslash is a
+ * valid POSIX filename character, so POSIX paths pass through untouched and
+ * `mkdir` always targets the same directory `writeFile` writes into.
+ * Forward slashes are accepted by Node fs APIs on Windows, so the normalized
+ * parent is safe to pass to `mkdir`.
+ */
+export function parentDir(configPath: string): string {
+  const isWindowsPath = /^[A-Za-z]:[\\/]|^\\\\/.test(configPath)
+  return dirname(isWindowsPath ? configPath.replace(/\\/g, "/") : configPath)
+}
+
 /** Write the stdio snippet into a client config file (opt-in only). */
 export async function writeMcpInstall(
   client: string | undefined,
@@ -66,7 +83,7 @@ export async function writeMcpInstall(
     ...existing,
     [key]: { ...current, neram: snippet(target) },
   }
-  await mkdir(dirname(path), { recursive: true })
+  await mkdir(parentDir(path), { recursive: true })
   await writeFile(path, JSON.stringify(next, null, 2) + "\n")
   const human = `Wrote neram MCP server to ${path} (${key}.neram). Sign in first: npx neram login`
   return { human, json: { ok: true, client: target, path, key } }
