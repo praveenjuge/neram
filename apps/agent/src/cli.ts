@@ -343,8 +343,8 @@ mcp
   .option("--json")
   .action((opts) =>
     wrap(opts, async () => {
-      const { Client } = await import("@modelcontextprotocol/sdk/client/index.js")
-      const { InMemoryTransport } = await import("@modelcontextprotocol/sdk/inMemory.js")
+      const { Client } = await import("@modelcontextprotocol/client")
+      const { InMemoryTransport } = await import("@modelcontextprotocol/server")
       const { createNeramMcpServer } = await import("./mcp.js")
       const config = await loadPublicConfig()
       const session = await authClientSession()

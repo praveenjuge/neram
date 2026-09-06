@@ -1,16 +1,13 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
-
-import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js"
-import { z } from "zod/v3"
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js"
-import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js"
-import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js"
-import type {
-  AnySchema,
-  ZodRawShapeCompat,
-} from "@modelcontextprotocol/sdk/server/zod-compat.js"
-
+import { NodeStreamableHTTPServerTransport } from "@modelcontextprotocol/node"
+import {
+  McpServer,
+  ResourceTemplate,
+  WebStandardStreamableHTTPServerTransport,
+} from "@modelcontextprotocol/server"
+import { StdioServerTransport } from "@modelcontextprotocol/server/stdio"
+import type { ToolAnnotations } from "@modelcontextprotocol/server"
+import * as z from "zod"
 import {
   createConvexApi,
   createTools,
@@ -23,7 +20,6 @@ import {
 import { packageVersion } from "./version.js"
 
 type JsonObject = Record<string, unknown>
-type Shape = { shape: Record<string, unknown> }
 
 // Short guidance surfaced to the calling agent alongside the tool list.
 // Aligned with MCP 2026-07-28: stateless, header-routed, cacheable lists.
@@ -67,27 +63,28 @@ export function createNeramMcpServer(client: NeramApi) {
     { instructions: INSTRUCTIONS }
   )
   const tools = createTools(client)
-  const raw = (schema: Shape) =>
-    schema.shape as Record<string, AnySchema> as ZodRawShapeCompat
+  // v2 takes Standard Schema objects directly (zod v4 satisfies
+  // StandardSchemaV1 + JSON Schema conversion); no raw-shape extraction.
+  type Schema = z.ZodType
   const register = (
     name: string,
     title: string,
     description: string,
-    schema: Shape,
+    schema: Schema,
     annotations: ToolAnnotations,
     run: (input: unknown) => Promise<JsonObject>,
-    outputSchema?: Shape
+    outputSchema?: Schema
   ) =>
     server.registerTool(
       name,
       {
         title,
         description,
-        inputSchema: raw(schema),
+        inputSchema: schema,
         annotations,
-        ...(outputSchema ? { outputSchema: raw(outputSchema) } : {}),
+        ...(outputSchema ? { outputSchema } : {}),
       },
-      async (input) => {
+      async (input: unknown) => {
         // Surface tool errors as MCP results so the agent sees stable codes and the
         // AMBIGUOUS candidate list, instead of a protocol-level exception.
         try {
@@ -604,7 +601,7 @@ export function createNeramMcpServer(client: NeramApi) {
       title: "Plan Sprint",
       description:
         "Triage Backlog into the active Sprint: review backlog, pick focus tasks, set a goal.",
-      argsSchema: {},
+      argsSchema: z.object({}),
     },
     async () => ({
       messages: [
@@ -629,7 +626,7 @@ export function createNeramMcpServer(client: NeramApi) {
     {
       title: "Daily Standup",
       description: "Summarize assigned work, open tasks, and next actions.",
-      argsSchema: {},
+      argsSchema: z.object({}),
     },
     async () => ({
       messages: [
@@ -649,13 +646,13 @@ export function createNeramMcpServer(client: NeramApi) {
       title: "Project Retro",
       description:
         "Review a project by id or unambiguous name: counts, done vs open, stale work.",
-      argsSchema: {
+      argsSchema: z.object({
         projectId: z.string().optional().describe("Exact project id (preferred)."),
         project: z
           .string()
           .optional()
           .describe("Unambiguous project name when the id is unknown."),
-      },
+      }),
     },
     async ({ projectId, project }) => ({
       messages: [
@@ -682,7 +679,7 @@ export function createNeramMcpServer(client: NeramApi) {
     {
       title: "Triage Capture",
       description: "Capture a task into the right project with title and due date.",
-      argsSchema: {},
+      argsSchema: z.object({}),
     },
     async () => ({
       messages: [
@@ -865,7 +862,7 @@ export async function handleHttpMcp(
     return
   }
   const server = createNeramMcpServer(client)
-  const transport = new StreamableHTTPServerTransport({
+  const transport = new NodeStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
   })
   try {

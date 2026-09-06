@@ -6,7 +6,7 @@ import { join } from "node:path"
 
 import { Entry } from "@napi-rs/keyring"
 import open from "open"
-import * as z from "zod/v3"
+import * as z from "zod"
 
 import { AgentError, createConvexApi, type NeramApi } from "./agent.js"
 import type { RevocationResult } from "./format.js"
