@@ -31,7 +31,7 @@ type Shape = { shape: Record<string, unknown> }
 // Multi Round-Trip Requests the server may elicit confirmation mid-call
 // instead of requiring the flag up front.
 const INSTRUCTIONS = [
-  "Neram workspace tools for AI agents. Protocol: MCP 2026-07-28 (stateless Streamable HTTP, Mcp-Method/Mcp-Name headers, server/discover).",
+  "Neram workspace tools for AI agents. Stateless Streamable HTTP (no session); clients may send Mcp-Method/Mcp-Name routing headers, which the server validates against the request body.",
   "Resolve a project or task by its id whenever you know it; otherwise pass an unambiguous name.",
   "When a name matches more than one record the tool returns an AMBIGUOUS error whose details.matches lists the candidates — retry with one of those ids. Use completion on project/taskTitle args to discover valid values.",
   "Read-only context is also available as resources (neram://workspace/status, neram://sprint/current, neram://projects, neram://brief/daily) and templates (neram://project/{id}, neram://task/{id}); reusable workflows are exposed as prompts (plan-sprint, daily-standup, project-retro, triage-capture).",
@@ -746,7 +746,8 @@ function mcpHeaderMismatch(
   if (!headerMethod && !headerName) return null
   const payload = (body ?? {}) as {
     method?: unknown
-    params?: { name?: unknown }
+    id?: unknown
+    params?: { name?: unknown; uri?: unknown }
   }
   if (
     headerMethod &&
@@ -755,12 +756,36 @@ function mcpHeaderMismatch(
   ) {
     return `Mcp-Method "${headerMethod}" does not match body method "${payload.method}".`
   }
+  // Mcp-Name carries the tool name for tools/call, the resource URI for
+  // resources/read, or the prompt name for prompts/get.
   const bodyName =
-    typeof payload.params?.name === "string" ? payload.params.name : null
+    typeof payload.params?.name === "string"
+      ? payload.params.name
+      : typeof payload.params?.uri === "string"
+        ? payload.params.uri
+        : null
   if (headerName && bodyName && headerName !== bodyName) {
-    return `Mcp-Name "${headerName}" does not match body tool "${bodyName}".`
+    return `Mcp-Name "${headerName}" does not match body target "${bodyName}".`
   }
   return null
+}
+
+/** JSON-RPC error envelope for transport-level rejections on a POST body. */
+function headerMismatchResponse(body: unknown, message: string) {
+  const id =
+    body !== null &&
+    typeof body === "object" &&
+    "id" in body &&
+    (typeof (body as { id: unknown }).id === "string" ||
+      typeof (body as { id: unknown }).id === "number" ||
+      (body as { id: unknown }).id === null)
+      ? (body as { id: string | number | null }).id
+      : null
+  return JSON.stringify({
+    jsonrpc: "2.0",
+    id,
+    error: { code: -32000, message: `Header mismatch: ${message}` },
+  })
 }
 
 export async function handleHttpMcp(
@@ -790,9 +815,7 @@ export async function handleHttpMcp(
   )
   if (mismatch) {
     res.writeHead(400, { "content-type": "application/json" })
-    res.end(
-      JSON.stringify({ error: { code: "HEADER_MISMATCH", message: mismatch } })
-    )
+    res.end(headerMismatchResponse(req.body, mismatch))
     return
   }
   const server = createNeramMcpServer(client)
@@ -843,10 +866,10 @@ export async function handleFetchMcp(
     body
   )
   if (mismatch) {
-    return Response.json(
-      { error: { code: "HEADER_MISMATCH", message: mismatch } },
-      { status: 400 }
-    )
+    return new Response(headerMismatchResponse(body, mismatch), {
+      headers: { "content-type": "application/json" },
+      status: 400,
+    })
   }
 
   const server = createNeramMcpServer(client)

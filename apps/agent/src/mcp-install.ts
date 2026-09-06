@@ -22,8 +22,11 @@ function targetPath(client: string): string | null {
   }
 }
 
-function snippet() {
-  return { command: "npx", args: ["neram", "mcp"] }
+function snippet(client: string) {
+  // VS Code's `servers` entries require an explicit stdio transport type.
+  return client === "vscode"
+    ? { type: "stdio", command: "npx", args: ["neram", "mcp"] }
+    : { command: "npx", args: ["neram", "mcp"] }
 }
 
 /** Write the stdio snippet into a client config file (opt-in only). */
@@ -61,7 +64,7 @@ export async function writeMcpInstall(
   }
   const next = {
     ...existing,
-    [key]: { ...current, neram: snippet() },
+    [key]: { ...current, neram: snippet(target) },
   }
   await mkdir(dirname(path), { recursive: true })
   await writeFile(path, JSON.stringify(next, null, 2) + "\n")

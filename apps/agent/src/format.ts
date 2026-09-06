@@ -495,7 +495,12 @@ export function formatDoctor(report: DoctorReport) {
 const MCP_COMMAND = { command: "npx", args: ["neram", "mcp"] } as const
 
 function serverSnippet(key: "mcpServers" | "servers") {
-  return JSON.stringify({ [key]: { neram: MCP_COMMAND } }, null, 2)
+  // VS Code's `servers` entries require an explicit stdio transport type.
+  const entry =
+    key === "servers"
+      ? { type: "stdio", ...MCP_COMMAND }
+      : MCP_COMMAND
+  return JSON.stringify({ [key]: { neram: entry } }, null, 2)
 }
 
 /** Per-client setup instructions for wiring up the local stdio MCP server. */

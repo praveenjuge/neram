@@ -43,18 +43,18 @@ export function OPTIONS() {
 }
 
 // Stateless discovery probe: clients may GET the endpoint to learn the
-// protocol versions and auth model before POSTing. Never requires a token.
+// transport and auth model before POSTing. Never requires a token.
 export function GET() {
   return Response.json(
     {
-      protocol: "MCP 2026-07-28 (stateless Streamable HTTP; no session)",
-      versions: ["2026-07-28", "2025-11-25"],
+      protocol: "Stateless Streamable HTTP; no session",
+      negotiatedVersions: ["2025-11-25", "2025-06-18", "2025-03-26"],
+      note: "Full 2026-07-28 (server/discover, MRTR, Tasks) is planned with the SDK v2 migration.",
       headers: {
         required: [],
         routing: ["Mcp-Method", "Mcp-Name"],
         version: "MCP-Protocol-Version",
       },
-      discovery: "POST tools/call server/discover when supported by your SDK",
       authorization: {
         type: "bearer",
         token: "Clerk OAuth id_token",

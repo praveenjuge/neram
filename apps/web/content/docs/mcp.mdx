@@ -1,9 +1,9 @@
 ---
 title: MCP
-description: Neram MCP — local stdio and hosted Streamable HTTP, same tools. MCP 2026-07-28.
+description: Neram MCP — local stdio and hosted Streamable HTTP, same tools.
 ---
 
-Local stdio and hosted Streamable HTTP run the same Organization-scoped tools. Protocol: **MCP 2026-07-28** (stateless Streamable HTTP, `Mcp-Method`/`Mcp-Name` routing headers, `server/discover`). Tool failures come back as `isError` results (not protocol exceptions) with stable error codes.
+Local stdio and hosted Streamable HTTP run the same Organization-scoped tools. Transport is stateless Streamable HTTP (no session); the server validates `Mcp-Method`/`Mcp-Name` routing headers against the request body. The SDK negotiates protocol versions through `2025-11-25`; full `2026-07-28` (`server/discover`, MRTR, Tasks) is a planned SDK v2 migration. Tool failures come back as `isError` results (not protocol exceptions) with stable error codes.
 
 ## Local stdio
 

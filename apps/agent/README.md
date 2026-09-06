@@ -23,7 +23,7 @@ result.
   totals, and MCP readiness hints.
 - `neram logout` clears local credentials, best-effort revokes the refresh
   token, and keeps the cached public config for your next login.
-- `neram mcp` starts the local stdio MCP server (MCP 2026-07-28, stateless) even when you aren't logged in.
+- `neram mcp` starts the local stdio MCP server (stateless) even when you aren't logged in.
   Handshake and tool listing succeed; the first tool call returns
   `UNAUTHENTICATED` as an `isError` result. It refreshes the auth token per
   request, so a long-lived server keeps working past token expiry as long as a
