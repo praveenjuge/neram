@@ -10,6 +10,18 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   deploymentId,
   experimental: {
+    optimizePackageImports: [
+      "@clerk/nextjs",
+      "@clerk/ui",
+      "convex",
+      "date-fns",
+      "fumadocs-core",
+      "fumadocs-ui",
+      "lucide-react",
+      "next-themes",
+      "radix-ui",
+      "sonner",
+    ],
     outputHashSalt: deploymentId,
     // Disabled: restoring this cache across deployments served a stale
     // compiled globals.css (old font stack) after source changes.
@@ -17,6 +29,7 @@ const nextConfig: NextConfig = {
     turbopackRustReactCompiler: true,
   },
   partialPrefetching: true,
+  poweredByHeader: false,
   reactCompiler: true,
   redirects: async () => [
     {
