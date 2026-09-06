@@ -1,4 +1,4 @@
-import * as z from "zod/v3"
+import * as z from "zod"
 
 export const statusSchema = z.enum(["todo", "inProgress", "done"])
 export const sprintPlacementSchema = z.enum(["backlog", "current"])

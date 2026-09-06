@@ -1,6 +1,6 @@
 import { ConvexHttpClient } from "convex/browser"
 import { anyApi } from "convex/server"
-import * as z from "zod/v3"
+import * as z from "zod"
 
 import {
   commentBodySchema,

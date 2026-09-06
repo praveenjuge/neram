@@ -1,5 +1,5 @@
 import { ConvexError } from "convex/values"
-import * as z from "zod/v3"
+import * as z from "zod"
 
 export class AgentError extends Error {
   readonly code: string
