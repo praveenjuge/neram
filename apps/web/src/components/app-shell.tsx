@@ -1,6 +1,7 @@
 "use client"
 
 import { OrganizationSwitcher, RedirectToSignIn } from "@clerk/nextjs"
+import dynamic from "next/dynamic"
 import Link from "next/link"
 import { useParams, usePathname } from "next/navigation"
 import { useQuery } from "convex-helpers/react/cache"
@@ -21,12 +22,7 @@ import { type ReactNode, useEffect, useState } from "react"
 import { api } from "@neram/convex/api"
 import { AppUserButton } from "@/components/theme-toggle"
 import { Button } from "@/components/ui/button"
-import { NewTaskDialog } from "@/components/project-board/new-task-dialog"
-import {
-  ArchiveProjectDialog,
-  EditProjectDialog,
-  NewProjectDialog,
-} from "@/components/project-dialogs"
+import { NewProjectDialog } from "@/components/project-dialogs/new-project-dialog"
 import { DialogTrigger } from "@/components/ui/dialog"
 import {
   DropdownMenu,
@@ -59,6 +55,31 @@ import { useProjectPrefetch } from "@/lib/prefetch"
 import { getProjectColorText } from "@/lib/project-colors"
 import { ProjectIcon } from "@/lib/project-icons"
 import { workspaceHref } from "@/lib/workspace"
+
+// Dialogs (forms, calendars, pickers) split from sidebar initial bundle.
+// Loaded on demand when user opens them. NewProjectDialog stays eager
+// because its trigger is visible affordance (avoids CLS).
+const NewTaskDialog = dynamic(
+  () =>
+    import("@/components/project-board/new-task-dialog").then(
+      (mod) => mod.NewTaskDialog
+    ),
+  { ssr: false }
+)
+const ArchiveProjectDialog = dynamic(
+  () =>
+    import("@/components/project-dialogs/archive-project-dialog").then(
+      (mod) => mod.ArchiveProjectDialog
+    ),
+  { ssr: false }
+)
+const EditProjectDialog = dynamic(
+  () =>
+    import("@/components/project-dialogs/edit-project-dialog").then(
+      (mod) => mod.EditProjectDialog
+    ),
+  { ssr: false }
+)
 
 type SidebarProject = FunctionReturnType<typeof api.projects.names>[number]
 

@@ -3,7 +3,7 @@ import type { ReactNode } from "react"
 import { RootProvider } from "fumadocs-ui/provider/next"
 
 import { ThemeProvider } from "@/components/theme-provider"
-import { Toaster } from "@/components/ui/sonner"
+import { LazyToaster } from "@/components/lazy-toaster"
 import { TooltipProvider } from "@/components/ui/tooltip"
 
 import "./globals.css"
@@ -41,7 +41,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <ThemeProvider>
           <TooltipProvider>
             <RootProvider theme={{ enabled: false }}>{children}</RootProvider>
-            <Toaster position="bottom-right" />
+            <LazyToaster />
           </TooltipProvider>
         </ThemeProvider>
       </body>

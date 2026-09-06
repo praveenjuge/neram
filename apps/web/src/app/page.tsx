@@ -1,4 +1,3 @@
-import { auth } from "@clerk/nextjs/server"
 import {
   History,
   IterationCcw,
@@ -9,13 +8,11 @@ import {
 } from "lucide-react"
 import type { Metadata } from "next"
 import Link from "next/link"
-import { redirect } from "next/navigation"
 
 import { CodeBlock } from "@/components/code-block"
 import { CopyCommand } from "@/components/copy-command"
 import { SiteFooter } from "@/components/site-footer"
 import { SITE_URL, homeOptions } from "@/lib/layout.shared"
-import { workspaceHref } from "@/lib/workspace"
 import { HomeLayout } from "fumadocs-ui/layouts/home"
 
 export const metadata: Metadata = {
@@ -96,13 +93,9 @@ const structuredData = {
   license: "https://github.com/praveenjuge/neram/blob/main/LICENSE",
 }
 
-export const instant = false
-
-export default async function HomePage() {
-  const { userId, orgSlug } = await auth()
-
-  if (userId) redirect(orgSlug ? workspaceHref(orgSlug) : "/w")
-
+// Static landing: signed-in redirect to `/w` is handled in `src/proxy.ts`
+// middleware so this page prerenders and serves from CDN.
+export default function HomePage() {
   return (
     <HomeLayout {...homeOptions()}>
       <main className="relative overflow-hidden">
