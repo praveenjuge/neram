@@ -744,34 +744,61 @@ function mcpHeaderMismatch(
   const headerMethod = get("mcp-method")
   const headerName = get("mcp-name")
   if (!headerMethod && !headerName) return null
-  const payload = (body ?? {}) as {
-    method?: unknown
-    id?: unknown
-    params?: { name?: unknown; uri?: unknown }
-  }
-  if (
-    headerMethod &&
-    typeof payload.method === "string" &&
-    headerMethod !== payload.method
-  ) {
-    return `Mcp-Method "${headerMethod}" does not match body method "${payload.method}".`
-  }
-  // Mcp-Name carries the tool name for tools/call, the resource URI for
-  // resources/read, or the prompt name for prompts/get.
-  const bodyName =
-    typeof payload.params?.name === "string"
-      ? payload.params.name
-      : typeof payload.params?.uri === "string"
-        ? payload.params.uri
-        : null
-  if (headerName && bodyName && headerName !== bodyName) {
-    return `Mcp-Name "${headerName}" does not match body target "${bodyName}".`
+  // JSON-RPC batches carry one routing header pair for N elements, so every
+  // element must agree with the headers — otherwise a batch labeled for one
+  // operation could dispatch another.
+  const elements = Array.isArray(body) ? body : [body]
+  for (const element of elements) {
+    const payload = (element ?? {}) as {
+      method?: unknown
+      params?: { name?: unknown; uri?: unknown }
+    }
+    if (
+      headerMethod &&
+      typeof payload.method === "string" &&
+      headerMethod !== payload.method
+    ) {
+      return `Mcp-Method "${headerMethod}" does not match body method "${payload.method}".`
+    }
+    // Mcp-Name carries the tool name for tools/call, the resource URI for
+    // resources/read, or the prompt name for prompts/get.
+    const bodyName =
+      typeof payload.params?.name === "string"
+        ? payload.params.name
+        : typeof payload.params?.uri === "string"
+          ? payload.params.uri
+          : null
+    if (headerName && bodyName && headerName !== bodyName) {
+      return `Mcp-Name "${headerName}" does not match body target "${bodyName}".`
+    }
   }
   return null
 }
 
 /** JSON-RPC error envelope for transport-level rejections on a POST body. */
 function headerMismatchResponse(body: unknown, message: string) {
+  const error = { code: -32000, message: `Header mismatch: ${message}` }
+  // Batch rejections answer per request id so no element hangs; a batch of
+  // notifications (no ids) gets a single null-id error.
+  if (Array.isArray(body)) {
+    const ids = body
+      .map((element) =>
+        element !== null &&
+        typeof element === "object" &&
+        "id" in element &&
+        (typeof (element as { id: unknown }).id === "string" ||
+          typeof (element as { id: unknown }).id === "number")
+          ? (element as { id: string | number }).id
+          : null
+      )
+      .filter((id): id is string | number => id !== null)
+    if (ids.length > 0) {
+      return JSON.stringify(
+        ids.map((id) => ({ jsonrpc: "2.0", id, error }))
+      )
+    }
+    return JSON.stringify({ jsonrpc: "2.0", id: null, error })
+  }
   const id =
     body !== null &&
     typeof body === "object" &&
@@ -781,11 +808,7 @@ function headerMismatchResponse(body: unknown, message: string) {
       (body as { id: unknown }).id === null)
       ? (body as { id: string | number | null }).id
       : null
-  return JSON.stringify({
-    jsonrpc: "2.0",
-    id,
-    error: { code: -32000, message: `Header mismatch: ${message}` },
-  })
+  return JSON.stringify({ jsonrpc: "2.0", id, error })
 }
 
 export async function handleHttpMcp(

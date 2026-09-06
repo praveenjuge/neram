@@ -381,4 +381,59 @@ describe("neram mcp server", () => {
       await server.close()
     }
   })
+
+  test("rejects header/body mismatches, including batches, as JSON-RPC errors", async () => {
+    const { handleFetchMcp } = await import("../src/mcp.js")
+    const api = fakeApi()
+    const batch = [
+      {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: { name: "daily_brief", arguments: {} },
+      },
+    ]
+    const mismatched = new Request("https://mcp.test/mcp", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "mcp-method": "tools/call",
+        "mcp-name": "workspace_status",
+      },
+      body: JSON.stringify(batch),
+    })
+    const rejected = await handleFetchMcp(mismatched, api)
+    expect(rejected.status).toBe(400)
+    const payload = (await rejected.json()) as Array<{
+      jsonrpc: string
+      id: number
+      error: { code: number }
+    }>
+    expect(payload).toHaveLength(1)
+    expect(payload[0]).toMatchObject({
+      jsonrpc: "2.0",
+      id: 1,
+      error: { code: -32000 },
+    })
+
+    const matched = new Request("https://mcp.test/mcp", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        "mcp-method": "tools/call",
+        "mcp-name": "workspace_status",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 2,
+        method: "tools/call",
+        params: { name: "workspace_status", arguments: {} },
+      }),
+    })
+    // Matching headers pass validation and reach the tool (which returns an
+    // isError-shaped result body, not a transport rejection).
+    const passed = await handleFetchMcp(matched, api)
+    expect(passed.status).toBe(200)
+  })
 })
