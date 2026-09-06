@@ -775,6 +775,18 @@ function mcpHeaderMismatch(
   return null
 }
 
+/** JSON-RPC notifications carry no id and must receive no response body. */
+function isNotificationOnlyBody(body: unknown): boolean {
+  const isNotification = (element: unknown) =>
+    element !== null &&
+    typeof element === "object" &&
+    !("id" in element)
+  if (Array.isArray(body)) {
+    return body.length > 0 && body.every(isNotification)
+  }
+  return isNotification(body)
+}
+
 /** JSON-RPC error envelope for transport-level rejections on a POST body. */
 function headerMismatchResponse(body: unknown, message: string) {
   const error = { code: -32000, message: `Header mismatch: ${message}` }
@@ -837,6 +849,12 @@ export async function handleHttpMcp(
     req.body
   )
   if (mismatch) {
+    // A notification-only batch must not receive a response body: ack it.
+    if (isNotificationOnlyBody(req.body)) {
+      res.writeHead(202, { "content-type": "application/json" })
+      res.end()
+      return
+    }
     res.writeHead(400, { "content-type": "application/json" })
     res.end(headerMismatchResponse(req.body, mismatch))
     return
@@ -889,6 +907,10 @@ export async function handleFetchMcp(
     body
   )
   if (mismatch) {
+    // A notification-only batch must not receive a response body: ack it.
+    if (isNotificationOnlyBody(body)) {
+      return new Response(null, { status: 202 })
+    }
     return new Response(headerMismatchResponse(body, mismatch), {
       headers: { "content-type": "application/json" },
       status: 400,

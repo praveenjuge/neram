@@ -436,4 +436,25 @@ describe("neram mcp server", () => {
     const passed = await handleFetchMcp(matched, api)
     expect(passed.status).toBe(200)
   })
+
+  test("acks notification-only batches without a response body", async () => {
+    const { handleFetchMcp } = await import("../src/mcp.js")
+    const api = fakeApi()
+    const notifications = new Request("https://mcp.test/mcp", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "mcp-method": "tools/call",
+        "mcp-name": "workspace_status",
+      },
+      body: JSON.stringify([
+        { jsonrpc: "2.0", method: "notifications/initialized" },
+      ]),
+    })
+    const acked = await handleFetchMcp(notifications, api)
+    // Per JSON-RPC, notifications receive no response: 202 with empty body,
+    // even when routing headers disagree with the notification method.
+    expect(acked.status).toBe(202)
+    expect(await acked.text()).toBe("")
+  })
 })
