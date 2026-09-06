@@ -11,6 +11,7 @@ export default defineConfig({
   webServer: process.env.PLAYWRIGHT_BASE_URL
     ? undefined
     : {
+        // Built by `bun run test:e2e` before Playwright starts.
         command: "bun run preview -- --port 3000",
         reuseExistingServer: true,
         timeout: 120_000,
