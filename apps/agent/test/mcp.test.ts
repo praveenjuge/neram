@@ -332,4 +332,157 @@ describe("neram mcp server", () => {
       await server.close()
     }
   })
+
+  test("exposes resources, prompts, and output schemas", async () => {
+    const { server, client } = await connect(fakeApi())
+    try {
+      const { resources } = await client.listResources()
+      expect(resources.map((r) => r.uri)).toEqual(
+        expect.arrayContaining([
+          "neram://workspace/status",
+          "neram://sprint/current",
+          "neram://projects",
+          "neram://brief/daily",
+        ])
+      )
+      const { resourceTemplates } = await client.listResourceTemplates()
+      expect(resourceTemplates.map((t) => t.uriTemplate)).toEqual(
+        expect.arrayContaining(["neram://project/{id}", "neram://task/{id}"])
+      )
+      const { prompts } = await client.listPrompts()
+      expect(prompts.map((p) => p.name)).toEqual(
+        expect.arrayContaining([
+          "plan-sprint",
+          "daily-standup",
+          "project-retro",
+          "triage-capture",
+        ])
+      )
+      const { tools } = await client.listTools()
+      const byName = Object.fromEntries(tools.map((t) => [t.name, t]))
+      expect(byName.daily_brief.outputSchema).toBeDefined()
+      expect(byName.list_projects.outputSchema).toBeDefined()
+      expect(byName.get_task.outputSchema).toBeDefined()
+    } finally {
+      await client.close()
+      await server.close()
+    }
+  })
+
+  test("reads a static resource without auth-gated tools/list failing", async () => {
+    const { server, client } = await connect(fakeApi())
+    try {
+      const result = await client.readResource({
+        uri: "neram://projects",
+      })
+      expect(result.contents.length).toBeGreaterThan(0)
+    } finally {
+      await client.close()
+      await server.close()
+    }
+  })
+
+  test("rejects header/body mismatches, including batches, as JSON-RPC errors", async () => {
+    const { handleFetchMcp } = await import("../src/mcp.js")
+    const api = fakeApi()
+    const batch = [
+      {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: { name: "daily_brief", arguments: {} },
+      },
+    ]
+    const mismatched = new Request("https://mcp.test/mcp", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "mcp-method": "tools/call",
+        "mcp-name": "workspace_status",
+      },
+      body: JSON.stringify(batch),
+    })
+    const rejected = await handleFetchMcp(mismatched, api)
+    expect(rejected.status).toBe(400)
+    const payload = (await rejected.json()) as Array<{
+      jsonrpc: string
+      id: number
+      error: { code: number }
+    }>
+    expect(payload).toHaveLength(1)
+    expect(payload[0]).toMatchObject({
+      jsonrpc: "2.0",
+      id: 1,
+      error: { code: -32000 },
+    })
+
+    const matched = new Request("https://mcp.test/mcp", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        "mcp-method": "tools/call",
+        "mcp-name": "workspace_status",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 2,
+        method: "tools/call",
+        params: { name: "workspace_status", arguments: {} },
+      }),
+    })
+    // Matching headers pass validation and reach the tool (which returns an
+    // isError-shaped result body, not a transport rejection).
+    const passed = await handleFetchMcp(matched, api)
+    expect(passed.status).toBe(200)
+  })
+
+  test("acks well-formed notification-only batches without a body", async () => {
+    const { handleFetchMcp } = await import("../src/mcp.js")
+    const api = fakeApi()
+    // Mismatched routing headers on a well-formed notification batch take
+    // the empty 202 path (there is no id to correlate an error with).
+    const notifications = new Request("https://mcp.test/mcp", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        "mcp-method": "tools/call",
+        "mcp-name": "workspace_status",
+      },
+      body: JSON.stringify([
+        { jsonrpc: "2.0", method: "notifications/initialized" },
+      ]),
+    })
+    const acked = await handleFetchMcp(notifications, api)
+    // Per JSON-RPC, notifications receive no response: 202 with empty body.
+    expect(acked.status).toBe(202)
+    expect(await acked.text()).toBe("")
+  })
+
+  test("rejects malformed id-less bodies instead of acking them", async () => {
+    const { handleFetchMcp } = await import("../src/mcp.js")
+    const api = fakeApi()
+    const malformed = new Request("https://mcp.test/mcp", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "mcp-method": "tools/call",
+        "mcp-name": "header-target",
+      },
+      body: JSON.stringify({ params: { name: "body-target" } }),
+    })
+    const rejected = await handleFetchMcp(malformed, api)
+    expect(rejected.status).toBe(400)
+    const payload = (await rejected.json()) as {
+      jsonrpc: string
+      id: null
+      error: { code: number }
+    }
+    expect(payload).toMatchObject({
+      jsonrpc: "2.0",
+      id: null,
+      error: { code: -32000 },
+    })
+  })
 })

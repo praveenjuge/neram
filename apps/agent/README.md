@@ -23,13 +23,15 @@ result.
   totals, and MCP readiness hints.
 - `neram logout` clears local credentials, best-effort revokes the refresh
   token, and keeps the cached public config for your next login.
-- `neram mcp` starts the local stdio MCP server even when you aren't logged in.
+- `neram mcp` starts the local stdio MCP server (stateless) even when you aren't logged in.
   Handshake and tool listing succeed; the first tool call returns
   `UNAUTHENTICATED` as an `isError` result. It refreshes the auth token per
   request, so a long-lived server keeps working past token expiry as long as a
   refresh token exists.
-- `neram mcp install [claude-code|cursor|vscode]` prints (does not write) the
-  config snippet for wiring the server into a client.
+- `neram mcp install [claude-code|cursor|vscode|opencode|goose]` prints (does not write) the
+  config snippet for wiring the server into a client. Add `--write [--merge]` to write it.
+- `neram mcp list --json` lists tools, resources, and prompts without a client.
+- `neram mcp serve --port 3030` serves local Streamable HTTP for Inspector testing.
 
 ## Workspace commands
 
@@ -100,6 +102,11 @@ Mutations: `capture_task`, `update_task`, `move_task`, `complete_task`,
 `delete_project`, `create_subtask`, `rename_subtask`, `set_subtask_completed`,
 `reorder_subtask`, `delete_subtask`, `create_comment`, `reply_to_comment`,
 `edit_comment`, `delete_comment`.
+
+Resources: `neram://workspace/status`, `neram://sprint/current`,
+`neram://projects`, `neram://brief/daily`, `neram://project/{id}`,
+`neram://task/{id}`. Prompts: `plan-sprint`, `daily-standup`,
+`project-retro`, `triage-capture`.
 
 Organization and Sprint mutations: `create_workspace`,
 `invite_workspace_member`, `update_workspace_member_role`,
