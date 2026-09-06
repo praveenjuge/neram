@@ -2,6 +2,17 @@
 
 All notable changes to the `neram` CLI/MCP package. Follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow SemVer.
 
+## [0.4.0]
+
+MCP SDK v2 migration (no protocol change: still negotiates 2025-11-25).
+
+### Changed
+
+- MCP integration moved from the monolithic `@modelcontextprotocol/sdk@1.30` to the v2 split packages `@modelcontextprotocol/{server,client,node}@2.0.0` (pinned exact).
+- Tool input/output schemas and prompt args now use zod v4 Standard Schema objects directly (previously zod/v3 raw shapes via the removed `zod-compat` helper).
+- `StreamableHTTPServerTransport` renamed to `NodeStreamableHTTPServerTransport` (same stateless behavior).
+- Minor release bump: 0.3.0 → 0.4.0 (SDK packaging change; tool/resource/prompt surface unchanged).
+
 ## [0.3.0]
 
 MCP 2026-07-28 alignment plus review follow-ups.
