@@ -21,22 +21,49 @@ if (!token) {
   process.exit(0)
 }
 
+// CI smoke-test deadline per request: a hung endpoint must fail fast instead
+// of stalling the job on Node's long default transport timeouts.
+const TIMEOUT_MS = Number(process.env.NERAM_MCP_TIMEOUT_MS ?? 30_000)
+
+// The server negotiates the protocol version in the initialize response;
+// every later request must send that version back, not our proposal.
+let protocolVersion = "2025-11-25"
+
+async function post(body) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        authorization: `Bearer ${token}`,
+        "mcp-protocol-version": protocolVersion,
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    })
+    // Keep the signal armed through the body read so a stalled stream fails.
+    const text = await res.text()
+    return { status: res.status, text }
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw new Error(
+        `request timed out after ${TIMEOUT_MS}ms: ${JSON.stringify(body).slice(0, 120)}`
+      )
+    }
+    throw error
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 let nextId = 1
-async function rpc(method, params = {}, extraHeaders = {}) {
+async function rpc(method, params = {}) {
   const id = nextId++
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      accept: "application/json, text/event-stream",
-      authorization: `Bearer ${token}`,
-      "mcp-protocol-version": "2025-11-25",
-      ...extraHeaders,
-    },
-    body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
-  })
-  const text = await res.text()
-  return { id, status: res.status, text }
+  const { status, text } = await post({ jsonrpc: "2.0", id, method, params })
+  return { id, status, text }
 }
 
 // Streamable HTTP may answer JSON directly or as an SSE data frame; accept both.
@@ -77,18 +104,16 @@ const init = await rpc("initialize", {
 })
 assertOk("initialize", init, (result) => {
   if (!result?.serverInfo) throw new Error("initialize missing serverInfo")
+  if (typeof result.protocolVersion !== "string") {
+    throw new Error("initialize missing negotiated protocolVersion")
+  }
+  // Pin every later request to the version the server negotiated.
+  protocolVersion = result.protocolVersion
+  console.log(`  negotiated protocol version: ${protocolVersion}`)
 })
 
 // Fire-and-forget per JSON-RPC: notifications get 202 with no body.
-await fetch(url, {
-  method: "POST",
-  headers: {
-    "content-type": "application/json",
-    accept: "application/json, text/event-stream",
-    authorization: `Bearer ${token}`,
-  },
-  body: JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }),
-})
+await post({ jsonrpc: "2.0", method: "notifications/initialized" })
 
 const tools = await rpc("tools/list")
 assertOk("tools/list", tools, (result) => {

@@ -42,7 +42,13 @@ describe("mcp install writer", () => {
     const windowsPath = "C:\\Users\\ada\\.cursor\\mcp.json"
     expect(windowsPath.split("/").slice(0, -1).join("/")).toBe("")
     expect(parentDir(windowsPath)).toBe("C:/Users/ada/.cursor")
-    // POSIX paths keep working.
+    // UNC paths normalize too.
+    expect(parentDir("\\\\server\\share\\.cursor\\mcp.json")).toBe(
+      "//server/share/.cursor"
+    )
+    // POSIX paths keep working, including a literal backslash in a filename:
+    // it is data, not a separator, so the parent is unchanged.
     expect(parentDir("/home/ada/.cursor/mcp.json")).toBe("/home/ada/.cursor")
+    expect(parentDir("/home/ada/we\\ird/mcp.json")).toBe("/home/ada/we\\ird")
   })
 })

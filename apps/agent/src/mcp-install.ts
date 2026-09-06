@@ -34,13 +34,16 @@ function snippet(client: string) {
  *
  * Config paths are built with `join()` from `homedir()`, so on Windows they
  * are backslash-separated. A naive `path.split("/")` never splits those and
- * `mkdir` would receive the full file path. Normalizing `\` to `/` first
- * keeps `dirname` correct on POSIX too, where a backslash is otherwise just
- * another filename character. Forward slashes are accepted by Node fs APIs
- * on Windows, so the normalized parent is safe to pass to `mkdir`.
+ * `mkdir` would receive the wrong directory. Only Windows-shaped paths
+ * (drive-letter or UNC prefixes) are normalized: a literal backslash is a
+ * valid POSIX filename character, so POSIX paths pass through untouched and
+ * `mkdir` always targets the same directory `writeFile` writes into.
+ * Forward slashes are accepted by Node fs APIs on Windows, so the normalized
+ * parent is safe to pass to `mkdir`.
  */
 export function parentDir(configPath: string): string {
-  return dirname(configPath.replace(/\\/g, "/"))
+  const isWindowsPath = /^[A-Za-z]:[\\/]|^\\\\/.test(configPath)
+  return dirname(isWindowsPath ? configPath.replace(/\\/g, "/") : configPath)
 }
 
 /** Write the stdio snippet into a client config file (opt-in only). */
