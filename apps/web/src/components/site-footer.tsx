@@ -20,10 +20,18 @@ export function SiteFooter() {
           >
             GitHub
           </a>
-          <Link className="transition hover:text-foreground" href="/docs/privacy">
+          <Link
+            className="transition hover:text-foreground"
+            href="/docs/privacy"
+            prefetch={false}
+          >
             Privacy
           </Link>
-          <Link className="transition hover:text-foreground" href="/docs/terms">
+          <Link
+            className="transition hover:text-foreground"
+            href="/docs/terms"
+            prefetch={false}
+          >
             Terms
           </Link>
         </div>

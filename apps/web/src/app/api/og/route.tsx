@@ -2,7 +2,14 @@ import { ImageResponse } from "next/og"
 
 export const contentType = "image/png"
 
-const SIZE = { width: 1200, height: 630 }
+const IMAGE_OPTIONS = {
+  width: 1200,
+  height: 630,
+  headers: {
+    "Cache-Control":
+      "public, max-age=0, s-maxage=86400, stale-while-revalidate=604800",
+  },
+}
 
 function clamp(value: string | null, fallback: string, max = 200) {
   if (!value) return fallback
@@ -57,6 +64,6 @@ export async function GET(request: Request) {
         </div>
       </div>
     ),
-    SIZE
+    IMAGE_OPTIONS
   )
 }

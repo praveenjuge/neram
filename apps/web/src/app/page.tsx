@@ -197,6 +197,7 @@ export default function HomePage() {
               <Link
                 className="inline-flex h-8 items-center rounded-full bg-foreground px-3 text-sm font-medium text-background transition hover:opacity-90"
                 href="/docs"
+                prefetch={false}
               >
                 Read docs
               </Link>
