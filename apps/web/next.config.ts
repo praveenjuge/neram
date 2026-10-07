@@ -10,6 +10,7 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   deploymentId,
   experimental: {
+    agentUpgrade: "latest",
     // Testing API for the instant() Playwright helper. Next warns against
     // user-facing prod, so expose it on preview/CI builds only; next dev
     // enables it automatically. VERCEL_ENV reaches this file via turbo
@@ -27,7 +28,6 @@ const nextConfig: NextConfig = {
       "radix-ui",
       "sonner",
     ],
-    outputHashSalt: deploymentId,
     // Turbopack FS build cache stays off: restoring .next/cache across
     // deploys once served a stale compiled globals.css (old font stack).
     // Next 16.3 hardened this cache on Vercel's own sites, so re-enable
@@ -39,6 +39,7 @@ const nextConfig: NextConfig = {
     // wait and retry on reconnect instead of throwing when offline.
     useOffline: true,
   },
+  outputHashSalt: deploymentId,
   partialPrefetching: true,
   poweredByHeader: false,
   reactCompiler: true,
