@@ -10,6 +10,7 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   deploymentId,
   experimental: {
+    agentUpgrade: "latest",
     // Testing API for the instant() Playwright helper. Next warns against
     // user-facing prod, so expose it on preview/CI builds only; next dev
     // enables it automatically. VERCEL_ENV reaches this file via turbo
