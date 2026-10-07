@@ -32,20 +32,18 @@ if (!rawDeploymentId) {
 }
 
 const deploymentId = rawDeploymentId.replace(/^dpl_/, "").slice(0, 32)
-// Next 16.4 under the Vercel adapter writes prerendered HTML to the route
-// cache instead of server/app, so scan both.
-const pageOutputDirs = ["../.next/server/app", "../.next/server/route-cache"]
-const prerenderedPagePaths = pageOutputDirs.flatMap((dir) => {
-  const cwd = resolve(import.meta.dirname, dir)
-  return globSync("**/*.html", { cwd }).map((path) => resolve(cwd, path))
-})
+// Next 16.4 under the Vercel adapter writes prerendered HTML to
+// .next/server/route-cache instead of .next/server/app, so scan all of
+// .next/server.
+const appOutputDir = resolve(import.meta.dirname, "../.next/server")
+const htmlPaths = globSync("**/*.html", { cwd: appOutputDir }).map((path) =>
+  resolve(appOutputDir, path)
+)
 const serverFilesPath = resolve(
   import.meta.dirname,
   "../.next/required-server-files.json"
 )
-const html = prerenderedPagePaths
-  .map((path) => readFileSync(path, "utf8"))
-  .join("\n")
+const html = htmlPaths.map((path) => readFileSync(path, "utf8")).join("\n")
 const serverFiles = JSON.parse(readFileSync(serverFilesPath, "utf8"))
 const assetUrls = [
   ...html.matchAll(/(?:href|src)="([^"]*\/_next\/static[^"]*)"/g),
