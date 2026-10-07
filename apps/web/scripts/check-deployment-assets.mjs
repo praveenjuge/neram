@@ -32,10 +32,13 @@ if (!rawDeploymentId) {
 }
 
 const deploymentId = rawDeploymentId.replace(/^dpl_/, "").slice(0, 32)
-const appOutputDir = resolve(import.meta.dirname, "../.next/server/app")
-const htmlPaths = globSync("**/*.html", { cwd: appOutputDir }).map((path) =>
-  resolve(appOutputDir, path)
-)
+// Next 16.4 under the Vercel adapter writes prerendered HTML to the route
+// cache instead of server/app, so scan both.
+const htmlOutputDirs = ["../.next/server/app", "../.next/server/route-cache"]
+const htmlPaths = htmlOutputDirs.flatMap((dir) => {
+  const cwd = resolve(import.meta.dirname, dir)
+  return globSync("**/*.html", { cwd }).map((path) => resolve(cwd, path))
+})
 const serverFilesPath = resolve(
   import.meta.dirname,
   "../.next/required-server-files.json"
@@ -47,7 +50,7 @@ const assetUrls = [
 ].map(([, url]) => url)
 const expectedQuery = `?dpl=${deploymentId}`
 const unversionedUrls = assetUrls.filter((url) => !url.includes(expectedQuery))
-const outputHashSalt = serverFiles.config?.experimental?.outputHashSalt
+const outputHashSalt = serverFiles.config?.outputHashSalt
 if (
   assetUrls.length === 0 ||
   typeof outputHashSalt !== "string" ||
