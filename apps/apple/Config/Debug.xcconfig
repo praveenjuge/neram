@@ -1,0 +1,5 @@
+// Development: the dev Clerk instance and dev Convex deployment, matching
+// apps/web/.env.local. Both values are public (they ship in the web bundle).
+// "/$()/" keeps xcconfig from reading "//" in URLs as a comment.
+CLERK_PUBLISHABLE_KEY = pk_test_c2Vuc2libGUtbGFjZXdpbmctMTguY2xlcmsuYWNjb3VudHMuZGV2JA
+CONVEX_URL = https:/$()/energized-guineapig-888.convex.cloud

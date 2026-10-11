@@ -1,0 +1,5 @@
+// Production: clerk.neram.praveenjuge.com and the production Convex deployment
+// (see https://neram.praveenjuge.com/.well-known/neram-agent.json). Both values
+// are public. "/$()/" keeps xcconfig from reading "//" in URLs as a comment.
+CLERK_PUBLISHABLE_KEY = pk_live_Y2xlcmsubmVyYW0ucHJhdmVlbmp1Z2UuY29tJA
+CONVEX_URL = https:/$()/impartial-clam-554.convex.cloud
