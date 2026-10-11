@@ -1,0 +1,11 @@
+{
+  "name": "@neram/apple",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "build": "xcodebuild build -project Neram.xcodeproj -scheme Neram -onlyUsePackageVersionsFromResolvedFile -destination generic/platform=iOS -destination platform=macOS,arch=arm64 CODE_SIGNING_ALLOWED=NO -quiet",
+    "format": "xcrun swift-format format --in-place --recursive Neram NeramKit/Sources NeramKit/Tests NeramUITests",
+    "lint": "xcrun swift-format lint --strict --recursive Neram NeramKit/Sources NeramKit/Tests NeramUITests",
+    "test": "swift test --package-path NeramKit && xcodebuild test -project Neram.xcodeproj -scheme Neram -onlyUsePackageVersionsFromResolvedFile -destination \"platform=iOS Simulator,name=${IOS_SIMULATOR:-iPhone 17}\" -quiet"
+  }
+}

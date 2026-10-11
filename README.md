@@ -1,6 +1,7 @@
 # Neram
 
-Neram is a project and task workspace built with Clerk, Convex, and Next.js.
+Neram is a project and task workspace built with Clerk, Convex, Next.js, and
+native SwiftUI.
 Clerk Organizations are the canonical tenant. Projects hold all work, while an
 optional Sprint gives the workspace one shared focus list across projects.
 
@@ -10,6 +11,7 @@ optional Sprint gives the workspace one shared focus list across projects.
 apps/
   web/            Next.js App Router, React, and shadcn/ui — serves the public
                   site (landing + /docs via Fumadocs) and the app at /w
+  apple/          Native SwiftUI app for iPhone, iPad, and Mac (iOS/macOS 26+)
 packages/
   convex/         Convex functions, generated API, and backend tests
 ```
@@ -35,6 +37,22 @@ bun run dev
 
 The production Vercel project uses `bun run deploy:convex`, which deploys Convex
 and builds the Next.js site (marketing + docs + app) as one release.
+
+## Apple app
+
+`apps/apple` needs Xcode 27 on an Apple silicon Mac. Open
+`apps/apple/Neram.xcodeproj` and run the `Neram` scheme, or use the workspace
+scripts:
+
+```bash
+bun --cwd apps/apple run build
+bun --cwd apps/apple run test
+```
+
+Debug builds use the development Clerk instance and Convex deployment; Release
+builds use production. Both are public values in `apps/apple/Config/*.xcconfig`.
+`NeramKit` holds the Convex models and client. Its tests decode
+`packages/convex/fixtures`, so a backend shape change fails them.
 
 ## Commands
 
