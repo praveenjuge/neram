@@ -74,7 +74,13 @@ private struct SubtaskRow: View {
   let run: (Call<NoResult>) async -> Bool
 
   @State private var draft: String?
+  /// The latest title this row sent, until the live subtask shows it.
+  @State private var sent: String?
+  @State private var renaming = 0
   @FocusState private var focused: Bool
+
+  /// The title as far as this row knows, counting renames still in flight.
+  private var known: String { sent ?? subtask.title }
 
   var body: some View {
     HStack {
@@ -88,29 +94,37 @@ private struct SubtaskRow: View {
       .accessibilityLabel(subtask.completed ? "Mark not done" : "Mark done")
       TextField(
         "Subtask",
-        text: Binding(get: { draft ?? subtask.title }, set: { draft = $0.prefix(utf16Limit: 200) })
+        text: Binding(get: { draft ?? known }, set: { draft = $0.prefix(utf16Limit: 200) })
       )
       .strikethrough(subtask.completed, color: .secondary)
       .foregroundStyle(subtask.completed ? .secondary : .primary)
       .focused($focused)
       .onSubmit(commit)
       .onChange(of: focused) { _, isFocused in if !isFocused { commit() } }
+      .onChange(of: subtask.title) { _, title in
+        if title == sent || renaming == 0 { sent = nil }
+      }
     }
   }
 
-  /// The draft stays until the rename succeeds; after a failure, leaving the
-  /// field again retries it.
+  /// Renames compare against the latest title sent, so a quick change back
+  /// is saved too. The draft stays until its rename succeeds; after a
+  /// failure, leaving the field again retries it.
   private func commit() {
     guard let value = draft?.trimmingCharacters(in: .whitespacesAndNewlines) else { return }
-    guard !value.isEmpty, value != subtask.title else {
+    guard !value.isEmpty, value != known else {
       draft = nil
       return
     }
+    sent = value
+    renaming += 1
     Task {
-      if await run(Calls.renameSubtask(subtask.id, title: value)),
-        draft?.trimmingCharacters(in: .whitespacesAndNewlines) == value
-      {
-        draft = nil
+      let renamed = await run(Calls.renameSubtask(subtask.id, title: value))
+      renaming -= 1
+      if renamed {
+        if draft?.trimmingCharacters(in: .whitespacesAndNewlines) == value { draft = nil }
+      } else if sent == value {
+        sent = nil
       }
     }
   }

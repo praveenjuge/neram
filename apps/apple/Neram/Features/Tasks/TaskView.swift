@@ -17,10 +17,14 @@ struct TaskView: View {
   @State private var moves = TaskMoves()
   @State private var action = Action()
   @State private var titleDraft = ""
-  @State private var titleBase: String?
   @State private var descriptionDraft = ""
-  /// The description editing started from; `.some(nil)` means it was empty.
-  @State private var descriptionBase: String??
+  /// The server value each field's edit expects; set while editing or saving.
+  /// An empty description is "".
+  @State private var bases: [Field: String] = [:]
+  @State private var saving: [Field: Int] = [:]
+  /// The last value this view saved per field, used until the live task
+  /// shows it, so a quick second edit doesn't conflict with our own save.
+  @State private var saved: [Field: String] = [:]
   /// One per field, so saving one field never discards the other's conflict.
   @State private var conflicts: [Field: Conflict] = [:]
   @State private var confirmingDelete = false
@@ -56,11 +60,13 @@ struct TaskView: View {
     #endif
     .incompleteSubtasksDialog(moves, client: session.client)
     .actionAlert(action)
-    .onChange(of: task.value) { _, value in moves.reconcile(value.flatMap { $0 }.map { [$0] } ?? [])
+    .onChange(of: task.value) { _, value in
+      let current = value.flatMap { $0 }
+      moves.reconcile(current.map { [$0] } ?? [])
+      if let current { settleSaved(current) }
     }
     .onChange(of: focus) { previous, _ in
-      if previous == .title { commitTitle() }
-      if previous == .description { commitDescription() }
+      if let previous { commit(previous) }
     }
     .task { await task.run(on: session.client) }
     .task { await projects.run(on: session.client) }
@@ -141,18 +147,18 @@ struct TaskView: View {
 
   private func titleBinding(_ task: TaskItem) -> Binding<String> {
     Binding {
-      titleBase == nil ? task.title : titleDraft
+      bases[.title] == nil ? known(.title, task) : titleDraft
     } set: { value in
-      if titleBase == nil { titleBase = task.title }
+      if bases[.title] == nil { bases[.title] = known(.title, task) }
       titleDraft = value.replacingOccurrences(of: "\n", with: " ").prefix(utf16Limit: 120)
     }
   }
 
   private func descriptionBinding(_ task: TaskItem) -> Binding<String> {
     Binding {
-      descriptionBase == nil ? (task.description ?? "") : descriptionDraft
+      bases[.description] == nil ? known(.description, task) : descriptionDraft
     } set: { value in
-      if descriptionBase == nil { descriptionBase = .some(task.description) }
+      if bases[.description] == nil { bases[.description] = known(.description, task) }
       descriptionDraft = value.prefix(utf16Limit: 2000)
     }
   }
@@ -191,58 +197,71 @@ struct TaskView: View {
 
   // MARK: - Saving
 
-  private func commitTitle() {
-    guard let base = titleBase else { return }
-    titleBase = nil
-    let value = titleDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !value.isEmpty, value != base else { return }
-    Task { await save(.title, value: value, expected: base) }
+  /// What the server has for a field, as far as this view knows.
+  private func known(_ field: Field, _ task: TaskItem) -> String {
+    saved[field] ?? (field == .title ? task.title : task.description ?? "")
   }
 
-  private func commitDescription() {
-    guard let base = descriptionBase else { return }
-    descriptionBase = nil
-    guard descriptionDraft != (base ?? "") else { return }
-    Task { await save(.description, value: descriptionDraft, expected: base) }
+  /// The draft as the server will store it: trimmed.
+  private func draft(_ field: Field) -> String {
+    (field == .title ? titleDraft : descriptionDraft)
+      .trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
-  private func save(_ field: Field, value: String, expected: String?) async {
+  /// Saves a finished edit. The field keeps showing the draft until the save
+  /// settles, and a follow-up edit expects this save's value.
+  private func commit(_ field: Field) {
+    guard let base = bases[field] else { return }
+    let value = draft(field)
+    if field == .title, value.isEmpty { titleDraft = base }
+    guard value != base, !(field == .title && value.isEmpty) else {
+      if saving[field, default: 0] == 0 { bases[field] = nil }
+      return
+    }
+    bases[field] = value
+    Task { await save(field, value: value, expected: base) }
+  }
+
+  private func save(_ field: Field, value: String, expected: String) async {
     let call =
       field == .title
-      ? Calls.updateTask(taskId, title: value, expectedTitle: expected ?? "")
-      : Calls.updateTask(taskId, description: value, expectedDescription: .some(expected))
+      ? Calls.updateTask(taskId, title: value, expectedTitle: expected)
+      : Calls.updateTask(
+        taskId, description: value, expectedDescription: .some(expected.isEmpty ? nil : expected))
+    saving[field, default: 0] += 1
+    var keepsDraft = false
     do {
       try await session.client.run(call)
+      saved[field] = value
       conflicts[field] = nil
     } catch {
       if case .server(let payload) = error, payload.code == "EDIT_CONFLICT" {
         conflicts[field] = Conflict(field: field, mine: value, latest: payload.latestValue)
       } else {
-        restoreDraft(field, value: value, base: expected)
+        // Keep the typed text; leaving the field again retries against the
+        // value the server still has.
+        if bases[field] == value { bases[field] = expected }
+        keepsDraft = true
         action.error = error
       }
     }
+    saving[field, default: 0] -= 1
+    if !keepsDraft, saving[field] == 0, bases[field] == value, draft(field) == value {
+      bases[field] = nil
+    }
   }
 
-  /// Puts unsaved text back in the field after a failed save, unless a newer
-  /// edit has started. Leaving the field again retries the save.
-  private func restoreDraft(_ field: Field, value: String, base: String?) {
-    switch field {
-    case .title where titleBase == nil:
-      titleBase = base ?? ""
-      titleDraft = value
-    case .description where descriptionBase == nil:
-      descriptionBase = .some(base)
-      descriptionDraft = value
-    default:
-      break
+  /// Forgets our saved values once the live task shows them, or once it
+  /// changes with nothing of ours in flight.
+  private func settleSaved(_ task: TaskItem) {
+    for (field, value) in saved {
+      let live = field == .title ? task.title : task.description ?? ""
+      if live == value || saving[field, default: 0] == 0 { saved[field] = nil }
     }
   }
 
   private func keepMine(_ conflict: Conflict) async {
-    let latest =
-      conflict.field == .description && (conflict.latest ?? "").isEmpty ? nil : conflict.latest
-    await save(conflict.field, value: conflict.mine, expected: latest)
+    await save(conflict.field, value: conflict.mine, expected: conflict.latest ?? "")
   }
 
   private func run(_ call: Call<NoResult>) {
