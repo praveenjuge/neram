@@ -1,5 +1,6 @@
 import ClerkKit
 import ClerkKitUI
+import NeramKit
 import SwiftUI
 
 /// Signed out → Clerk sign-in. Signed in without a workspace → Clerk's
@@ -7,10 +8,16 @@ import SwiftUI
 struct RootView: View {
   @Environment(Clerk.self) private var clerk
   @Environment(AppSession.self) private var session
+  @Environment(DeepLinkRouter.self) private var links
 
   var body: some View {
     content
+      .task(id: LinkSwitch(link: links.pending, user: clerk.user?.id, loaded: clerk.isLoaded)) {
+        await links.switchWorkspaceIfNeeded(clerk: clerk)
+      }
+      .deepLinkAlert(links)
       .task(id: Identity(userId: clerk.user?.id, organizationId: clerk.organization?.id)) {
+        CrashReporting.setUser(id: clerk.user?.id)
         await session.update(userId: clerk.user?.id, organizationId: clerk.organization?.id)
       }
       .task { await session.watchConnection() }
@@ -40,6 +47,12 @@ struct RootView: View {
       }
     }
   }
+}
+
+private struct LinkSwitch: Equatable {
+  var link: DeepLink?
+  var user: String?
+  var loaded: Bool
 }
 
 private struct Identity: Equatable {

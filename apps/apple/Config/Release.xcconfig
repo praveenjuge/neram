@@ -3,3 +3,6 @@
 // are public. "/$()/" keeps xcconfig from reading "//" in URLs as a comment.
 CLERK_PUBLISHABLE_KEY = pk_live_Y2xlcmsubmVyYW0ucHJhdmVlbmp1Z2UuY29tJA
 CONVEX_URL = https:/$()/impartial-clam-554.convex.cloud
+// Crash reports go to Sentry only from Release builds, once a DSN is set.
+// Write it as https:/$()/key@host/id (xcconfig treats // as a comment).
+SENTRY_DSN =

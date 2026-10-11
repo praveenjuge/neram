@@ -6,5 +6,7 @@
 	<string>$(CLERK_PUBLISHABLE_KEY)</string>
 	<key>CONVEX_URL</key>
 	<string>$(CONVEX_URL)</string>
+	<key>SENTRY_DSN</key>
+	<string>$(SENTRY_DSN)</string>
 </dict>
 </plist>

@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		263BC36F7E827260BCF27B13 /* NeramKit in Frameworks */ = {isa = PBXBuildFile; productRef = 17D233A3BE5C20CD667E4DB1 /* NeramKit */; };
 		3C1275C3011D6BEE55226CFB /* ClerkKitUI in Frameworks */ = {isa = PBXBuildFile; productRef = B282253523003488A3F73C86 /* ClerkKitUI */; };
+		5E7A2C0B9D4F4E1A8B3C6D23 /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = 5E7A2C0B9D4F4E1A8B3C6D22 /* Sentry */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -57,6 +58,7 @@
 			files = (
 				263BC36F7E827260BCF27B13 /* NeramKit in Frameworks */,
 				3C1275C3011D6BEE55226CFB /* ClerkKitUI in Frameworks */,
+				5E7A2C0B9D4F4E1A8B3C6D23 /* Sentry in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -144,6 +146,7 @@
 			packageProductDependencies = (
 				17D233A3BE5C20CD667E4DB1 /* NeramKit */,
 				B282253523003488A3F73C86 /* ClerkKitUI */,
+				5E7A2C0B9D4F4E1A8B3C6D22 /* Sentry */,
 			);
 			productName = Neram;
 			productReference = B3534DFB7765BA2324E1EC6D /* Neram.app */;
@@ -180,6 +183,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				0F87DB8959C030750CC86647 /* XCRemoteSwiftPackageReference "clerk-ios" */,
+				5E7A2C0B9D4F4E1A8B3C6D21 /* XCRemoteSwiftPackageReference "sentry-cocoa" */,
 				EF2D8E59C9CB237F6CFF5F28 /* XCLocalSwiftPackageReference "NeramKit" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -407,6 +411,7 @@
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				CODE_SIGN_ENTITLEMENTS = Config/Neram.entitlements;
 				INFOPLIST_FILE = Config/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Neram;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
@@ -467,6 +472,7 @@
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				CODE_SIGN_ENTITLEMENTS = Config/Neram.entitlements;
 				INFOPLIST_FILE = Config/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Neram;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
@@ -541,6 +547,14 @@
 				version = 1.6.1;
 			};
 		};
+		5E7A2C0B9D4F4E1A8B3C6D21 /* XCRemoteSwiftPackageReference "sentry-cocoa" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/getsentry/sentry-cocoa";
+			requirement = {
+				kind = exactVersion;
+				version = 9.30.1;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -552,6 +566,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 0F87DB8959C030750CC86647 /* XCRemoteSwiftPackageReference "clerk-ios" */;
 			productName = ClerkKitUI;
+		};
+		5E7A2C0B9D4F4E1A8B3C6D22 /* Sentry */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 5E7A2C0B9D4F4E1A8B3C6D21 /* XCRemoteSwiftPackageReference "sentry-cocoa" */;
+			productName = Sentry;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

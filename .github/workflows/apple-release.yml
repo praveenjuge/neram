@@ -1,0 +1,40 @@
+name: Apple Release
+
+# Builds the iOS app and uploads it to TestFlight for internal testers. Run it
+# by hand from the Actions tab. Needs these repository secrets:
+#   ASC_KEY_ID, ASC_ISSUER_ID, and ASC_KEY_P8 (the .p8 key file's contents).
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apple-release
+  cancel-in-progress: false
+
+jobs:
+  testflight:
+    runs-on: xcode-27
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: apps/apple
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # v1.327.0
+        with:
+          working-directory: apps/apple
+          bundler-cache: true
+      - name: Write the App Store Connect key
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          umask 077
+          printf '%s\n' "$ASC_KEY_P8" > "$RUNNER_TEMP/asc_key.p8"
+      - name: Build and upload to TestFlight
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_PATH: ${{ runner.temp }}/asc_key.p8
+        run: bundle exec fastlane beta
