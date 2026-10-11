@@ -1,5 +1,7 @@
 import { ImageResponse } from "next/og"
 
+import { OgLogo } from "@/lib/og-brand"
+
 export const size = { width: 1200, height: 630 }
 export const contentType = "image/png"
 export const alt = "Neram — A quieter way to focus"
@@ -21,26 +23,7 @@ export default function opengraphImage() {
           backgroundSize: "32px 32px",
         }}
       >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            fontSize: 30,
-            color: "#525252",
-          }}
-        >
-          <div
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: 999,
-              backgroundColor: "#8ff044",
-              display: "flex",
-            }}
-          />
-          Neram
-        </div>
+        <OgLogo />
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <div
             style={{

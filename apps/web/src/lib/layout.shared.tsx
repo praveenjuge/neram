@@ -1,11 +1,13 @@
 import type { BaseLayoutProps } from "fumadocs-ui/layouts/shared"
 
+import { Logo } from "@/components/logo"
+
 export const SITE_URL = "https://neram.praveenjuge.com"
 
 export function baseOptions(): BaseLayoutProps {
   return {
     nav: {
-      title: "Neram",
+      title: <Logo />,
       url: "/",
     },
     links: [
@@ -27,7 +29,7 @@ export function baseOptions(): BaseLayoutProps {
 export function homeOptions(): BaseLayoutProps {
   return {
     nav: {
-      title: "Neram",
+      title: <Logo />,
       url: "/",
     },
     links: [
