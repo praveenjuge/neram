@@ -55,6 +55,7 @@ struct MyTasksView: View {
       }
       .pickerStyle(.segmented)
       // The count and Clear sit beside the chips when they fit, else below.
+      // With large text the chips scroll sideways rather than run off-screen.
       ViewThatFits(in: .horizontal) {
         HStack {
           chips
@@ -63,6 +64,13 @@ struct MyTasksView: View {
         }
         VStack(alignment: .leading, spacing: 8) {
           HStack { chips }
+          HStack { summary(shownCount: shownCount) }
+        }
+        VStack(alignment: .leading, spacing: 8) {
+          ScrollView(.horizontal) {
+            HStack { chips }
+          }
+          .scrollIndicators(.hidden)
           HStack { summary(shownCount: shownCount) }
         }
       }
