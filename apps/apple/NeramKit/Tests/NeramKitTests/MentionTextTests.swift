@@ -31,4 +31,13 @@ struct MentionTextTests {
     #expect(segments.count == 2)
     #expect(segments.last == .text(" please review"))
   }
+
+  @Test func limitsCountUTF16UnitsAndKeepWholeCharacters() {
+    #expect(String(repeating: "a", count: 90).prefix(utf16Limit: 80).count == 80)
+    // 41 emoji are 82 UTF-16 units; only 40 fit in 80.
+    let emoji = String(repeating: "🚀", count: 41)
+    #expect(emoji.prefix(utf16Limit: 80).utf16.count == 80)
+    #expect(emoji.prefix(utf16Limit: 80).count == 40)
+    #expect("ok".prefix(utf16Limit: 80) == "ok")
+  }
 }

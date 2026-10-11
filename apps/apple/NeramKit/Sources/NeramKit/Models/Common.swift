@@ -17,8 +17,8 @@ public enum TaskStatus: String, Codable, Sendable, Hashable, CaseIterable, Ident
 
   public var label: String {
     switch self {
-    case .todo: "To do"
-    case .inProgress: "In progress"
+    case .todo: "Todo"
+    case .inProgress: "In Progress"
     case .done: "Done"
     }
   }

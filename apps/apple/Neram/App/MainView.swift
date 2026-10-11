@@ -8,7 +8,7 @@ struct MainView: View {
   var body: some View {
     TabView {
       Tab("Home", systemImage: "house") {
-        NavigationStack { HomeView() }
+        HomeView()
       }
       Tab("My Tasks", systemImage: "checklist") {
         NavigationStack { MyTasksView() }
