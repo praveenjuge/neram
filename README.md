@@ -1,6 +1,6 @@
 # Neram
 
-Neram is a project and task workspace built with Clerk, Convex, Next.js, and Expo.
+Neram is a project and task workspace built with Clerk, Convex, and Next.js.
 Clerk Organizations are the canonical tenant. Projects hold all work, while an
 optional Sprint gives the workspace one shared focus list across projects.
 
@@ -10,7 +10,6 @@ optional Sprint gives the workspace one shared focus list across projects.
 apps/
   web/            Next.js App Router, React, and shadcn/ui — serves the public
                   site (landing + /docs via Fumadocs) and the app at /w
-  native/         Expo iOS app
 packages/
   convex/         Convex functions, generated API, and backend tests
 ```
@@ -26,7 +25,6 @@ bun install --frozen-lockfile
 Create local env files from the examples:
 
 - `apps/web/.env.local` contains browser-safe `NEXT_PUBLIC_*` values.
-- `apps/native/.env.local` contains browser-safe `EXPO_PUBLIC_*` values.
 - `packages/convex/.env.local` contains Convex and Clerk configuration.
 
 Start development:
