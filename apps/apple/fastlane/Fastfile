@@ -40,9 +40,9 @@ platform :ios do
       destination: "generic/platform=iOS",
       export_method: "app-store",
       output_directory: "build",
+      # gym passes xcargs to both the archive and the export step.
       xcargs: "CURRENT_PROJECT_VERSION=#{build_number} " \
-        "-onlyUsePackageVersionsFromResolvedFile #{signing}",
-      export_xcargs: signing
+        "-onlyUsePackageVersionsFromResolvedFile #{signing}"
     )
 
     upload_to_testflight(
