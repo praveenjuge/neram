@@ -73,21 +73,26 @@ public final class PagedQuery<Item: Codable & Sendable & Identifiable> {
         ], keeping: result)
     }
     append(PageRequest(numItems: pageSize, cursor: result.continueCursor))
+    publish()
   }
 
   // MARK: - Slots
+  //
+  // Slot changes don't publish; each entry point publishes once when its
+  // slots are consistent. Publishing midway could start another `loadMore`
+  // from the same cursor while the last page is being pinned.
 
   private func restart() {
     stopAll()
     slots = []
     error = nil
     append(PageRequest(numItems: pageSize))
+    publish()
   }
 
   private func append(_ request: PageRequest) {
     slots.append(makeSlot(request))
     subscribe(slotAt: slots.count - 1)
-    publish()
   }
 
   /// Swaps one slot for new ones. `keeping` shows the old result until the
@@ -99,7 +104,6 @@ public final class PagedQuery<Item: Codable & Sendable & Identifiable> {
     if requests.count == 1 { replacements[0].result = result }
     slots.replaceSubrange(index...index, with: replacements)
     for offset in replacements.indices { subscribe(slotAt: index + offset) }
-    publish()
   }
 
   private func makeSlot(_ request: PageRequest) -> Slot {
@@ -135,6 +139,7 @@ public final class PagedQuery<Item: Codable & Sendable & Identifiable> {
           PageRequest(numItems: pageSize, cursor: request.cursor, endCursor: split),
           PageRequest(numItems: pageSize, cursor: split, endCursor: end),
         ], keeping: nil)
+      publish()
       return
     }
     slots[index].result = page

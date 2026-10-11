@@ -119,7 +119,7 @@ private struct KanbanBoard: View {
   @Environment(AppSession.self) private var session
 
   var body: some View {
-    ScrollView(.horizontal) {
+    ScrollView([.horizontal, .vertical]) {
       HStack(alignment: .top, spacing: 16) {
         ForEach(TaskStatus.allCases) { status in
           column(status)

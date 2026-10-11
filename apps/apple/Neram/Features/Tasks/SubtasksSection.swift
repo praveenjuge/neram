@@ -8,6 +8,7 @@ struct SubtasksSection: View {
   @Environment(AppSession.self) private var session
   @State private var subtasks: LiveQuery<[Subtask]>
   @State private var newTitle = ""
+  @State private var adding = false
   @State private var action = Action()
 
   static let titleLimit = 200
@@ -24,10 +25,10 @@ struct SubtasksSection: View {
         Text("No subtasks yet.").foregroundStyle(.secondary)
       }
       ForEach(rows) { subtask in
-        SubtaskRow(subtask: subtask) { call in run(call) }
+        SubtaskRow(subtask: subtask) { call in await run(call) }
           .swipeActions {
             Button("Delete", systemImage: "trash", role: .destructive) {
-              run(Calls.removeSubtask(subtask.id))
+              Task { await run(Calls.removeSubtask(subtask.id)) }
             }
           }
       }
@@ -44,25 +45,33 @@ struct SubtasksSection: View {
     .task { await subtasks.run(on: session.client) }
   }
 
+  /// Keeps the typed title until the server accepts it, so a failed add can
+  /// be retried without retyping.
   private func add() {
     let title = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !title.isEmpty else { return }
-    newTitle = ""
-    run(Calls.createSubtask(taskId: taskId, title: title))
+    guard !title.isEmpty, !adding else { return }
+    adding = true
+    Task {
+      if await run(Calls.createSubtask(taskId: taskId, title: title)),
+        newTitle.trimmingCharacters(in: .whitespacesAndNewlines) == title
+      {
+        newTitle = ""
+      }
+      adding = false
+    }
   }
 
-  private func run<Value>(_ call: Call<Value>) {
-    Task {
-      await action.run { () async throws(NeramError) in
-        _ = try await session.client.run(call)
-      }
+  @discardableResult
+  private func run<Value>(_ call: Call<Value>) async -> Bool {
+    await action.run { () async throws(NeramError) in
+      _ = try await session.client.run(call)
     }
   }
 }
 
 private struct SubtaskRow: View {
   let subtask: Subtask
-  let run: (Call<NoResult>) -> Void
+  let run: (Call<NoResult>) async -> Bool
 
   @State private var draft: String?
   @FocusState private var focused: Bool
@@ -70,7 +79,7 @@ private struct SubtaskRow: View {
   var body: some View {
     HStack {
       Button {
-        run(Calls.setSubtaskCompleted(subtask.id, !subtask.completed))
+        Task { await run(Calls.setSubtaskCompleted(subtask.id, !subtask.completed)) }
       } label: {
         Image(systemName: subtask.completed ? "checkmark.circle.fill" : "circle")
           .foregroundStyle(subtask.completed ? Color.accentColor : .secondary)
@@ -89,10 +98,20 @@ private struct SubtaskRow: View {
     }
   }
 
+  /// The draft stays until the rename succeeds; after a failure, leaving the
+  /// field again retries it.
   private func commit() {
     guard let value = draft?.trimmingCharacters(in: .whitespacesAndNewlines) else { return }
-    draft = nil
-    guard !value.isEmpty, value != subtask.title else { return }
-    run(Calls.renameSubtask(subtask.id, title: value))
+    guard !value.isEmpty, value != subtask.title else {
+      draft = nil
+      return
+    }
+    Task {
+      if await run(Calls.renameSubtask(subtask.id, title: value)),
+        draft?.trimmingCharacters(in: .whitespacesAndNewlines) == value
+      {
+        draft = nil
+      }
+    }
   }
 }

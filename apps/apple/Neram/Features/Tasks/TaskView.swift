@@ -21,11 +21,12 @@ struct TaskView: View {
   @State private var descriptionDraft = ""
   /// The description editing started from; `.some(nil)` means it was empty.
   @State private var descriptionBase: String??
-  @State private var conflict: Conflict?
+  /// One per field, so saving one field never discards the other's conflict.
+  @State private var conflicts: [Field: Conflict] = [:]
   @State private var confirmingDelete = false
   @FocusState private var focus: Field?
 
-  private enum Field { case title, description }
+  private enum Field: String { case title, description }
 
   private struct Conflict {
     let field: Field
@@ -68,14 +69,17 @@ struct TaskView: View {
 
   private func form(_ task: TaskItem) -> some View {
     Form {
-      if let conflict {
-        Section {
-          Label("This field changed elsewhere.", systemImage: "exclamationmark.triangle")
-          HStack {
-            Button("Use Latest") { self.conflict = nil }
-            Spacer()
-            Button("Keep Mine") { Task { await keepMine(conflict, task: task) } }
-              .buttonStyle(.borderedProminent)
+      ForEach([Field.title, .description], id: \.self) { field in
+        if let conflict = conflicts[field] {
+          Section {
+            Label(
+              "The \(field.rawValue) changed elsewhere.", systemImage: "exclamationmark.triangle")
+            HStack {
+              Button("Use Latest") { conflicts[field] = nil }
+              Spacer()
+              Button("Keep Mine") { Task { await keepMine(conflict) } }
+                .buttonStyle(.borderedProminent)
+            }
           }
         }
       }
@@ -209,17 +213,33 @@ struct TaskView: View {
       : Calls.updateTask(taskId, description: value, expectedDescription: .some(expected))
     do {
       try await session.client.run(call)
-      conflict = nil
+      conflicts[field] = nil
     } catch {
       if case .server(let payload) = error, payload.code == "EDIT_CONFLICT" {
-        conflict = Conflict(field: field, mine: value, latest: payload.latestValue)
+        conflicts[field] = Conflict(field: field, mine: value, latest: payload.latestValue)
       } else {
+        restoreDraft(field, value: value, base: expected)
         action.error = error
       }
     }
   }
 
-  private func keepMine(_ conflict: Conflict, task: TaskItem) async {
+  /// Puts unsaved text back in the field after a failed save, unless a newer
+  /// edit has started. Leaving the field again retries the save.
+  private func restoreDraft(_ field: Field, value: String, base: String?) {
+    switch field {
+    case .title where titleBase == nil:
+      titleBase = base ?? ""
+      titleDraft = value
+    case .description where descriptionBase == nil:
+      descriptionBase = .some(base)
+      descriptionDraft = value
+    default:
+      break
+    }
+  }
+
+  private func keepMine(_ conflict: Conflict) async {
     let latest =
       conflict.field == .description && (conflict.latest ?? "").isEmpty ? nil : conflict.latest
     await save(conflict.field, value: conflict.mine, expected: latest)
