@@ -10,7 +10,7 @@ struct HomeView: View {
   @State private var creating = false
   @State private var inviting = false
   @State private var archiving: ProjectSummary?
-  @State private var path: [AppRoute] = []
+  @Binding var path: [AppRoute]
   @State private var action = Action()
 
   private var isAdmin: Bool { workspace.value?.isAdmin == true }

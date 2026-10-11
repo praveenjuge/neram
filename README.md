@@ -54,6 +54,22 @@ builds use production. Both are public values in `apps/apple/Config/*.xcconfig`.
 `NeramKit` holds the Convex models and client. Its tests decode
 `packages/convex/fixtures`, so a backend shape change fails them.
 
+Workspace links (`https://neram.praveenjuge.com/w/…`) open in the app as
+Universal Links, served by `apps/web/src/app/.well-known/apple-app-site-association`.
+Release builds report crashes to Sentry once `SENTRY_DSN` is set in
+`Config/Release.xcconfig`.
+
+To upload an iOS build to TestFlight for internal testers, run fastlane with an
+App Store Connect API key (Admin role):
+
+```bash
+cd apps/apple && bundle install
+ASC_KEY_ID=… ASC_ISSUER_ID=… ASC_KEY_PATH=~/.appstoreconnect/private_keys/AuthKey_….p8 bun run beta
+```
+
+The "Apple Release" GitHub workflow does the same from the Actions tab, using
+the `ASC_KEY_ID`, `ASC_ISSUER_ID`, and `ASC_KEY_P8` repository secrets.
+
 ## Commands
 
 ```bash

@@ -3,3 +3,6 @@
 // are public. "/$()/" keeps xcconfig from reading "//" in URLs as a comment.
 CLERK_PUBLISHABLE_KEY = pk_live_Y2xlcmsubmVyYW0ucHJhdmVlbmp1Z2UuY29tJA
 CONVEX_URL = https:/$()/impartial-clam-554.convex.cloud
+// Crash reports go to Sentry (teakvault/neram-apple) from Release builds only.
+// A DSN is a public client key, safe to ship in the app.
+SENTRY_DSN = https:/$()/6ddeb46b9e0ad5da5f211d5a74133844@o4509483678236672.ingest.us.sentry.io/4512238727266304

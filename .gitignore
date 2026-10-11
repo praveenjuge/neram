@@ -39,4 +39,7 @@ apps/apple/NeramKit/.build/
 apps/apple/NeramKit/.swiftpm/
 apps/apple/fastlane/report.xml
 apps/apple/fastlane/test_output
+apps/apple/fastlane/README.md
+apps/apple/build/
+apps/apple/vendor/
 *.xcresult
