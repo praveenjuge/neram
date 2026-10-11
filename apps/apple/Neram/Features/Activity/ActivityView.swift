@@ -22,7 +22,9 @@ struct ActivityView: View {
         List {
           ForEach(feed.items) { item in
             if let taskId = item.taskId, item.projectId != nil {
-              NavigationLink(value: AppRoute.task(taskId)) { ActivityRow(item: item) }
+              NavigationLink(value: AppRoute.task(taskId, comment: item.commentId)) {
+                ActivityRow(item: item)
+              }
             } else {
               ActivityRow(item: item)
             }

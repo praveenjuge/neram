@@ -7,6 +7,8 @@ import SwiftUI
 /// like the web's task dialog.
 struct TaskView: View {
   let taskId: DocumentID
+  /// A comment to show in context, when opened from a link or Activity.
+  var commentId: DocumentID?
 
   @Environment(AppSession.self) private var session
   @Environment(Clerk.self) private var clerk
@@ -38,8 +40,9 @@ struct TaskView: View {
     let latest: String?
   }
 
-  init(taskId: DocumentID) {
+  init(taskId: DocumentID, commentId: DocumentID? = nil) {
     self.taskId = taskId
+    self.commentId = commentId
     _task = State(initialValue: LiveQuery(Queries.task(taskId)))
   }
 
@@ -74,6 +77,12 @@ struct TaskView: View {
   }
 
   private func form(_ task: TaskItem) -> some View {
+    ScrollViewReader { proxy in
+      fields(task, scrollTo: { id in withAnimation { proxy.scrollTo(id, anchor: .center) } })
+    }
+  }
+
+  private func fields(_ task: TaskItem, scrollTo: @escaping (String) -> Void) -> some View {
     Form {
       ForEach([Field.title, .description], id: \.self) { field in
         if let conflict = conflicts[field] {
@@ -117,6 +126,8 @@ struct TaskView: View {
         )
       }
       SubtasksSection(taskId: task.id)
+      CommentsSection(
+        taskId: task.id, targetCommentId: commentId, members: members.all, scrollTo: scrollTo)
     }
     .formStyle(.grouped)
     .disabled(!session.isConnected)
