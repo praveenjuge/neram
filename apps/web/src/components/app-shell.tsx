@@ -51,6 +51,7 @@ import {
   SidebarRail,
   SidebarTrigger,
 } from "@/components/ui/sidebar"
+import { Logo } from "@/components/logo"
 import { useProjectPrefetch } from "@/lib/prefetch"
 import { getProjectColorText } from "@/lib/project-colors"
 import { ProjectIcon } from "@/lib/project-icons"
@@ -419,7 +420,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       <SidebarInset>
         <div className="flex items-center gap-2 border-b px-3 py-2 md:hidden">
           <SidebarTrigger />
-          <span className="font-heading font-medium">Neram</span>
+          <Logo />
         </div>
         {children}
       </SidebarInset>

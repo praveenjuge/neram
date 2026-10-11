@@ -1,5 +1,7 @@
 import { ImageResponse } from "next/og"
 
+import { OgLogo } from "@/lib/og-brand"
+
 export const contentType = "image/png"
 
 const IMAGE_OPTIONS = {
@@ -40,8 +42,16 @@ export async function GET(request: Request) {
           backgroundSize: "32px 32px",
         }}
       >
-        <div style={{ display: "flex", fontSize: 30, color: "#525252" }}>
-          Neram Docs
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 14,
+            fontSize: 34,
+          }}
+        >
+          <OgLogo />
+          <span style={{ color: "#888888" }}>Docs</span>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <div
