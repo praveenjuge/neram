@@ -1,0 +1,47 @@
+[
+  {
+    "_creationTime": 1768478400000.005,
+    "_id": "000000000000000000000010005tasks",
+    "activeCommentCount": 2,
+    "assigneeName": "Bob",
+    "assigneeSubject": "user_bob",
+    "completedSubtasks": 1,
+    "createdAt": 1768478400000,
+    "description": "Cover the native apps.",
+    "dueDate": "2026-01-20",
+    "position": 1768478400000,
+    "projectId": "000000000000000000010003projects",
+    "status": "todo",
+    "title": "Write the launch post",
+    "totalSubtasks": 2,
+    "updatedAt": 1768478400000
+  },
+  {
+    "_creationTime": 1768478400000.0078,
+    "_id": "000000000000000000000010008tasks",
+    "activeCommentCount": 0,
+    "completedSubtasks": 0,
+    "createdAt": 1768478400000,
+    "currentSprintId": "0000000000000000000010031sprints",
+    "position": 1768478400000,
+    "projectId": "000000000000000000010003projects",
+    "status": "inProgress",
+    "title": "Review designs",
+    "totalSubtasks": 0,
+    "updatedAt": 1768478400000
+  },
+  {
+    "_creationTime": 1768478400000.0117,
+    "_id": "000000000000000000000010012tasks",
+    "activeCommentCount": 0,
+    "completedAt": 1768478400000,
+    "completedSubtasks": 0,
+    "createdAt": 1768478400000,
+    "position": 1768478400000,
+    "projectId": "000000000000000000010003projects",
+    "status": "done",
+    "title": "Pick a name",
+    "totalSubtasks": 0,
+    "updatedAt": 1768478400000
+  }
+]

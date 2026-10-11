@@ -16,10 +16,7 @@ async function runningJob(
   const jobs = await t.run(async (ctx) => {
     const rows: Array<Doc<"organizationJobs">> = []
     for await (const row of ctx.db.query("organizationJobs")) {
-      if (
-        row.organizationId === "org_acme" &&
-        row.status === "running"
-      ) {
+      if (row.organizationId === "org_acme" && row.status === "running") {
         rows.push(row)
       }
     }
@@ -240,4 +237,91 @@ test("coordinated external deletion drains task children before the Organization
     comments: [],
     stats: [],
   })
+})
+
+test("deleted users leave every workspace and orphaned workspaces start deletion", async () => {
+  const { t } = await setup()
+  await t.mutation(internal.organizations.upsertOrganization, {
+    organizationId: "org_solo",
+    slug: "solo",
+    name: "Solo",
+  })
+  await t.mutation(internal.organizations.upsertMember, {
+    organizationId: "org_solo",
+    membershipId: "mem_solo_user_member",
+    userId: "user_member",
+    role: "org:admin",
+    displayName: "Bob",
+  })
+
+  await t.mutation(internal.organizations.removeUser, {
+    userId: "user_member",
+  })
+
+  const state = await t.run(async (ctx) => ({
+    memberships: await ctx.db
+      .query("organizationMembers")
+      .withIndex("by_user", (q) => q.eq("userId", "user_member"))
+      .take(10),
+    organizations: await ctx.db.query("organizations").take(10),
+    jobs: await ctx.db.query("organizationJobs").take(10),
+  }))
+  expect(state.memberships).toEqual([])
+  expect(
+    state.organizations.map(({ organizationId, state }) => ({
+      organizationId,
+      state,
+    }))
+  ).toEqual(
+    expect.arrayContaining([
+      { organizationId: "org_acme", state: "active" },
+      { organizationId: "org_solo", state: "deleting" },
+    ])
+  )
+  const jobs = state.jobs.map(({ organizationId, kind, externalDeletion }) => ({
+    organizationId,
+    kind,
+    externalDeletion,
+  }))
+  expect(jobs).toHaveLength(3)
+  expect(jobs).toEqual(
+    expect.arrayContaining([
+      {
+        organizationId: "org_acme",
+        kind: "member_cleanup",
+        externalDeletion: undefined,
+      },
+      {
+        organizationId: "org_solo",
+        kind: "member_cleanup",
+        externalDeletion: undefined,
+      },
+      // Clerk keeps an empty organization, so Neram deletes it there last.
+      {
+        organizationId: "org_solo",
+        kind: "workspace_deletion",
+        externalDeletion: undefined,
+      },
+    ])
+  )
+})
+
+test("removing the last membership starts workspace deletion", async () => {
+  const { t } = await setup()
+  await t.mutation(internal.organizations.removeMemberProjection, {
+    organizationId: "org_acme",
+    userId: "user_member",
+  })
+  expect(await runningJob(t, "workspace_deletion")).toBeNull()
+
+  await t.mutation(internal.organizations.removeMemberProjection, {
+    organizationId: "org_acme",
+    userId: "user_admin",
+  })
+  expect(await runningJob(t, "workspace_deletion")).toMatchObject({
+    phase: "organizationActivity",
+  })
+  expect(
+    (await runningJob(t, "workspace_deletion"))?.externalDeletion
+  ).toBeUndefined()
 })

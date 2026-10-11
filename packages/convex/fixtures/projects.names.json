@@ -1,0 +1,10 @@
+[
+  {
+    "_id": "000000000000000000010003projects",
+    "color": "lime",
+    "icon": "folder-kanban",
+    "name": "Roadmap",
+    "openCount": 2,
+    "role": "org:admin"
+  }
+]

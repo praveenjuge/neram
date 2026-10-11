@@ -1,0 +1,36 @@
+{
+  "comments": [
+    {
+      "_creationTime": 1768478400000.0166,
+      "_id": "00000000000000010017taskComments",
+      "authorName": "Alice",
+      "authorSubject": "user_alice",
+      "body": "Thanks 👋 @Bob",
+      "createdAt": 1768478400000,
+      "mentions": [
+        {
+          "label": "Bob",
+          "length": 4,
+          "start": 10,
+          "subject": "user_bob"
+        }
+      ],
+      "taskId": "000000000000000000000010005tasks",
+      "updatedAt": 1768478400000
+    },
+    {
+      "_creationTime": 1768478400000.0186,
+      "_id": "00000000000000010019taskComments",
+      "authorName": "Bob",
+      "authorSubject": "user_bob",
+      "body": "On it.",
+      "createdAt": 1768478400000,
+      "mentions": [],
+      "parentCommentId": "00000000000000010017taskComments",
+      "rootCommentId": "00000000000000010017taskComments",
+      "taskId": "000000000000000000000010005tasks",
+      "updatedAt": 1768478400000
+    }
+  ],
+  "taskId": "000000000000000000000010005tasks"
+}

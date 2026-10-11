@@ -1,0 +1,17 @@
+{
+  "_creationTime": 1768478400000.005,
+  "_id": "000000000000000000000010005tasks",
+  "activeCommentCount": 2,
+  "assigneeName": "Bob",
+  "assigneeSubject": "user_bob",
+  "completedSubtasks": 1,
+  "createdAt": 1768478400000,
+  "description": "Cover the native apps.",
+  "dueDate": "2026-01-20",
+  "position": 1768478400000,
+  "projectId": "000000000000000000010003projects",
+  "status": "todo",
+  "title": "Write the launch post",
+  "totalSubtasks": 2,
+  "updatedAt": 1768478400000
+}

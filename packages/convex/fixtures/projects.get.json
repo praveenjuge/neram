@@ -1,0 +1,14 @@
+{
+  "_creationTime": 1768478400000.003,
+  "_id": "000000000000000000010003projects",
+  "color": "lime",
+  "createdAt": 1768478400000,
+  "doneCount": 1,
+  "icon": "folder-kanban",
+  "inProgressCount": 1,
+  "name": "Roadmap",
+  "role": "org:admin",
+  "taskCount": 3,
+  "todoCount": 1,
+  "updatedAt": 1768478400000
+}

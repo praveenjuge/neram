@@ -1,0 +1,28 @@
+{
+  "sprint": {
+    "_id": "0000000000000000000010031sprints",
+    "endsAt": 1769083200000,
+    "number": 2,
+    "startsAt": 1768478400000,
+    "state": "current"
+  },
+  "tasks": [
+    {
+      "_creationTime": 1768478400000.0078,
+      "_id": "000000000000000000000010008tasks",
+      "activeCommentCount": 0,
+      "completedSubtasks": 0,
+      "createdAt": 1768478400000,
+      "currentSprintId": "0000000000000000000010031sprints",
+      "position": 1768478400000,
+      "projectColor": "lime",
+      "projectIcon": "folder-kanban",
+      "projectId": "000000000000000000010003projects",
+      "projectName": "Roadmap",
+      "status": "inProgress",
+      "title": "Review designs",
+      "totalSubtasks": 0,
+      "updatedAt": 1768478400000
+    }
+  ]
+}
