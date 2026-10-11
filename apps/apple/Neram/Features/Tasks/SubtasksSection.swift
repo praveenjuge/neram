@@ -112,8 +112,14 @@ private struct SubtaskRow: View {
   /// failure, leaving the field again retries it.
   private func commit() {
     guard let value = draft?.trimmingCharacters(in: .whitespacesAndNewlines) else { return }
-    guard !value.isEmpty, value != known else {
+    if value.isEmpty {
       draft = nil
+      return
+    }
+    guard value != known else {
+      // Already saved, or in flight: that rename settles the draft, and keeps
+      // it if it fails.
+      if renaming == 0 { draft = nil }
       return
     }
     sent = value
