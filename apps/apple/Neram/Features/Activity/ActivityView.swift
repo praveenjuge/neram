@@ -27,11 +27,7 @@ struct ActivityView: View {
                 .foregroundStyle(.secondary)
             }
           }
-          if feed.status == .canLoadMore || feed.status == .loadingMore {
-            ProgressView()
-              .frame(maxWidth: .infinity)
-              .onAppear { feed.loadMore() }
-          }
+          PageFooter(query: feed)
         }
       }
     }

@@ -57,3 +57,21 @@ public enum MentionText {
     range(start: start, length: end - start, in: text).map { String(text[$0]) }
   }
 }
+
+extension String {
+  /// The longest prefix of whole characters that fits in `limit` UTF-16 code
+  /// units. Server limits count JavaScript string length (UTF-16), so an
+  /// emoji uses two of them.
+  public func prefix(utf16Limit limit: Int) -> String {
+    guard utf16.count > limit else { return self }
+    var result = ""
+    var used = 0
+    for character in self {
+      let size = character.utf16.count
+      if used + size > limit { break }
+      result.append(character)
+      used += size
+    }
+    return result
+  }
+}

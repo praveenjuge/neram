@@ -21,7 +21,7 @@ struct InviteView: View {
             #endif
             .autocorrectionDisabled()
             .onChange(of: email) { _, value in
-              if value.count > 254 { email = String(value.prefix(254)) }
+              if value.utf16.count > 254 { email = value.prefix(utf16Limit: 254) }
             }
         } footer: {
           Text("Invite someone to this workspace. They can view and work on every project.")

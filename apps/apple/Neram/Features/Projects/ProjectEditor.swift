@@ -32,7 +32,9 @@ struct ProjectEditor: View {
         Section("Name") {
           TextField("Project name", text: $name)
             .onChange(of: name) { _, value in
-              if value.count > Self.nameLimit { name = String(value.prefix(Self.nameLimit)) }
+              if value.utf16.count > Self.nameLimit {
+                name = value.prefix(utf16Limit: Self.nameLimit)
+              }
             }
         }
         Section("Color") {

@@ -48,11 +48,7 @@ struct ArchivedProjectsView: View {
               Button("Delete", systemImage: "trash", role: .destructive) { deleting = project }
             }
           }
-          if archived.status == .canLoadMore || archived.status == .loadingMore {
-            ProgressView()
-              .frame(maxWidth: .infinity)
-              .onAppear { archived.loadMore() }
-          }
+          PageFooter(query: archived)
         }
       }
     }

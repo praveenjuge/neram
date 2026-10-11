@@ -30,4 +30,10 @@ struct ClerkConvexAuthTests {
     #expect(ClerkConvexAuth.refreshDelay(for: "not-a-jwt") == 45)
     #expect(ClerkConvexAuth.expiry(of: "a.b.c") == nil)
   }
+
+  @Test func failedRefreshesBackOffUpToThirtySeconds() {
+    #expect(ClerkConvexAuth.retryDelay(afterFailures: 1) == 2)
+    #expect(ClerkConvexAuth.retryDelay(afterFailures: 3) == 8)
+    #expect(ClerkConvexAuth.retryDelay(afterFailures: 12) == 30)
+  }
 }
