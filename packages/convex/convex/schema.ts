@@ -173,7 +173,8 @@ export default defineSchema({
   })
     .index("by_organization", ["organizationId"])
     .index("by_organization_and_user", ["organizationId", "userId"])
-    .index("by_membership_id", ["membershipId"]),
+    .index("by_membership_id", ["membershipId"])
+    .index("by_user", ["userId"]),
 
   organizationSettings: defineTable({
     organizationId: v.string(),

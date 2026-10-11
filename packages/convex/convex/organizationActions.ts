@@ -1,6 +1,7 @@
 "use node"
 
 import { createClerkClient } from "@clerk/backend"
+import { isClerkAPIResponseError } from "@clerk/backend/errors"
 import { ConvexError, v } from "convex/values"
 
 import { internal } from "./_generated/api"
@@ -256,7 +257,12 @@ export const deleteClerkOrganization = internalAction({
   returns: v.null(),
   handler: async (ctx, args) => {
     try {
-      await clerk().organizations.deleteOrganization(args.organizationId)
+      try {
+        await clerk().organizations.deleteOrganization(args.organizationId)
+      } catch (error) {
+        // Already gone in Clerk, e.g. deleted there while Neram was purging.
+        if (!isClerkAPIResponseError(error) || error.status !== 404) throw error
+      }
       await ctx.runMutation(
         internal.organizationJobs.finishWorkspaceDeletion,
         args

@@ -103,6 +103,11 @@ const clerkWebhook = httpAction(async (ctx, request) => {
         userId: membership.userId,
       })
     }
+  } else if (event.type === "user.deleted") {
+    const userId = text(event.data.id)
+    if (userId) {
+      await ctx.runMutation(internal.organizations.removeUser, { userId })
+    }
   }
   return new Response("ok", { status: 200 })
 })

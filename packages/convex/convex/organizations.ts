@@ -215,30 +215,107 @@ export const upsertMembers = internalMutation({
   },
 })
 
+async function removeMember(
+  ctx: MutationCtx,
+  organizationId: string,
+  userId: string
+) {
+  const membership = await ctx.db
+    .query("organizationMembers")
+    .withIndex("by_organization_and_user", (q) =>
+      q.eq("organizationId", organizationId).eq("userId", userId)
+    )
+    .unique()
+  if (membership) await ctx.db.delete(membership._id)
+  const now = Date.now()
+  const jobId = await ctx.db.insert("organizationJobs", {
+    organizationId,
+    kind: "member_cleanup",
+    status: "running",
+    phase: "tasks",
+    targetUserId: userId,
+    createdAt: now,
+    updatedAt: now,
+  })
+  await ctx.scheduler.runAfter(0, internal.organizationJobs.cleanupMember, {
+    jobId,
+  })
+  // Only a deleted Clerk user can leave a workspace with no members. Nobody
+  // could manage it again, so purge it and delete the Clerk organization last,
+  // the same as an admin-initiated deletion.
+  const remaining = await ctx.db
+    .query("organizationMembers")
+    .withIndex("by_organization", (q) => q.eq("organizationId", organizationId))
+    .first()
+  if (!remaining) await startWorkspaceDeletion(ctx, organizationId, false)
+}
+
+async function startWorkspaceDeletion(
+  ctx: MutationCtx,
+  organizationId: string,
+  externalDeletion: boolean
+) {
+  const organization = await ctx.db
+    .query("organizations")
+    .withIndex("by_organization_id", (q) =>
+      q.eq("organizationId", organizationId)
+    )
+    .unique()
+  if (!organization) return
+  const existing = await ctx.db
+    .query("organizationJobs")
+    .withIndex("by_organization_and_status", (q) =>
+      q.eq("organizationId", organizationId).eq("status", "running")
+    )
+    .take(20)
+  if (existing.some((job) => job.kind === "workspace_deletion")) return
+  const now = Date.now()
+  const jobId = await ctx.db.insert("organizationJobs", {
+    organizationId,
+    kind: "workspace_deletion",
+    status: "running",
+    phase: "organizationActivity",
+    confirmationSlug: organization.slug,
+    ...(externalDeletion ? { externalDeletion: true } : {}),
+    createdAt: now,
+    updatedAt: now,
+  })
+  await ctx.db.patch(organization._id, {
+    state: "deleting",
+    deletingAt: now,
+    updatedAt: now,
+  })
+  await ctx.scheduler.runAfter(0, internal.organizationJobs.purgeWorkspace, {
+    jobId,
+  })
+}
+
 export const removeMemberProjection = internalMutation({
   args: { organizationId: v.string(), userId: v.string() },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const membership = await ctx.db
+    await removeMember(ctx, args.organizationId, args.userId)
+    return null
+  },
+})
+
+const USER_REMOVAL_BATCH = 50
+
+// A deleted Clerk user leaves every workspace they belonged to.
+export const removeUser = internalMutation({
+  args: { userId: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const memberships = await ctx.db
       .query("organizationMembers")
-      .withIndex("by_organization_and_user", (q) =>
-        q.eq("organizationId", args.organizationId).eq("userId", args.userId)
-      )
-      .unique()
-    if (membership) await ctx.db.delete(membership._id)
-    const now = Date.now()
-    const jobId = await ctx.db.insert("organizationJobs", {
-      organizationId: args.organizationId,
-      kind: "member_cleanup",
-      status: "running",
-      phase: "tasks",
-      targetUserId: args.userId,
-      createdAt: now,
-      updatedAt: now,
-    })
-    await ctx.scheduler.runAfter(0, internal.organizationJobs.cleanupMember, {
-      jobId,
-    })
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .take(USER_REMOVAL_BATCH)
+    for (const membership of memberships) {
+      await removeMember(ctx, membership.organizationId, args.userId)
+    }
+    if (memberships.length === USER_REMOVAL_BATCH) {
+      await ctx.scheduler.runAfter(0, internal.organizations.removeUser, args)
+    }
     return null
   },
 })
@@ -247,39 +324,7 @@ export const handleExternalDeletion = internalMutation({
   args: { organizationId: v.string() },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const organization = await ctx.db
-      .query("organizations")
-      .withIndex("by_organization_id", (q) =>
-        q.eq("organizationId", args.organizationId)
-      )
-      .unique()
-    if (!organization) return null
-    const existing = await ctx.db
-      .query("organizationJobs")
-      .withIndex("by_organization_and_status", (q) =>
-        q.eq("organizationId", args.organizationId).eq("status", "running")
-      )
-      .take(20)
-    if (existing.some((job) => job.kind === "workspace_deletion")) return null
-    const now = Date.now()
-    const jobId = await ctx.db.insert("organizationJobs", {
-      organizationId: args.organizationId,
-      kind: "workspace_deletion",
-      status: "running",
-      phase: "organizationActivity",
-      confirmationSlug: organization.slug,
-      externalDeletion: true,
-      createdAt: now,
-      updatedAt: now,
-    })
-    await ctx.db.patch(organization._id, {
-      state: "deleting",
-      deletingAt: now,
-      updatedAt: now,
-    })
-    await ctx.scheduler.runAfter(0, internal.organizationJobs.purgeWorkspace, {
-      jobId,
-    })
+    await startWorkspaceDeletion(ctx, args.organizationId, true)
     return null
   },
 })

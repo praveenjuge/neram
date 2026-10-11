@@ -138,7 +138,8 @@ export const list = query({
       )
       .order("asc")
       .paginate({
-        cursor: args.paginationOpts.cursor,
+        // Keep endCursor and the other options so clients can pin page bounds.
+        ...args.paginationOpts,
         numItems: Math.min(
           args.paginationOpts.numItems,
           args.parentCommentId ? REPLY_PAGE_SIZE : ROOT_PAGE_SIZE

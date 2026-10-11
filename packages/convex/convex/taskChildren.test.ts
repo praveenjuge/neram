@@ -344,6 +344,35 @@ test("comment pagination is capped per level and invalid mentions fail", async (
   ).rejects.toThrow()
 })
 
+test("comment pages honour endCursor so clients can pin page bounds", async () => {
+  const { alice, projectId } = await organizationProject()
+  const taskId = await alice.mutation(api.tasks.create, {
+    projectId,
+    title: "Discuss",
+  })
+  for (const body of ["One", "Two", "Three"]) {
+    await alice.mutation(api.taskComments.create, {
+      taskId,
+      body,
+      mentions: [],
+    })
+  }
+  const first = await alice.query(api.taskComments.list, {
+    taskId,
+    paginationOpts: { numItems: 1, cursor: null },
+  })
+  const pinned = await alice.query(api.taskComments.list, {
+    taskId,
+    paginationOpts: {
+      numItems: 20,
+      cursor: null,
+      endCursor: first.continueCursor,
+    },
+  })
+
+  expect(pinned.page.map((comment) => comment.body)).toEqual(["One"])
+})
+
 test("outsiders cannot read or mutate task children", async () => {
   const { t, alice } = await organizationFixture(modules)
   const charlie = t.withIdentity({
