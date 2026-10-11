@@ -54,28 +54,46 @@ struct MyTasksView: View {
         ForEach(Scope.allCases) { Text($0.rawValue).tag($0) }
       }
       .pickerStyle(.segmented)
-      HStack {
-        ForEach(DueFilter.allCases) { filter in
-          Toggle(
-            filter.rawValue,
-            isOn: Binding(
-              get: { due.contains(filter) },
-              set: { if $0 { due.insert(filter) } else { due.remove(filter) } })
-          )
-          .toggleStyle(.button)
-          .buttonStyle(.bordered)
-          .controlSize(.small)
+      // The count and Clear sit beside the chips when they fit, else below.
+      ViewThatFits(in: .horizontal) {
+        HStack {
+          chips
+          Spacer()
+          summary(shownCount: shownCount)
         }
-        Spacer()
-        if !due.isEmpty || scope == .unassigned {
-          Text("\(shownCount) shown").font(.caption).foregroundStyle(.secondary)
-          Button("Clear") {
-            due = []
-            scope = .mine
-          }
-          .controlSize(.small)
+        VStack(alignment: .leading, spacing: 8) {
+          HStack { chips }
+          HStack { summary(shownCount: shownCount) }
         }
       }
+    }
+  }
+
+  private var chips: some View {
+    ForEach(DueFilter.allCases) { filter in
+      Toggle(
+        filter.rawValue,
+        isOn: Binding(
+          get: { due.contains(filter) },
+          set: { if $0 { due.insert(filter) } else { due.remove(filter) } })
+      )
+      .toggleStyle(.button)
+      .buttonStyle(.bordered)
+      .controlSize(.small)
+      .lineLimit(1)
+      .fixedSize()
+    }
+  }
+
+  /// Shown when any filter differs from the default, like the web.
+  @ViewBuilder private func summary(shownCount: Int) -> some View {
+    if !due.isEmpty || scope != .mine {
+      Text("\(shownCount) shown").font(.caption).foregroundStyle(.secondary)
+      Button("Clear") {
+        due = []
+        scope = .mine
+      }
+      .controlSize(.small)
     }
   }
 

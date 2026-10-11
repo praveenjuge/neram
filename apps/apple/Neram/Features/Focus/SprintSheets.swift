@@ -196,6 +196,12 @@ struct BacklogPickerView: View {
       }
       .actionAlert(action)
       .task { await backlog.run(on: session.client) }
+      // Drop picks that left the Backlog (planned, completed, or deleted
+      // elsewhere); search only hides rows, so it keeps them.
+      .onChange(of: backlog.value) { _, tasks in
+        guard let tasks else { return }
+        selected.formIntersection(tasks.map(\.id))
+      }
     }
   }
 
