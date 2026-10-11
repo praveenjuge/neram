@@ -41,9 +41,12 @@ struct RootView: View {
             await session.retry(userId: clerk.user?.id, organizationId: clerk.organization?.id)
           }
         }
-      case .ready:
+      case .ready where session.activeWorkspaceId == clerk.organization?.id:
         MainView()
           .id(clerk.organization?.id)
+      case .ready:
+        // Clerk has switched workspace; Convex is about to open it.
+        ProgressView("Opening your workspace…")
       }
     }
   }

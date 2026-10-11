@@ -17,7 +17,8 @@ final class AppSession {
   let client: NeramClient
   private(set) var phase: Phase = .idle
   private(set) var isConnected = true
-  private var activeWorkspaceId: String?
+  /// The workspace Convex has finished opening.
+  private(set) var activeWorkspaceId: String?
 
   init(client: NeramClient) {
     self.client = client

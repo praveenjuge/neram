@@ -28,24 +28,45 @@ final class DeepLinkRouter {
   }
 
   /// Makes the link's workspace active when it isn't already. Signed-out
-  /// users keep the link until they sign in.
+  /// users keep the link until they sign in. Runs from `.task(id:)`, so a
+  /// newer link cancels this one; results for a replaced link are ignored.
   func switchWorkspaceIfNeeded(clerk: Clerk) async {
-    guard let slug = pending?.slug, clerk.isLoaded, let user = clerk.user,
+    guard let link = pending, let slug = link.slug, clerk.isLoaded, let user = clerk.user,
       let session = clerk.session, clerk.organization?.slug != slug
     else { return }
     do {
-      let memberships = try await user.getOrganizationMemberships(pageSize: 100).data
-      guard pending?.slug == slug else { return }
-      guard let membership = memberships.first(where: { $0.organization.slug == slug }) else {
+      guard let organizationId = try await organizationId(for: slug, user: user) else {
+        guard isCurrent(link) else { return }
         pending = nil
         problem = "You're not a member of that workspace, or it no longer exists."
         return
       }
-      try await clerk.auth.setActive(
-        sessionId: session.id, organizationId: membership.organization.id)
+      guard isCurrent(link) else { return }
+      try await clerk.auth.setActive(sessionId: session.id, organizationId: organizationId)
     } catch {
+      guard isCurrent(link) else { return }
       pending = nil
       problem = error.localizedDescription
+    }
+  }
+
+  private func isCurrent(_ link: DeepLink) -> Bool {
+    !Task.isCancelled && pending == link
+  }
+
+  /// Looks through every membership page, like the web's workspace gate.
+  private func organizationId(for slug: String, user: User) async throws -> String? {
+    let pageSize = 100
+    var page = 1
+    while true {
+      let response = try await user.getOrganizationMemberships(page: page, pageSize: pageSize)
+      if let match = response.data.first(where: { $0.organization.slug == slug }) {
+        return match.organization.id
+      }
+      guard response.data.count == pageSize, page * pageSize < response.totalCount else {
+        return nil
+      }
+      page += 1
     }
   }
 }
