@@ -1,73 +1,83 @@
 import NeramKit
 import SwiftUI
 
-/// A task's comments, like the web: a composer, threaded replies that load
-/// in pages, and, when opened from a link, the linked comment's thread.
-/// Authors edit their comments; authors and admins delete them.
-struct CommentsSection: View {
+/// A task's comments and their live queries. Owned by the task screen and
+/// run from its `.task`, because List drops rows (and cancels their tasks)
+/// as they scroll away; anything long-lived must not hang off a row.
+@MainActor
+@Observable
+final class TaskComments {
   let taskId: DocumentID
-  let targetCommentId: DocumentID?
-  let members: [Member]
-  /// Scrolls the task view to a row id once the linked thread loads.
-  let scrollTo: (String) -> Void
+  let roots: PagedQuery<TaskComment>
+  let workspace = LiveQuery(Queries.currentOrganization)
+  /// The linked comment's thread, when the task was opened at a comment.
+  let linked: LinkedThread?
+  var sheet: CommentSheet?
+  let action = Action()
 
-  @Environment(AppSession.self) private var session
-  @State private var roots: PagedQuery<TaskComment>
-  @State private var workspace = LiveQuery(Queries.currentOrganization)
-  @State private var sheet: CommentSheet?
-  @State private var action = Action()
-
-  static let linkedThreadId = "linked-thread"
-
-  init(
-    taskId: DocumentID, targetCommentId: DocumentID?, members: [Member],
-    scrollTo: @escaping (String) -> Void
-  ) {
+  init(taskId: DocumentID, targetId: DocumentID?) {
     self.taskId = taskId
-    self.targetCommentId = targetCommentId
-    self.members = members
-    self.scrollTo = scrollTo
-    _roots = State(
-      initialValue: PagedQuery(pageSize: 20) { Queries.comments(taskId: taskId, $0) })
+    roots = PagedQuery(pageSize: 20) { Queries.comments(taskId: taskId, $0) }
+    linked = targetId.map(LinkedThread.init)
   }
 
+  func run(on client: NeramClient) async {
+    async let rootsRun: Void = roots.run(on: client)
+    async let workspaceRun: Void = workspace.run(on: client)
+    async let linkedRun: Void = runLinked(on: client)
+    _ = await (rootsRun, workspaceRun, linkedRun)
+  }
+
+  private func runLinked(on client: NeramClient) async {
+    await linked?.run(on: client)
+  }
+
+  func delete(_ comment: TaskComment, on client: NeramClient) async {
+    await action.run { () async throws(NeramError) in
+      try await client.run(Calls.removeComment(comment.id))
+    }
+  }
+}
+
+/// The comment sections of a task, like the web: a composer, threaded
+/// replies that load in pages, and, when opened from a link, the linked
+/// comment's thread. Authors edit their comments; authors and admins
+/// delete them.
+struct CommentsSection: View {
+  let comments: TaskComments
+  let members: [Member]
+
+  @Environment(AppSession.self) private var session
+
+  private var taskId: DocumentID { comments.taskId }
+
   private var context: CommentContext {
-    let current = workspace.value ?? nil
+    let current = comments.workspace.value ?? nil
     return CommentContext(
       taskId: taskId, currentSubject: current?.membership.userId,
-      isAdmin: current?.isAdmin ?? false, targetId: targetCommentId
+      isAdmin: current?.isAdmin ?? false, targetId: comments.linked?.targetId
     ) { action in
       switch action {
-      case .reply(let comment): sheet = .reply(comment)
-      case .edit(let comment): sheet = .edit(comment)
-      case .delete(let comment): Task { await delete(comment) }
+      case .reply(let comment): comments.sheet = .reply(comment)
+      case .edit(let comment): comments.sheet = .edit(comment)
+      case .delete(let comment): Task { await comments.delete(comment, on: session.client) }
       }
     }
   }
 
   var body: some View {
-    if let targetCommentId {
-      Section("Linked thread") {
-        LinkedThread(targetId: targetCommentId, context: context) {
-          scrollTo(Self.linkedThreadId)
-        }
-        .id(Self.linkedThreadId)
-      }
+    if let linked = comments.linked {
+      Section("Linked thread") { linkedRows(linked) }
     }
     Section("Comments") {
       CommentComposer(members: members) { body, mentions throws(NeramError) in
         _ = try await session.client.run(
           Calls.createComment(taskId: taskId, body: body, mentions: mentions))
       }
-      .task { await roots.run(on: session.client) }
-      .task { await workspace.run(on: session.client) }
-      .sheet(item: $sheet) { sheet in
-        CommentEditor(sheet: sheet, members: members)
-      }
-      .actionAlert(action)
 
+      let roots = comments.roots
       if let error = roots.error, roots.items.isEmpty {
-        Text(error.localizedDescription).foregroundStyle(.secondary)
+        LoadErrorRow(error: error, retry: roots.retry)
       } else if roots.status == .loadingFirstPage {
         ProgressView().frame(maxWidth: .infinity)
       } else if roots.items.isEmpty {
@@ -80,11 +90,33 @@ struct CommentsSection: View {
     }
   }
 
-  private func delete(_ comment: TaskComment) async {
-    await action.run { () async throws(NeramError) in
-      try await session.client.run(Calls.removeComment(comment.id))
+  /// The chain from the root down to the linked comment, one row per
+  /// comment so the list can scroll to the linked one.
+  @ViewBuilder private func linkedRows(_ linked: LinkedThread) -> some View {
+    if let linkedTask = linked.taskId, linkedTask != taskId {
+      Text("Linked comment unavailable.").foregroundStyle(.secondary)
+    } else {
+      if linked.isLoading {
+        ProgressView().frame(maxWidth: .infinity)
+      } else if linked.hasOlder {
+        Button("Show earlier comments") { linked.showOlder() }
+          .font(.caption)
+          .buttonStyle(.borderless)
+      }
+      ForEach(Array(linked.comments.enumerated()), id: \.element.id) { index, comment in
+        CommentNode(
+          comment: comment, depth: index, context: context,
+          showsReplies: comment.id == linked.targetId
+        )
+        .padding(.leading, CGFloat(min(index, 3)) * 12)
+        .id(comment.id)
+      }
+      if let error = linked.error {
+        LoadErrorRow(error: error, retry: linked.retry)
+      }
     }
   }
+
 }
 
 // MARK: - Shared
@@ -246,6 +278,9 @@ private struct CommentReplies: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
+      if let error = replies.error, replies.items.isEmpty {
+        LoadErrorRow(error: error, retry: replies.retry)
+      }
       ForEach(replies.items) { reply in
         CommentNode(comment: reply, depth: depth, context: context)
       }
@@ -263,107 +298,86 @@ private struct CommentReplies: View {
 
 // MARK: - Linked thread
 
-/// The chain from a linked comment's root down to it, with the linked
-/// comment's own replies, like the web. Very deep chains load older
-/// comments in pages of 100.
-private struct LinkedThread: View {
+/// The chain from a linked comment's root down to it, kept live while the
+/// task is open, like the web. Very deep chains load older comments in pages
+/// of 100 when asked. Pages run here rather than in row views, so rows can
+/// appear and disappear without stopping updates.
+@MainActor
+@Observable
+final class LinkedThread {
   let targetId: DocumentID
-  let context: CommentContext
-  let onLoad: () -> Void
+  /// Nearest page first; each later page holds older comments.
+  private(set) var pages: [LiveQuery<CommentAncestry>] = []
+  @ObservationIgnored private var tasks: [Task<Void, Never>] = []
+  @ObservationIgnored private weak var client: NeramClient?
 
-  @Environment(AppSession.self) private var session
-  @State private var ancestry: LiveQuery<CommentAncestry>
-
-  init(targetId: DocumentID, context: CommentContext, onLoad: @escaping () -> Void) {
+  init(targetId: DocumentID) {
     self.targetId = targetId
-    self.context = context
-    self.onLoad = onLoad
-    _ancestry = State(
-      initialValue: LiveQuery(Queries.commentAncestry(commentId: targetId, limit: 100)))
   }
 
-  var body: some View {
-    Group {
-      if let page = ancestry.value {
-        if page.taskId == context.taskId {
-          AncestryPage(page: page, targetId: targetId, context: context)
-        } else {
-          unavailable
-        }
-      } else if ancestry.error != nil {
-        unavailable
-      } else {
-        ProgressView().frame(maxWidth: .infinity)
-      }
-    }
-    .task { await ancestry.run(on: session.client) }
-    .onChange(of: ancestry.value != nil) { _, loaded in
-      if loaded { onLoad() }
+  /// Keeps every loaded page live until the calling task is cancelled.
+  func run(on client: NeramClient) async {
+    self.client = client
+    retry()
+    defer { stop() }
+    while !Task.isCancelled {
+      try? await Task.sleep(for: .seconds(86_400))
     }
   }
 
-  private var unavailable: some View {
-    Text("Linked comment unavailable.").foregroundStyle(.secondary)
+  func retry() {
+    stop()
+    pages = []
+    add(startingAt: nil)
+  }
+
+  func showOlder() {
+    guard let older = pages.last?.value?.nextCommentId else { return }
+    add(startingAt: older)
+  }
+
+  /// Root first, down to the linked comment.
+  var comments: [TaskComment] { pages.reversed().flatMap { $0.value?.comments ?? [] } }
+  var taskId: DocumentID? { pages.first?.value?.taskId }
+  var isLoaded: Bool { pages.first?.value != nil }
+  var isLoading: Bool { pages.contains { $0.value == nil && $0.error == nil } }
+  var hasOlder: Bool { pages.last?.value?.nextCommentId != nil }
+  var error: NeramError? { pages.lazy.compactMap(\.error).first }
+
+  private func add(startingAt start: DocumentID?) {
+    let page = LiveQuery(
+      Queries.commentAncestry(commentId: targetId, startCommentId: start, limit: 100))
+    pages.append(page)
+    guard let client else { return }
+    tasks.append(Task { await page.run(on: client) })
+  }
+
+  private func stop() {
+    for task in tasks { task.cancel() }
+    tasks = []
   }
 }
 
-private struct AncestryPage: View {
-  let page: CommentAncestry
-  let targetId: DocumentID
-  let context: CommentContext
+/// A failed load, with a way to try again.
+private struct LoadErrorRow: View {
+  let error: NeramError
+  let retry: () -> Void
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 6) {
-      if let older = page.nextCommentId {
-        OlderAncestry(startId: older, targetId: targetId, context: context)
-      }
-      ForEach(Array(page.comments.enumerated()), id: \.element.id) { index, comment in
-        CommentNode(
-          comment: comment, depth: index, context: context,
-          showsReplies: comment.id == targetId
-        )
-        .padding(.leading, CGFloat(min(index, 3)) * 12)
-      }
-    }
-  }
-}
-
-/// Older comments above a deep chain, loaded when asked for.
-private struct OlderAncestry: View {
-  let startId: DocumentID
-  let targetId: DocumentID
-  let context: CommentContext
-
-  @Environment(AppSession.self) private var session
-  @State private var shown = false
-  @State private var ancestry: LiveQuery<CommentAncestry>
-
-  init(startId: DocumentID, targetId: DocumentID, context: CommentContext) {
-    self.startId = startId
-    self.targetId = targetId
-    self.context = context
-    _ancestry = State(
-      initialValue: LiveQuery(
-        Queries.commentAncestry(commentId: targetId, startCommentId: startId, limit: 100)))
-  }
-
-  var body: some View {
-    if !shown {
-      Button("Show earlier comments") { shown = true }
-        .font(.caption)
+    HStack {
+      Label(error.localizedDescription, systemImage: "exclamationmark.triangle")
+        .foregroundStyle(.secondary)
+      Spacer()
+      Button("Try Again", action: retry)
         .buttonStyle(.borderless)
-    } else if let page = ancestry.value {
-      AncestryPage(page: page, targetId: targetId, context: context)
-    } else {
-      ProgressView()
-        .task { await ancestry.run(on: session.client) }
     }
+    .font(.caption)
   }
 }
 
 // MARK: - Reply and edit
 
-private struct CommentEditor: View {
+struct CommentEditor: View {
   let sheet: CommentSheet
   let members: [Member]
 
