@@ -33,12 +33,19 @@ public final class PagedQuery<Item: Codable & Sendable & Identifiable> {
 
   @ObservationIgnored private let makeQuery: (PageRequest) -> Query<Page<Item>>
   @ObservationIgnored private let pageSize: Int
+  @ObservationIgnored private let loadsAllPages: Bool
   @ObservationIgnored private var slots: [Slot] = []
   @ObservationIgnored private var nextSlotId = 0
   @ObservationIgnored private weak var client: NeramClient?
 
-  public init(pageSize: Int = 20, _ makeQuery: @escaping (PageRequest) -> Query<Page<Item>>) {
+  /// - Parameter loadsAllPages: Keep requesting pages until the list is
+  ///   exhausted, for small sets every screen needs whole (like members).
+  public init(
+    pageSize: Int = 20, loadsAllPages: Bool = false,
+    _ makeQuery: @escaping (PageRequest) -> Query<Page<Item>>
+  ) {
     self.pageSize = pageSize
+    self.loadsAllPages = loadsAllPages
     self.makeQuery = makeQuery
   }
 
@@ -158,5 +165,6 @@ public final class PagedQuery<Item: Codable & Sendable & Identifiable> {
     } else {
       status = slots.last?.result?.isDone == true ? .exhausted : .canLoadMore
     }
+    if loadsAllPages, status == .canLoadMore { loadMore() }
   }
 }

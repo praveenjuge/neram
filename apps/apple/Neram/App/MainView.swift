@@ -11,13 +11,13 @@ struct MainView: View {
         HomeView()
       }
       Tab("My Tasks", systemImage: "checklist") {
-        NavigationStack { MyTasksView() }
+        NavigationStack { MyTasksView().appDestinations() }
       }
       Tab("Focus", systemImage: "scope") {
-        NavigationStack { FocusView() }
+        NavigationStack { FocusView().appDestinations() }
       }
       Tab("Activity", systemImage: "clock") {
-        NavigationStack { ActivityView() }
+        NavigationStack { ActivityView().appDestinations() }
       }
     }
     .tabViewStyle(.sidebarAdaptable)
