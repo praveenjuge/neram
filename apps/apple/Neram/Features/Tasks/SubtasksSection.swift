@@ -33,7 +33,9 @@ struct SubtasksSection: View {
       }
       TextField("Add a subtask", text: $newTitle)
         .onChange(of: newTitle) { _, value in
-          if value.count > Self.titleLimit { newTitle = String(value.prefix(Self.titleLimit)) }
+          if value.utf16.count > Self.titleLimit {
+            newTitle = value.prefix(utf16Limit: Self.titleLimit)
+          }
         }
         .onSubmit(add)
         .submitLabel(.done)
@@ -77,7 +79,7 @@ private struct SubtaskRow: View {
       .accessibilityLabel(subtask.completed ? "Mark not done" : "Mark done")
       TextField(
         "Subtask",
-        text: Binding(get: { draft ?? subtask.title }, set: { draft = String($0.prefix(200)) })
+        text: Binding(get: { draft ?? subtask.title }, set: { draft = $0.prefix(utf16Limit: 200) })
       )
       .strikethrough(subtask.completed, color: .secondary)
       .foregroundStyle(subtask.completed ? .secondary : .primary)

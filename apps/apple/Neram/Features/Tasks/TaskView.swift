@@ -140,7 +140,7 @@ struct TaskView: View {
       titleBase == nil ? task.title : titleDraft
     } set: { value in
       if titleBase == nil { titleBase = task.title }
-      titleDraft = String(value.replacingOccurrences(of: "\n", with: " ").prefix(120))
+      titleDraft = value.replacingOccurrences(of: "\n", with: " ").prefix(utf16Limit: 120)
     }
   }
 
@@ -149,7 +149,7 @@ struct TaskView: View {
       descriptionBase == nil ? (task.description ?? "") : descriptionDraft
     } set: { value in
       if descriptionBase == nil { descriptionBase = .some(task.description) }
-      descriptionDraft = String(value.prefix(2000))
+      descriptionDraft = value.prefix(utf16Limit: 2000)
     }
   }
 

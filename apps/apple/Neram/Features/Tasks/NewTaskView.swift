@@ -29,7 +29,9 @@ struct NewTaskView: View {
         Section {
           TextField("Task title", text: $title)
             .onChange(of: title) { _, value in
-              if value.count > Self.titleLimit { title = String(value.prefix(Self.titleLimit)) }
+              if value.utf16.count > Self.titleLimit {
+                title = value.prefix(utf16Limit: Self.titleLimit)
+              }
             }
           Picker("Project", selection: $selectedProject) {
             ForEach(projects.value ?? []) { project in
@@ -49,8 +51,8 @@ struct NewTaskView: View {
             TextField("Add more detail", text: $description, axis: .vertical)
               .lineLimit(3...8)
               .onChange(of: description) { _, value in
-                if value.count > Self.descriptionLimit {
-                  description = String(value.prefix(Self.descriptionLimit))
+                if value.utf16.count > Self.descriptionLimit {
+                  description = value.prefix(utf16Limit: Self.descriptionLimit)
                 }
               }
           }
