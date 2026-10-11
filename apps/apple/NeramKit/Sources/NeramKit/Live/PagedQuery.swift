@@ -33,12 +33,19 @@ public final class PagedQuery<Item: Codable & Sendable & Identifiable> {
 
   @ObservationIgnored private let makeQuery: (PageRequest) -> Query<Page<Item>>
   @ObservationIgnored private let pageSize: Int
+  @ObservationIgnored private let loadsAllPages: Bool
   @ObservationIgnored private var slots: [Slot] = []
   @ObservationIgnored private var nextSlotId = 0
   @ObservationIgnored private weak var client: NeramClient?
 
-  public init(pageSize: Int = 20, _ makeQuery: @escaping (PageRequest) -> Query<Page<Item>>) {
+  /// - Parameter loadsAllPages: Keep requesting pages until the list is
+  ///   exhausted, for small sets every screen needs whole (like members).
+  public init(
+    pageSize: Int = 20, loadsAllPages: Bool = false,
+    _ makeQuery: @escaping (PageRequest) -> Query<Page<Item>>
+  ) {
     self.pageSize = pageSize
+    self.loadsAllPages = loadsAllPages
     self.makeQuery = makeQuery
   }
 
@@ -66,21 +73,26 @@ public final class PagedQuery<Item: Codable & Sendable & Identifiable> {
         ], keeping: result)
     }
     append(PageRequest(numItems: pageSize, cursor: result.continueCursor))
+    publish()
   }
 
   // MARK: - Slots
+  //
+  // Slot changes don't publish; each entry point publishes once when its
+  // slots are consistent. Publishing midway could start another `loadMore`
+  // from the same cursor while the last page is being pinned.
 
   private func restart() {
     stopAll()
     slots = []
     error = nil
     append(PageRequest(numItems: pageSize))
+    publish()
   }
 
   private func append(_ request: PageRequest) {
     slots.append(makeSlot(request))
     subscribe(slotAt: slots.count - 1)
-    publish()
   }
 
   /// Swaps one slot for new ones. `keeping` shows the old result until the
@@ -92,7 +104,6 @@ public final class PagedQuery<Item: Codable & Sendable & Identifiable> {
     if requests.count == 1 { replacements[0].result = result }
     slots.replaceSubrange(index...index, with: replacements)
     for offset in replacements.indices { subscribe(slotAt: index + offset) }
-    publish()
   }
 
   private func makeSlot(_ request: PageRequest) -> Slot {
@@ -128,6 +139,7 @@ public final class PagedQuery<Item: Codable & Sendable & Identifiable> {
           PageRequest(numItems: pageSize, cursor: request.cursor, endCursor: split),
           PageRequest(numItems: pageSize, cursor: split, endCursor: end),
         ], keeping: nil)
+      publish()
       return
     }
     slots[index].result = page
@@ -158,5 +170,6 @@ public final class PagedQuery<Item: Codable & Sendable & Identifiable> {
     } else {
       status = slots.last?.result?.isDone == true ? .exhausted : .canLoadMore
     }
+    if loadsAllPages, status == .canLoadMore { loadMore() }
   }
 }

@@ -1,12 +1,6 @@
 import NeramKit
 import SwiftUI
 
-/// Navigation targets reachable from Home.
-enum HomeRoute: Hashable {
-  case project(DocumentID)
-  case archived
-}
-
 /// The dashboard: every active project, newest activity first.
 struct HomeView: View {
   @Environment(AppSession.self) private var session
@@ -16,7 +10,7 @@ struct HomeView: View {
   @State private var creating = false
   @State private var inviting = false
   @State private var archiving: ProjectSummary?
-  @State private var path: [HomeRoute] = []
+  @State private var path: [AppRoute] = []
   @State private var action = Action()
 
   private var isAdmin: Bool { workspace.value?.isAdmin == true }
@@ -36,7 +30,7 @@ struct HomeView: View {
           }
         } else {
           List(projects) { project in
-            NavigationLink(value: HomeRoute.project(project.id)) {
+            NavigationLink(value: AppRoute.project(project.id)) {
               ProjectRow(project: project)
             }
             .swipeActions {
@@ -47,12 +41,7 @@ struct HomeView: View {
         }
       }
       .navigationTitle("Projects")
-      .navigationDestination(for: HomeRoute.self) { route in
-        switch route {
-        case .project(let id): ProjectView(projectId: id)
-        case .archived: ArchivedProjectsView()
-        }
-      }
+      .appDestinations()
       .toolbar {
         AccountToolbar()
         ToolbarItem(placement: .primaryAction) {
