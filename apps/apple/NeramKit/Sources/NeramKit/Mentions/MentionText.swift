@@ -53,6 +53,47 @@ public enum MentionText {
     return lowerBound..<upperBound
   }
 
+  /// The `@query` being typed just before `caret`, like the web composer: the
+  /// `@` must start the text or follow a space or newline, and the query
+  /// stops at whitespace. `start` is the index of the `@`.
+  public static func query(in text: String, caret: String.Index) -> (
+    query: String, start: String.Index
+  )? {
+    var index = caret
+    while index > text.startIndex {
+      let previous = text.index(before: index)
+      let character = text[previous]
+      if character == "@" {
+        guard
+          previous == text.startIndex || [" ", "\n"].contains(text[text.index(before: previous)])
+        else { return nil }
+        return (String(text[text.index(after: previous)..<caret]), previous)
+      }
+      if character == " " || character == "\n" { return nil }
+      index = previous
+    }
+    return nil
+  }
+
+  /// Mention spans for the tokens inserted into `body`, in order, like the
+  /// web composer: each token's `@label` is matched after the previous one,
+  /// and tokens whose text was deleted are dropped. Offsets are UTF-16.
+  public static func mentions(in body: String, tokens: [(subject: String, label: String)])
+    -> [Mention]
+  {
+    var mentions: [Mention] = []
+    var searchFrom = body.startIndex
+    for token in tokens {
+      let text = "@\(token.label)"
+      guard let range = body.range(of: text, range: searchFrom..<body.endIndex) else { continue }
+      let (start, length) = offsets(of: range, in: body)
+      mentions.append(
+        Mention(start: start, length: length, subject: token.subject, label: token.label))
+      searchFrom = range.upperBound
+    }
+    return mentions
+  }
+
   private static func substring(_ text: String, from start: Int, to end: Int) -> String? {
     range(start: start, length: end - start, in: text).map { String(text[$0]) }
   }

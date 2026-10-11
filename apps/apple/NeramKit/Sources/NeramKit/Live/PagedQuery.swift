@@ -76,6 +76,11 @@ public final class PagedQuery<Item: Codable & Sendable & Identifiable> {
     publish()
   }
 
+  /// Starts over from the first page, for example after a failed load.
+  public func retry() {
+    restart()
+  }
+
   // MARK: - Slots
   //
   // Slot changes don't publish; each entry point publishes once when its

@@ -32,6 +32,29 @@ struct MentionTextTests {
     #expect(segments.last == .text(" please review"))
   }
 
+  @Test func queryNeedsAnAtAfterSpaceOrStart() {
+    let text = "Hi @bo"
+    let found = MentionText.query(in: text, caret: text.endIndex)
+    #expect(found?.query == "bo")
+    #expect(found.map { text[$0.start...] } == "@bo")
+    #expect(MentionText.query(in: "@", caret: "@".endIndex)?.query == "")
+    #expect(MentionText.query(in: "mail@bo", caret: "mail@bo".endIndex) == nil)
+    #expect(MentionText.query(in: "@bo b", caret: "@bo b".endIndex) == nil)
+    let multiline = "Hey\n@al"
+    #expect(MentionText.query(in: multiline, caret: multiline.endIndex)?.query == "al")
+  }
+
+  @Test func mentionsFollowTokensInOrderWithUTF16Offsets() {
+    let body = "👋 @Bob and @Al, then @Bob"
+    let mentions = MentionText.mentions(
+      in: body,
+      tokens: [("user_bob", "Bob"), ("user_al", "Al"), ("user_bob", "Bob"), ("user_cy", "Cy")])
+    #expect(mentions.map(\.subject) == ["user_bob", "user_al", "user_bob"])
+    // The emoji is two UTF-16 units, so "@Bob" starts at 3, not 2.
+    #expect(mentions.map { Int($0.start) } == [3, 12, 22])
+    #expect(MentionText.segments(body: body, mentions: mentions).count == 6)
+  }
+
   @Test func limitsCountUTF16UnitsAndKeepWholeCharacters() {
     #expect(String(repeating: "a", count: 90).prefix(utf16Limit: 80).count == 80)
     // 41 emoji are 82 UTF-16 units; only 40 fit in 80.

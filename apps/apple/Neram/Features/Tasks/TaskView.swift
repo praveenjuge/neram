@@ -7,6 +7,8 @@ import SwiftUI
 /// like the web's task dialog.
 struct TaskView: View {
   let taskId: DocumentID
+  /// A comment to show in context, when opened from a link or Activity.
+  var commentId: DocumentID?
 
   @Environment(AppSession.self) private var session
   @Environment(Clerk.self) private var clerk
@@ -15,6 +17,7 @@ struct TaskView: View {
   @State private var projects = LiveQuery(Queries.projectNames)
   @State private var members = Members()
   @State private var moves = TaskMoves()
+  @State private var comments: TaskComments
   @State private var action = Action()
   @State private var titleDraft = ""
   @State private var descriptionDraft = ""
@@ -38,8 +41,10 @@ struct TaskView: View {
     let latest: String?
   }
 
-  init(taskId: DocumentID) {
+  init(taskId: DocumentID, commentId: DocumentID? = nil) {
     self.taskId = taskId
+    self.commentId = commentId
+    _comments = State(initialValue: TaskComments(taskId: taskId, targetId: commentId))
     _task = State(initialValue: LiveQuery(Queries.task(taskId)))
   }
 
@@ -71,9 +76,30 @@ struct TaskView: View {
     .task { await task.run(on: session.client) }
     .task { await projects.run(on: session.client) }
     .task { await members.run(on: session.client) }
+    .task { await comments.run(on: session.client) }
+    .sheet(item: Binding(get: { comments.sheet }, set: { comments.sheet = $0 })) { sheet in
+      CommentEditor(sheet: sheet, members: members.all)
+    }
+    .actionAlert(comments.action)
   }
 
   private func form(_ task: TaskItem) -> some View {
+    ScrollViewReader { proxy in
+      fields(task)
+        .task(id: comments.linked?.isLoaded == true) {
+          // List estimates the height of rows it hasn't drawn, so the first
+          // jump can land short; a second pass, once the rows on the way are
+          // measured, settles on the linked comment.
+          guard comments.linked?.isLoaded == true, let commentId else { return }
+          for delay in [100, 500] {
+            try? await Task.sleep(for: .milliseconds(delay))
+            withAnimation { proxy.scrollTo(commentId, anchor: .center) }
+          }
+        }
+    }
+  }
+
+  private func fields(_ task: TaskItem) -> some View {
     Form {
       ForEach([Field.title, .description], id: \.self) { field in
         if let conflict = conflicts[field] {
@@ -117,6 +143,7 @@ struct TaskView: View {
         )
       }
       SubtasksSection(taskId: task.id)
+      CommentsSection(comments: comments, members: members.all)
     }
     .formStyle(.grouped)
     .disabled(!session.isConnected)
