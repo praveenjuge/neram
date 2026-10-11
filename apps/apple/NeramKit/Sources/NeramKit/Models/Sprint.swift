@@ -25,6 +25,31 @@ public struct Sprint: Codable, Sendable, Hashable, Identifiable {
   }
 }
 
+extension Sprint {
+  /// `MMM d – MMM d, yyyy`, or `Started MMM d, yyyy` with no fixed end.
+  /// Mirrors `dateRange` in apps/web/src/components/sprints/shared.tsx.
+  public var dateRange: String {
+    let start = startDate
+    guard let end = endDate else {
+      return "Started \(start.formatted(.dateTime.month(.abbreviated).day().year()))"
+    }
+    return
+      "\(start.formatted(.dateTime.month(.abbreviated).day())) – \(end.formatted(.dateTime.month(.abbreviated).day().year()))"
+  }
+
+  /// "N days remaining", "Ends today", or "No fixed end date".
+  public func remaining(now: Date = .now, calendar: Calendar = .current) -> String {
+    guard let end = endDate else { return "No fixed end date" }
+    let days = max(
+      0,
+      calendar.dateComponents(
+        [.day], from: calendar.startOfDay(for: now), to: calendar.startOfDay(for: end)
+      ).day ?? 0)
+    if days == 0 { return "Ends today" }
+    return "\(days) day\(days == 1 ? "" : "s") remaining"
+  }
+}
+
 /// `sprints:current`: the open Sprint and its focused tasks.
 public struct CurrentSprint: Codable, Sendable, Hashable {
   public var sprint: Sprint

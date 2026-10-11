@@ -4,9 +4,9 @@ import Testing
 @testable import NeramKit
 
 struct TaskOrderingTests {
-  static func task(_ id: String, _ position: Double) throws -> TaskItem {
+  static func task(_ id: String, _ position: Double, project: String = "p") throws -> TaskItem {
     let json = """
-      {"_id":"\(id)","projectId":"p","title":"\(id)","status":"todo","position":\(position),
+      {"_id":"\(id)","projectId":"\(project)","title":"\(id)","status":"todo","position":\(position),
       "createdAt":0,"updatedAt":0,"totalSubtasks":0,"completedSubtasks":0,"activeCommentCount":0}
       """
     return try JSONDecoder().decode(TaskItem.self, from: Data(json.utf8))
@@ -26,6 +26,17 @@ struct TaskOrderingTests {
     #expect(TaskOrdering.position(in: [], insertingAt: 0, moving: "x", now: now) == 5000)
   }
 
+  @Test func mixedColumnsOrderWithinTheMovingTasksProject() throws {
+    // Visual order: a1, b1, a2. Dropping a3 (project a) between b1 and a2
+    // lands between a1 and a2 in project a's own ordering.
+    let column = [
+      try Self.task("a1", 10, project: "a"), try Self.task("b1", 5, project: "b"),
+      try Self.task("a2", 20, project: "a"),
+    ]
+    let moving = try Self.task("a3", 99, project: "a")
+    #expect(TaskOrdering.position(inMixed: column, insertingAt: 2, moving: moving) == 15)
+  }
+
   @Test func dueDatesRoundTripAsCalendarDays() throws {
     let date = try #require(DueDate.date(from: "2026-01-20"))
     #expect(DueDate.string(from: date) == "2026-01-20")
@@ -38,5 +49,22 @@ struct TaskOrderingTests {
     #expect(initials("ada") == "AD")
     #expect(initials("Mary Ann Smith") == "MS")
     #expect(initials("  ") == "?")
+  }
+
+  static func sprint(endsAt: Double?) throws -> Sprint {
+    let end = endsAt.map { #","endsAt":\#($0)"# } ?? ""
+    let json = #"{"_id":"s","number":1,"state":"current","startsAt":0"# + end + "}"
+    return try JSONDecoder().decode(Sprint.self, from: Data(json.utf8))
+  }
+
+  @Test func sprintRemainingMatchesTheWeb() throws {
+    let day: Double = 86_400_000
+    let now = Date(timeIntervalSince1970: 0)
+    var utc = Calendar(identifier: .gregorian)
+    utc.timeZone = TimeZone(identifier: "UTC")!
+    #expect(
+      try Self.sprint(endsAt: 3 * day).remaining(now: now, calendar: utc) == "3 days remaining")
+    #expect(try Self.sprint(endsAt: day / 2).remaining(now: now, calendar: utc) == "Ends today")
+    #expect(try Self.sprint(endsAt: nil).remaining(now: now) == "No fixed end date")
   }
 }

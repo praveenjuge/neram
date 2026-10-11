@@ -22,6 +22,18 @@ public enum TaskOrdering {
     }
   }
 
+  /// Like ``position(in:insertingAt:moving:now:)`` for a column that mixes
+  /// projects, as on My Tasks. Positions are per project, so the visual
+  /// index maps onto the moving task's project only, as on the web.
+  public static func position(
+    inMixed column: [TaskItem], insertingAt insertIndex: Int, moving task: TaskItem,
+    now: Date = .now
+  ) -> Double {
+    let sameProject = column.filter { $0.projectId == task.projectId }
+    let index = column.prefix(max(0, insertIndex)).filter { $0.projectId == task.projectId }.count
+    return position(in: sameProject, insertingAt: index, moving: task.id, now: now)
+  }
+
   /// Tasks of one status, in board order.
   public static func column(_ tasks: [TaskItem], status: TaskStatus) -> [TaskItem] {
     tasks.filter { $0.status == status }.sorted { $0.position < $1.position }
