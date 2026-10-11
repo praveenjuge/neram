@@ -70,6 +70,21 @@ ASC_KEY_ID=… ASC_ISSUER_ID=… ASC_KEY_PATH=~/.appstoreconnect/private_keys/Au
 The "Apple Release" GitHub workflow does the same from the Actions tab, using
 the `ASC_KEY_ID`, `ASC_ISSUER_ID`, and `ASC_KEY_P8` repository secrets.
 
+## Android app
+
+`apps/android` is a Kotlin and Jetpack Compose app (Android 15+). It needs JDK 21
+and the Android SDK (platform 37); point `JAVA_HOME` and `ANDROID_HOME` at them,
+then use the Gradle wrapper or the workspace scripts:
+
+```bash
+bun --cwd apps/android run build
+bun --cwd apps/android run test
+```
+
+Debug builds (`com.praveenjuge.neram.debug`) use the development Clerk instance
+and Convex deployment; release builds use production. Its unit tests decode
+`packages/convex/fixtures`, like `NeramKit`.
+
 ## Commands
 
 ```bash

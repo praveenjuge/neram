@@ -1,0 +1,11 @@
+{
+  "name": "@neram/android",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "build": "./gradlew :app:assembleDebug",
+    "format": "./gradlew ktfmtFormat",
+    "lint": "./gradlew ktfmtCheck :app:lintDebug",
+    "test": "./gradlew :app:testDebugUnitTest"
+  }
+}
