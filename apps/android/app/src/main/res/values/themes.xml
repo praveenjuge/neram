@@ -1,0 +1,4 @@
+<resources>
+  <!-- Compose draws everything; this only sets the window before it loads. -->
+  <style name="Theme.Neram" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>

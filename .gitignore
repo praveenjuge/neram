@@ -43,3 +43,13 @@ apps/apple/fastlane/README.md
 apps/apple/build/
 apps/apple/vendor/
 *.xcresult
+
+# Android app (apps/android)
+apps/android/.gradle/
+apps/android/.kotlin/
+apps/android/build/
+apps/android/app/build/
+apps/android/local.properties
+apps/android/.idea/
+*.apk
+*.aab

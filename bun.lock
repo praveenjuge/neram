@@ -36,6 +36,10 @@
         "vitest": "^4.1.9",
       },
     },
+    "apps/android": {
+      "name": "@neram/android",
+      "version": "1.0.0",
+    },
     "apps/apple": {
       "name": "@neram/apple",
       "version": "1.0.0",
@@ -434,6 +438,8 @@
     "@napi-rs/keyring-win32-x64-msvc": ["@napi-rs/keyring-win32-x64-msvc@1.3.0", "", { "os": "win32", "cpu": "x64" }, "sha512-4DnCWXwDc0HRKwyRlG5y0VhKZW2tNRQfKKfyj6IX/KWfDNyq9hn4n+GL1auyDcOO/v8PwnhmYo2+rOOqCkvvOg=="],
 
     "@napi-rs/wasm-runtime": ["@napi-rs/wasm-runtime@1.1.6", "", { "dependencies": { "@tybys/wasm-util": "^0.10.3" }, "peerDependencies": { "@emnapi/core": "^1.7.1", "@emnapi/runtime": "^1.7.1" } }, "sha512-ZLv/JdUfkvOy9eCnnBaGfiO+XimbjebAeO+MRQqD/B+FR1tnRN0tpKSJHRbE8sFfS6aqsXZ67TQjfwfsxULVbg=="],
+
+    "@neram/android": ["@neram/android@workspace:apps/android"],
 
     "@neram/apple": ["@neram/apple@workspace:apps/apple"],
 

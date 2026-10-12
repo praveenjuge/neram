@@ -1,0 +1,11 @@
+{
+  "extends": ["//"],
+  "tasks": {
+    "build": {
+      "cache": false
+    },
+    "test": {
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/convex/fixtures/**"]
+    }
+  }
+}
