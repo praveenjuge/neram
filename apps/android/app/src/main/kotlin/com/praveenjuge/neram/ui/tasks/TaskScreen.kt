@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -81,13 +82,20 @@ private const val DESCRIPTION_LIMIT = 2000
 @HiltViewModel(assistedFactory = TaskViewModel.Factory::class)
 class TaskViewModel
 @AssistedInject
-constructor(@Assisted private val taskId: String, private val client: NeramClient) : ViewModel() {
+constructor(
+    @Assisted("taskId") private val taskId: String,
+    @Assisted("commentId") commentId: String?,
+    private val client: NeramClient,
+) : ViewModel() {
     val task = LiveQuery(viewModelScope) { client.observe(Queries.task(taskId)) }
     val projects = LiveQuery(viewModelScope) { client.observe(Queries.projectNames) }
     val subtasks = LiveQuery(viewModelScope) { client.observe(Queries.subtasks(taskId)) }
     val members = PagedQuery(pageSize = 100, loadsAllPages = true) { Queries.members(it) }
     val moves = TaskMoves(client, viewModelScope)
     val action = ActionState()
+    /** Who's viewing, for comment permissions. */
+    val workspace = LiveQuery(viewModelScope) { client.observe(Queries.currentOrganization) }
+    val comments = TaskComments(taskId, commentId, client, viewModelScope)
 
     val title =
         EditableField(
@@ -145,7 +153,10 @@ constructor(@Assisted private val taskId: String, private val client: NeramClien
 
     @AssistedFactory
     interface Factory {
-        fun create(taskId: String): TaskViewModel
+        fun create(
+            @Assisted("taskId") taskId: String,
+            @Assisted("commentId") commentId: String?,
+        ): TaskViewModel
     }
 }
 
@@ -157,8 +168,10 @@ constructor(@Assisted private val taskId: String, private val client: NeramClien
 fun TaskScreen(
     taskId: String,
     onBack: () -> Unit,
+    /** A comment to show in context, when opened from a link or Activity. */
+    commentId: String? = null,
     viewModel: TaskViewModel =
-        hiltViewModel<TaskViewModel, TaskViewModel.Factory> { it.create(taskId) },
+        hiltViewModel<TaskViewModel, TaskViewModel.Factory> { it.create(taskId, commentId) },
 ) {
     val live by viewModel.task.state.collectAsStateWithLifecycle()
     var confirmingDelete by remember { mutableStateOf(false) }
@@ -238,6 +251,7 @@ fun TaskScreen(
     }
     TaskMoveDialogs(viewModel.moves)
     ActionErrorDialog(viewModel.action)
+    ActionErrorDialog(viewModel.comments.action, "Couldn't save the comment")
 }
 
 @Composable
@@ -250,12 +264,34 @@ private fun TaskForm(
     val projects by viewModel.projects.state.collectAsStateWithLifecycle()
     val members by viewModel.members.state.collectAsStateWithLifecycle()
     val subtasks by viewModel.subtasks.state.collectAsStateWithLifecycle()
+    val workspace by viewModel.workspace.state.collectAsStateWithLifecycle()
+    val roots by viewModel.comments.roots.state.collectAsStateWithLifecycle()
     val focus = LocalFocusManager.current
+    val list = rememberLazyListState()
+    var sheet by remember { mutableStateOf<CommentSheet?>(null) }
+    val membership = (workspace as? Live.Loaded)?.value
+    val context =
+        CommentContext(
+            viewModel.comments,
+            currentSubject = membership?.membership?.userId,
+            isAdmin = membership?.isAdmin == true,
+            enabled = enabled,
+            onReply = { sheet = CommentSheet.Reply(it) },
+            onEdit = { sheet = CommentSheet.Edit(it) },
+        )
+    // Bring the linked comment into view once its thread loads.
+    val linked = viewModel.comments.linked
+    LaunchedEffect(linked?.isLoaded) {
+        if (linked?.isLoaded != true) return@LaunchedEffect
+        // The linked thread follows the fields item.
+        linkedCommentIndex(linked, sectionStart = 1)?.let { list.animateScrollToItem(it) }
+    }
 
     // Edge to edge, the keyboard draws over the screen: pad for it so focused fields scroll into
     // view above it.
     Box(Modifier.fillMaxWidth().imePadding(), Alignment.TopCenter) {
         LazyColumn(
+            state = list,
             contentPadding = padding,
             modifier = Modifier.widthIn(max = 720.dp).fillMaxWidth(),
         ) {
@@ -350,8 +386,13 @@ private fun TaskForm(
                     )
                 }
             }
+            linkedThreadSection(context)
             subtasksSection(subtasks, viewModel, enabled)
+            commentsSection(context, members.items, roots)
         }
+    }
+    sheet?.let {
+        CommentEditorSheet(it, viewModel.comments, members.items, enabled) { sheet = null }
     }
 }
 
