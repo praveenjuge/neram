@@ -123,9 +123,9 @@ private fun TabContent(stack: NavBackStack<NavKey>) {
                         onOpenArchived = { stack.add(Route.Archived) },
                     )
                 }
-                entry<Route.MyTasks> { MyTasksScreen() }
-                entry<Route.Focus> { FocusScreen() }
-                entry<Route.Activity> { ActivityScreen() }
+                entry<Route.MyTasks> { MyTasksScreen(onOpenTask = { stack.add(Route.Task(it)) }) }
+                entry<Route.Focus> { FocusScreen(onOpenTask = { stack.add(Route.Task(it)) }) }
+                entry<Route.Activity> { ActivityScreen(onOpenTask = { stack.add(Route.Task(it)) }) }
                 entry<Route.Project> { route ->
                     ProjectScreen(
                         route.id,

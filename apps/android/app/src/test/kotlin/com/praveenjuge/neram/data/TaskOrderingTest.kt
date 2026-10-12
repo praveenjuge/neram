@@ -1,19 +1,29 @@
 package com.praveenjuge.neram.data
 
+import com.praveenjuge.neram.data.model.Sprint
 import com.praveenjuge.neram.data.model.TaskItem
 import com.praveenjuge.neram.data.model.TaskStatus
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneOffset
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
 class TaskOrderingTest {
-    private fun task(id: String, position: Double, project: String = "p") =
+    private fun task(
+        id: String,
+        position: Double = 0.0,
+        project: String = "p",
+        due: String? = null,
+        status: TaskStatus = TaskStatus.Todo,
+    ) =
         TaskItem(
             id = id,
             projectId = project,
             title = id,
-            status = TaskStatus.Todo,
+            dueDate = due,
+            status = status,
             position = position,
             createdAt = 0.0,
             updatedAt = 0.0,
@@ -60,5 +70,39 @@ class TaskOrderingTest {
         assertEquals("AD", initials("ada"))
         assertEquals("MS", initials("Mary Ann Smith"))
         assertEquals("?", initials("  "))
+    }
+
+    @Test
+    fun dueFiltersCombineWithOrAndSkipDoneWork() {
+        val today = LocalDate.of(2026, 10, 12)
+        val tasks =
+            listOf(
+                task("late", due = "2026-10-01"),
+                task("lateDone", due = "2026-10-01", status = TaskStatus.Done),
+                task("soon", due = "2026-10-19"),
+                task("later", due = "2026-10-20"),
+                task("none"),
+            )
+        fun ids(vararg filters: DueFilter) =
+            DueFilter.apply(tasks, filters.toSet(), today).map { it.id }
+        assertEquals(tasks.map { it.id }, ids())
+        assertEquals(listOf("late"), ids(DueFilter.Overdue))
+        assertEquals(listOf("soon"), ids(DueFilter.DueSoon))
+        assertEquals(listOf("late", "none"), ids(DueFilter.Overdue, DueFilter.NoDueDate))
+    }
+
+    @Test
+    fun sprintDatesMatchTheWeb() {
+        val day = 86_400_000.0
+        val utc = ZoneOffset.UTC
+        fun sprint(endsAt: Double?) =
+            Sprint("s", 1.0, state = Sprint.State.Current, startsAt = 0.0, endsAt = endsAt)
+        val now = Instant.EPOCH
+        assertEquals("3 days remaining", sprint(3 * day).remaining(now, utc))
+        assertEquals("1 day remaining", sprint(day).remaining(now, utc))
+        assertEquals("Ends today", sprint(day / 2).remaining(now, utc))
+        assertEquals("No fixed end date", sprint(null).remaining(now, utc))
+        assertEquals("Jan 1 – Jan 15, 1970", sprint(14 * day).dateRange(utc))
+        assertEquals("Started Jan 1, 1970", sprint(null).dateRange(utc))
     }
 }

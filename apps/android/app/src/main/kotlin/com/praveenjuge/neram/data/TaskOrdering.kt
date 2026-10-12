@@ -78,6 +78,35 @@ object DueDate {
     }
 }
 
+/** The due-date chips on My Tasks, like the web's Tasks page. */
+enum class DueFilter(val label: String) {
+    Overdue("Overdue"),
+    DueSoon("Due soon"),
+    NoDueDate("No due date");
+
+    companion object {
+        /**
+         * Tasks matching any of [filters] (all tasks when empty). Overdue and Due soon skip done
+         * tasks; Due soon is today through the next seven days.
+         */
+        fun apply(
+            tasks: List<TaskItem>,
+            filters: Set<DueFilter>,
+            today: LocalDate = LocalDate.now(),
+        ): List<TaskItem> {
+            if (filters.isEmpty()) return tasks
+            val soon = today.plusDays(7)
+            return tasks.filter { task ->
+                val date = DueDate.parse(task.dueDate)
+                val open = task.status != TaskStatus.Done
+                (Overdue in filters && open && date != null && date < today) ||
+                    (DueSoon in filters && open && date != null && date in today..soon) ||
+                    (NoDueDate in filters && date == null)
+            }
+        }
+    }
+}
+
 /** Avatar initials, matching apps/web/src/components/user-avatar.tsx. */
 fun initials(name: String): String {
     val parts = name.split(Regex("\\s+")).filter { it.isNotEmpty() }
