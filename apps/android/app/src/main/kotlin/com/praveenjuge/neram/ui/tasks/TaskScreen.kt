@@ -29,6 +29,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -169,6 +170,10 @@ fun TaskScreen(
         onBack()
     }
     BackHandler(onBack = leave)
+    // A delete can finish after this screen is popped or covered; only close it while it shows,
+    // or the callback would close whichever screen is on top by then.
+    val showing = remember { mutableStateOf(true) }
+    DisposableEffect(Unit) { onDispose { showing.value = false } }
 
     DetailScreen(
         "Task",
@@ -225,7 +230,7 @@ fun TaskScreen(
             confirmLabel = "Delete Task",
             onConfirm = {
                 viewModel.run(Calls.removeTask(current.id, confirmCascade = true)) { deleted ->
-                    if (deleted) onBack()
+                    if (deleted && showing.value) onBack()
                 }
             },
             onDismiss = { confirmingDelete = false },
