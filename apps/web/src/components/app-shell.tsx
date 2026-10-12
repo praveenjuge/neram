@@ -234,12 +234,19 @@ function AppSidebar() {
                 hidePersonal
                 appearance={{
                   elements: {
-                    rootBox: "min-w-0 flex-1",
+                    // Collapsed to icons, the switcher is just the org avatar:
+                    // the name and chevron would overflow the narrow rail.
+                    rootBox:
+                      "min-w-0 flex-1 group-data-[collapsible=icon]:flex-none",
                     organizationSwitcherTrigger:
-                      "w-full max-w-full !justify-start overflow-hidden",
-                    organizationPreview: "min-w-0",
-                    organizationPreviewTextContainer: "min-w-0",
+                      "w-full max-w-full !justify-start overflow-hidden group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:justify-center! group-data-[collapsible=icon]:p-0!",
+                    organizationPreview:
+                      "min-w-0 group-data-[collapsible=icon]:gap-0!",
+                    organizationPreviewTextContainer:
+                      "min-w-0 group-data-[collapsible=icon]:hidden!",
                     organizationPreviewMainIdentifier: "truncate",
+                    organizationSwitcherTriggerIcon:
+                      "group-data-[collapsible=icon]:hidden!",
                   },
                 }}
               />
