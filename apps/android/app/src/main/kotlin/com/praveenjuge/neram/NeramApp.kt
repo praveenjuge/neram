@@ -8,6 +8,7 @@ import dagger.hilt.android.HiltAndroidApp
 class NeramApp : Application() {
     override fun onCreate() {
         super.onCreate()
+        CrashReporting.start(this)
         Clerk.initialize(this, BuildConfig.CLERK_PUBLISHABLE_KEY)
     }
 }

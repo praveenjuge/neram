@@ -1,0 +1,60 @@
+name: Android Release
+
+# Builds a signed App Bundle and uploads it to the Google Play internal testing
+# track. Run it by hand from the Actions tab. Needs these repository secrets:
+#   ANDROID_UPLOAD_KEYSTORE_BASE64  the upload keystore (.jks), base64-encoded
+#   ANDROID_UPLOAD_STORE_PASSWORD, ANDROID_UPLOAD_KEY_ALIAS, ANDROID_UPLOAD_KEY_PASSWORD
+#   PLAY_JSON_KEY                   the Play service account's JSON key
+#   SENTRY_AUTH_TOKEN               optional: uploads the R8 mapping to Sentry
+on:
+  workflow_dispatch:
+    inputs:
+      release_status:
+        description: "draft until the Play app has been published once, then completed"
+        type: choice
+        options: [draft, completed]
+        default: draft
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-release
+  cancel-in-progress: false
+
+jobs:
+  internal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: apps/android
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+      - uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # v1.327.0
+        with:
+          working-directory: apps/android
+          bundler-cache: true
+      - name: Write the upload keystore and Play key
+        env:
+          ANDROID_UPLOAD_KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}
+          PLAY_JSON_KEY: ${{ secrets.PLAY_JSON_KEY }}
+        run: |
+          umask 077
+          printf '%s' "$ANDROID_UPLOAD_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/upload.jks"
+          printf '%s' "$PLAY_JSON_KEY" > "$RUNNER_TEMP/play.json"
+      - name: Build and upload to the internal track
+        env:
+          ANDROID_UPLOAD_KEYSTORE: ${{ runner.temp }}/upload.jks
+          ANDROID_UPLOAD_STORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_STORE_PASSWORD }}
+          ANDROID_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
+          ANDROID_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
+          PLAY_JSON_KEY_PATH: ${{ runner.temp }}/play.json
+          PLAY_RELEASE_STATUS: ${{ inputs.release_status }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        run: bundle exec fastlane internal

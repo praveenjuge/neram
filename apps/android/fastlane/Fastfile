@@ -1,0 +1,49 @@
+# Releases for the Android app, uploaded to Google Play with a service account:
+#
+#   PLAY_JSON_KEY_PATH              the service account's JSON key (Play Console → Users and
+#                                   permissions; it needs "Release to testing tracks")
+#   ANDROID_UPLOAD_KEYSTORE         path to the upload keystore (.jks)
+#   ANDROID_UPLOAD_STORE_PASSWORD   its store password
+#   ANDROID_UPLOAD_KEY_ALIAS        the upload key's alias
+#   ANDROID_UPLOAD_KEY_PASSWORD     the upload key's password
+#   SENTRY_AUTH_TOKEN               optional: uploads the R8 mapping so crash reports are readable
+#
+# Play App Signing re-signs builds with Google's app signing key; the upload key only proves an
+# upload came from us. Run with `bundle exec fastlane internal` from apps/android, or the
+# "Android Release" workflow.
+
+default_platform(:android)
+
+platform :android do
+  desc "Build a signed App Bundle and upload it to the Play internal testing track"
+  lane :internal do
+    json_key = File.expand_path(ENV.fetch("PLAY_JSON_KEY_PATH"))
+
+    # One above the highest version code on any track.
+    version_codes = %w[internal alpha beta production].flat_map do |track|
+      google_play_track_version_codes(track: track, json_key: json_key)
+    rescue StandardError
+      [] # A track with no releases yet.
+    end
+    version_code = (version_codes.max || 0) + 1
+
+    gradle(
+      task: "bundle",
+      build_type: "Release",
+      properties: { "versionCode" => version_code }
+    )
+
+    upload_to_play_store(
+      track: "internal",
+      aab: lane_context[SharedValues::GRADLE_AAB_OUTPUT_PATH],
+      json_key: json_key,
+      # A Play app that has never been published only accepts draft releases; set this to
+      # "completed" once it has been, so testers get builds without a manual rollout.
+      release_status: ENV.fetch("PLAY_RELEASE_STATUS", "draft"),
+      skip_upload_metadata: true,
+      skip_upload_changelogs: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true
+    )
+  end
+end

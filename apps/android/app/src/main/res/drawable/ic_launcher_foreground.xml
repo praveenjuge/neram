@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The Task box mark from apps/web/public/pwa-icon.svg, in its 512-unit coordinates. The
+  680-unit viewport shrinks it to about 48dp of the 108dp adaptive canvas, inside the 66dp safe
+  zone, so no launcher mask clips it.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+  android:width="108dp"
+  android:height="108dp"
+  android:viewportWidth="680"
+  android:viewportHeight="680">
+  <group
+    android:translateX="84"
+    android:translateY="84">
+    <path
+      android:pathData="M180,132H124V380H180M332,132H388V380H332"
+      android:strokeWidth="38"
+      android:strokeColor="#244515"
+      android:strokeLineCap="round"
+      android:strokeLineJoin="round" />
+    <path
+      android:pathData="M194,262L238,306L320,210"
+      android:strokeWidth="42"
+      android:strokeColor="#244515"
+      android:strokeLineCap="round"
+      android:strokeLineJoin="round" />
+  </group>
+</vector>
