@@ -2,6 +2,9 @@ package com.praveenjuge.neram.data
 
 import android.content.Context
 import dev.convex.android.ConvexClientWithAuth
+import dev.convex.android.ConvexError
+import dev.convex.android.InternalError
+import dev.convex.android.ServerError
 import dev.convex.android.WebSocketState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.awaitCancellation
@@ -99,9 +102,11 @@ class NeramClient(
                     Call.Kind.Mutation -> convex.mutation<JsonElement>(call.name, call.args)
                     Call.Kind.Action -> convex.action<JsonElement>(call.name, call.args)
                 }
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (error: Exception) {
+            } catch (error: ConvexError) {
+                throw NeramError.from(error)
+            } catch (error: ServerError) {
+                throw NeramError.from(error)
+            } catch (error: InternalError) {
                 throw NeramError.from(error)
             }
         return runCatching { NeramJson.decodeFromJsonElement(call.serializer, element) }

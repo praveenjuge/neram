@@ -2,7 +2,6 @@ package com.praveenjuge.neram.data
 
 import kotlin.math.min
 import kotlin.math.pow
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -75,10 +74,7 @@ class AppSession(private val client: NeramClient) {
                 }
                 _phase.value = Phase.Ready(workspaceId, live = true)
                 return
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (error: Exception) {
-                val failure = NeramError.from(error)
+            } catch (failure: NeramError) {
                 if (failure is NeramError.Server || !saved) {
                     _phase.value = Phase.Failed(message(failure))
                     return

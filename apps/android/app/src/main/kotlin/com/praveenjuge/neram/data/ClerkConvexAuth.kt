@@ -102,7 +102,7 @@ class ClerkConvexAuth(
                 wait = refreshDelaySeconds(next)
             } catch (signedOut: NeramError.SignedOut) {
                 return
-            } catch (error: Exception) {
+            } catch (error: NeramError) {
                 failures += 1
                 wait = retryDelaySeconds(failures)
             }
