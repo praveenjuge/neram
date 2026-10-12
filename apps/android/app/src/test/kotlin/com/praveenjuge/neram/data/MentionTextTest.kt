@@ -68,4 +68,20 @@ class MentionTextTest {
         assertEquals(listOf(3, 12, 22), mentions.map { it.start.toInt() })
         assertEquals(6, MentionText.segments(body, mentions).size)
     }
+
+    @Test
+    fun mentionsPickedOutOfTextOrderAllCount() {
+        // @Bob was picked first, then @Al inserted before it.
+        val mentions =
+            MentionText.mentions("@Al @Bob", listOf("user_bob" to "Bob", "user_al" to "Al"))
+        assertEquals(listOf("user_al", "user_bob"), mentions.map { it.subject })
+        assertEquals(listOf(0, 4), mentions.map { it.start.toInt() })
+    }
+
+    @Test
+    fun aNameMentionedTwiceGetsTwoSpans() {
+        val mentions =
+            MentionText.mentions("@Bob and @Bob", listOf("user_bob" to "Bob", "user_bob" to "Bob"))
+        assertEquals(listOf(0, 9), mentions.map { it.start.toInt() })
+    }
 }

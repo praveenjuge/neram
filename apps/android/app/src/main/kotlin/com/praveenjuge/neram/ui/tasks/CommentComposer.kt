@@ -16,6 +16,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -35,6 +36,13 @@ import com.praveenjuge.neram.ui.common.UserAvatar
 
 private const val COMMENT_LIMIT = 5000
 
+/** Mention tokens (subject to label) as a flat list of strings, which a Bundle can hold. */
+private val tokenSaver =
+    listSaver<List<Pair<String, String>>, String>(
+        save = { tokens -> tokens.flatMap { listOf(it.first, it.second) } },
+        restore = { flat -> flat.chunked(2).map { it[0] to it[1] } },
+    )
+
 /**
  * A comment field with @mention suggestions, like the web composer. Typing `@` after a space
  * suggests members; picking one inserts `@Name ` and records it, and Post sends UTF-16 mention
@@ -53,13 +61,19 @@ fun CommentComposer(
     initialMentions: List<Mention> = emptyList(),
     autoFocus: Boolean = false,
     onCancel: (() -> Unit)? = null,
+    /** After a post that cleared the field; not when newer typing was kept. */
+    onPosted: () -> Unit = {},
 ) {
     // Editing continues from the end of the existing text.
     var value by
         rememberSaveable(stateSaver = TextFieldValue.Saver) {
             mutableStateOf(TextFieldValue(initialBody, TextRange(initialBody.length)))
         }
-    var tokens by remember { mutableStateOf(initialMentions.map { it.subject to it.label }) }
+    // Kept with the text, so a draft restored after rotation or scrolling still mentions people.
+    var tokens by
+        rememberSaveable(stateSaver = tokenSaver) {
+            mutableStateOf(initialMentions.map { it.subject to it.label })
+        }
     var focused by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { if (autoFocus) focus.requestFocus() }
@@ -96,6 +110,7 @@ fun CommentComposer(
             if (posted && value.text == text) {
                 value = TextFieldValue("")
                 tokens = emptyList()
+                onPosted()
             }
         }
     }
