@@ -17,4 +17,6 @@ sealed interface Route : NavKey {
     @Serializable data class Project(val id: String) : Route
 
     @Serializable data object Archived : Route
+
+    @Serializable data class Task(val id: String) : Route
 }

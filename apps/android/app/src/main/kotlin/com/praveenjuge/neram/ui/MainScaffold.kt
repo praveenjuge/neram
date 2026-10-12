@@ -43,6 +43,7 @@ import com.praveenjuge.neram.ui.navigation.Route
 import com.praveenjuge.neram.ui.projects.ArchivedProjectsScreen
 import com.praveenjuge.neram.ui.projects.ProjectScreen
 import com.praveenjuge.neram.ui.tasks.MyTasksScreen
+import com.praveenjuge.neram.ui.tasks.TaskScreen
 
 private enum class Section(val label: String, val icon: ImageVector, val root: Route) {
     Home("Home", Icons.Outlined.Home, Route.Home),
@@ -125,8 +126,15 @@ private fun TabContent(stack: NavBackStack<NavKey>) {
                 entry<Route.MyTasks> { MyTasksScreen() }
                 entry<Route.Focus> { FocusScreen() }
                 entry<Route.Activity> { ActivityScreen() }
-                entry<Route.Project> { route -> ProjectScreen(route.id, onBack = back) }
+                entry<Route.Project> { route ->
+                    ProjectScreen(
+                        route.id,
+                        onBack = back,
+                        onOpenTask = { stack.add(Route.Task(it)) },
+                    )
+                }
                 entry<Route.Archived> { ArchivedProjectsScreen(onBack = back) }
+                entry<Route.Task> { route -> TaskScreen(route.id, onBack = back) }
             },
     )
 }
