@@ -27,6 +27,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -75,6 +76,9 @@ class FocusViewModel @Inject constructor(private val client: NeramClient) : View
     val moves = TaskMoves(client, viewModelScope)
     val action = ActionState()
 
+    /** The last loaded default duration, kept if the workspace query later fails. */
+    var lastDuration by mutableStateOf<SprintDuration?>(null)
+
     /** Keeps Sprint history live while the caller (the History sheet) runs. */
     suspend fun runHistory() = history.run(client)
 
@@ -104,14 +108,22 @@ fun FocusScreen(
 ) {
     val current by viewModel.current.state.collectAsStateWithLifecycle()
     val workspace by viewModel.workspace.state.collectAsStateWithLifecycle()
-    // Null until the workspace loads, so nothing shows or saves a guessed duration. A workspace
-    // without settings uses the server's default, two weeks.
-    val defaultDuration =
+    // Null until the workspace first loads, so nothing shows or saves a guessed duration. A
+    // workspace without settings uses the server's default, two weeks. A later failure keeps the
+    // last loaded value, so an open sheet stays put.
+    val loadedDuration =
         (workspace as? Live.Loaded)?.value?.let {
             it.settings?.sprintDuration ?: SprintDuration.TwoWeeks
         }
+    LaunchedEffect(loadedDuration) { loadedDuration?.let { viewModel.lastDuration = it } }
+    val defaultDuration = loadedDuration ?: viewModel.lastDuration
+    val workspaceFailed = workspace is Live.Failed
     val sprint = (current as? Live.Loaded)?.value
     val isConnected = LocalIsConnected.current
+    // A failed query stays failed until retried; try again once the connection is back.
+    LaunchedEffect(workspaceFailed, isConnected) {
+        if (workspaceFailed && isConnected) viewModel.workspace.retry()
+    }
     var sheet by remember { mutableStateOf<FocusSheet?>(null) }
     var confirmingEnd by remember { mutableStateOf(false) }
 
@@ -135,10 +147,12 @@ fun FocusScreen(
                     DropdownMenuItem(
                         text = { Text("Default Duration") },
                         leadingIcon = { Icon(Icons.Outlined.CalendarMonth, null) },
-                        enabled = defaultDuration != null,
+                        // Before the setting first loads, a failed load can be retried from here.
+                        enabled = defaultDuration != null || workspaceFailed,
                         onClick = {
                             menu = false
-                            sheet = FocusSheet.Duration
+                            if (defaultDuration != null) sheet = FocusSheet.Duration
+                            else viewModel.workspace.retry()
                         },
                     )
                 }
