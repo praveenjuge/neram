@@ -111,20 +111,24 @@ class PagedQuery<T>(
     }
 
     private fun append(request: PageRequest) {
-        slots.add(newSlot(request))
+        val slot = newSlot(request)
+        slots.add(slot)
+        subscribe(slot)
     }
 
     /** Swaps one slot for a pinned one that shows [keeping] until it delivers. */
     private fun replace(index: Int, request: PageRequest, keeping: Page<T>?) {
         slots[index].cancel()
-        slots[index] = newSlot(request).also { it.result = keeping }
+        val slot = newSlot(request).also { it.result = keeping }
+        slots[index] = slot
+        subscribe(slot)
     }
 
-    private fun newSlot(request: PageRequest): Slot<T> {
-        val slot = Slot<T>(nextSlotId++, request)
-        subscribe(slot)
-        return slot
-    }
+    /**
+     * A slot that isn't subscribed yet. Register it before calling [subscribe]: a subscription can
+     * deliver (or fail) immediately, and results for unknown slots are dropped.
+     */
+    private fun newSlot(request: PageRequest) = Slot<T>(nextSlotId++, request)
 
     private fun subscribe(slot: Slot<T>) {
         val client = client ?: return
@@ -148,11 +152,13 @@ class PagedQuery<T>(
             val split = page.splitCursor
             if (split != null && page.pageStatus != null && slot.halves == null) {
                 val end = slot.request.endCursor ?: page.continueCursor
-                slot.halves =
+                val halves =
                     listOf(
                         newSlot(PageRequest(pageSize, slot.request.cursor, split)),
                         newSlot(PageRequest(pageSize, split, end)),
                     )
+                slot.halves = halves
+                halves.forEach(::subscribe)
             }
             _state.value = _state.value.copy(error = null)
             publish()
