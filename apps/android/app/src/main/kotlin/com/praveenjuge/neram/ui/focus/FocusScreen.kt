@@ -14,6 +14,7 @@ import com.praveenjuge.neram.data.NeramClient
 import com.praveenjuge.neram.data.Queries
 import com.praveenjuge.neram.ui.common.LiveContent
 import com.praveenjuge.neram.ui.common.LiveQuery
+import com.praveenjuge.neram.ui.common.LocalWorkspaceViewModelStoreOwner
 import com.praveenjuge.neram.ui.common.Message
 import com.praveenjuge.neram.ui.common.TopLevelScreen
 import com.praveenjuge.neram.ui.tasks.TaskListItem
@@ -27,7 +28,9 @@ class FocusViewModel @Inject constructor(client: NeramClient) : ViewModel() {
 
 /** The optional Sprint: one shared focus list across projects. */
 @Composable
-fun FocusScreen(viewModel: FocusViewModel = hiltViewModel()) {
+fun FocusScreen(
+    viewModel: FocusViewModel = hiltViewModel(LocalWorkspaceViewModelStoreOwner.current)
+) {
     val current by viewModel.current.state.collectAsStateWithLifecycle()
     TopLevelScreen("Focus") { padding ->
         LiveContent(current, padding, viewModel.current::retry) { sprint ->
