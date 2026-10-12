@@ -73,7 +73,8 @@ class ActivityViewModel @Inject constructor(client: NeramClient) : ViewModel() {
 /** Workspace history, newest first. Rows about a task open it. */
 @Composable
 fun ActivityScreen(
-    onOpenTask: (DocumentId) -> Unit,
+    /** Opens a task, at the comment the row is about when there is one. */
+    onOpenTask: (task: DocumentId, comment: DocumentId?) -> Unit,
     viewModel: ActivityViewModel = hiltViewModel(LocalWorkspaceViewModelStoreOwner.current),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -105,7 +106,7 @@ fun ActivityScreen(
                         ActivityRow(
                             item,
                             if (taskId == null) Modifier
-                            else Modifier.clickable { onOpenTask(taskId) },
+                            else Modifier.clickable { onOpenTask(taskId, item.commentId) },
                         )
                     }
                     pageFooter(
@@ -123,11 +124,14 @@ private fun ActivityRow(item: ActivityItem, modifier: Modifier) {
     val context =
         item.projectName ?: item.sprintNumber?.let { "Sprint ${it.toInt()}" } ?: "Workspace"
     val time =
-        DateUtils.getRelativeTimeSpanString(
-            item.createdAt.toLong(),
-            System.currentTimeMillis(),
-            DateUtils.MINUTE_IN_MILLIS,
-        )
+        // The server's clock can run slightly ahead; never say "in 0 minutes".
+        System.currentTimeMillis().let { now ->
+            DateUtils.getRelativeTimeSpanString(
+                item.createdAt.toLong().coerceAtMost(now),
+                now,
+                DateUtils.MINUTE_IN_MILLIS,
+            )
+        }
     ListItem(
         modifier = modifier,
         leadingContent = {

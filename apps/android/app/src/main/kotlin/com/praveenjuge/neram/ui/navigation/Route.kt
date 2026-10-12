@@ -18,5 +18,6 @@ sealed interface Route : NavKey {
 
     @Serializable data object Archived : Route
 
-    @Serializable data class Task(val id: String) : Route
+    /** [commentId] opens the task at that comment's thread. */
+    @Serializable data class Task(val id: String, val commentId: String? = null) : Route
 }

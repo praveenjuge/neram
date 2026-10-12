@@ -125,7 +125,11 @@ private fun TabContent(stack: NavBackStack<NavKey>) {
                 }
                 entry<Route.MyTasks> { MyTasksScreen(onOpenTask = { stack.add(Route.Task(it)) }) }
                 entry<Route.Focus> { FocusScreen(onOpenTask = { stack.add(Route.Task(it)) }) }
-                entry<Route.Activity> { ActivityScreen(onOpenTask = { stack.add(Route.Task(it)) }) }
+                entry<Route.Activity> {
+                    ActivityScreen(
+                        onOpenTask = { task, comment -> stack.add(Route.Task(task, comment)) }
+                    )
+                }
                 entry<Route.Project> { route ->
                     ProjectScreen(
                         route.id,
@@ -134,7 +138,9 @@ private fun TabContent(stack: NavBackStack<NavKey>) {
                     )
                 }
                 entry<Route.Archived> { ArchivedProjectsScreen(onBack = back) }
-                entry<Route.Task> { route -> TaskScreen(route.id, onBack = back) }
+                entry<Route.Task> { route ->
+                    TaskScreen(route.id, onBack = back, commentId = route.commentId)
+                }
             },
     )
 }
