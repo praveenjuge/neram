@@ -120,9 +120,12 @@ fun FocusScreen(
     val workspaceFailed = workspace is Live.Failed
     val sprint = (current as? Live.Loaded)?.value
     val isConnected = LocalIsConnected.current
-    // A failed query stays failed until retried; try again once the connection is back.
-    LaunchedEffect(workspaceFailed, isConnected) {
-        if (workspaceFailed && isConnected) viewModel.workspace.retry()
+    // A failed query stays failed until retried; try once each time the connection comes back.
+    // Keyed on the connection alone, so a lasting server error can't loop through retries.
+    LaunchedEffect(isConnected) {
+        if (isConnected && viewModel.workspace.state.value is Live.Failed) {
+            viewModel.workspace.retry()
+        }
     }
     var sheet by remember { mutableStateOf<FocusSheet?>(null) }
     var confirmingEnd by remember { mutableStateOf(false) }
