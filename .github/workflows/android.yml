@@ -1,9 +1,8 @@
 name: Android
 
-# Fast checks for Android changes: formatting and JVM unit tests (the data
-# layer, ordering, mentions, links, and the contract fixtures). Kept under
-# about two minutes; release builds and lint run locally and in the release
-# workflow instead.
+# A fast check for Android changes: formatting only, well under two minutes.
+# Unit tests compile the whole app (about three minutes on a fresh runner), so
+# they run locally with `bun run test` instead, along with lint.
 on:
   pull_request:
     paths:
@@ -32,5 +31,5 @@ jobs:
           distribution: temurin
           java-version: "21"
       - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
-      - name: Format and unit tests
-        run: ./gradlew ktfmtCheck :app:testDebugUnitTest
+      - name: Format
+        run: ./gradlew ktfmtCheck
