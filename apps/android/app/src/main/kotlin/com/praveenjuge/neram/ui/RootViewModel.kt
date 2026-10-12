@@ -37,7 +37,7 @@ class RootViewModel @Inject constructor(private val session: AppSession, client:
         data class Failed(val message: String) : UiState
 
         /** [live] is false while showing saved data. */
-        data class Ready(val workspaceId: String, val live: Boolean) : UiState
+        data class Ready(val userId: String, val workspaceId: String, val live: Boolean) : UiState
     }
 
     private data class Identity(val loaded: Boolean, val userId: String?, val workspaceId: String?)
@@ -69,8 +69,10 @@ class RootViewModel @Inject constructor(private val session: AppSession, client:
                     !identity.loaded -> UiState.Loading
                     identity.userId == null -> UiState.SignedOut
                     identity.workspaceId == null -> UiState.ChooseWorkspace
-                    phase is AppSession.Phase.Ready && phase.workspaceId == identity.workspaceId ->
-                        UiState.Ready(phase.workspaceId, phase.live)
+                    phase is AppSession.Phase.Ready &&
+                        phase.userId == identity.userId &&
+                        phase.workspaceId == identity.workspaceId ->
+                        UiState.Ready(phase.userId, phase.workspaceId, phase.live)
                     phase is AppSession.Phase.Failed -> UiState.Failed(phase.message)
                     else -> UiState.Opening
                 }

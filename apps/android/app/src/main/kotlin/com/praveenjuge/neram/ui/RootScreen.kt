@@ -43,10 +43,10 @@ fun RootScreen(viewModel: RootViewModel = hiltViewModel()) {
             RootViewModel.UiState.Opening -> Progress("Opening your workspace…")
             is RootViewModel.UiState.Failed ->
                 WorkspaceUnavailable(current.message, viewModel::retry)
-            // Each workspace, and the switch from saved to live data, gets fresh screens and view
+            // Each user and workspace, and the switch from saved to live data, gets fresh screens
+            // and view
             // models, so every query subscribes again with the current workspace's auth.
-            is RootViewModel.UiState.Ready ->
-                WorkspaceScope(current.workspaceId to current.live) { MainScaffold(isConnected) }
+            is RootViewModel.UiState.Ready -> WorkspaceScope(current) { MainScaffold(isConnected) }
         }
     }
 }

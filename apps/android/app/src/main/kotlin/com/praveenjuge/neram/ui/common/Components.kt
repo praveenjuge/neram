@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -50,21 +51,31 @@ fun TopLevelScreen(title: String, content: @Composable (PaddingValues) -> Unit) 
 
 /** Loading, error, and loaded states for a [Live] value. */
 @Composable
-fun <T> LiveContent(live: Live<T>, padding: PaddingValues, content: @Composable (T) -> Unit) {
+fun <T> LiveContent(
+    live: Live<T>,
+    padding: PaddingValues,
+    onRetry: () -> Unit,
+    content: @Composable (T) -> Unit,
+) {
     when (live) {
         Live.Loading ->
             Box(Modifier.fillMaxSize().padding(padding), Alignment.Center) {
                 CircularProgressIndicator()
             }
         is Live.Failed ->
-            Message(padding, "Couldn't load this", live.error.message ?: "Something went wrong.")
+            Message(
+                padding,
+                "Couldn't load this",
+                live.error.message ?: "Something went wrong.",
+                onRetry,
+            )
         is Live.Loaded -> content(live.value)
     }
 }
 
-/** A centered title and explanation, for empty and error states. */
+/** A centered title and explanation, for empty and error states, with Try Again for errors. */
 @Composable
-fun Message(padding: PaddingValues, title: String, body: String) {
+fun Message(padding: PaddingValues, title: String, body: String, onRetry: (() -> Unit)? = null) {
     Box(Modifier.fillMaxSize().padding(padding).padding(24.dp), Alignment.Center) {
         Column(
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -76,6 +87,7 @@ fun Message(padding: PaddingValues, title: String, body: String) {
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            if (onRetry != null) Button(onClick = onRetry) { Text("Try Again") }
         }
     }
 }

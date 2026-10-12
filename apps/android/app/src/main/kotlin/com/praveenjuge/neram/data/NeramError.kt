@@ -1,6 +1,8 @@
 package com.praveenjuge.neram.data
 
+import dev.convex.android.ClientException
 import dev.convex.android.ConvexError
+import dev.convex.android.toError
 import kotlinx.serialization.Serializable
 
 /**
@@ -31,6 +33,10 @@ sealed class NeramError(message: String) : Exception(message) {
     /** There is no active Clerk session to authenticate with. */
     data object SignedOut : NeramError("Sign in to continue.")
 
+    /** Offline, and this screen has no saved data yet. */
+    data object NotSaved :
+        NeramError("This isn't saved on this device yet. Connect to the internet to load it.")
+
     /** Anything else: transport failures, unexpected server errors, bad payloads. */
     data class Unexpected(val detail: String) : NeramError("Something went wrong. Try again.")
 
@@ -41,6 +47,7 @@ sealed class NeramError(message: String) : Exception(message) {
         fun from(error: Throwable): NeramError =
             when (error) {
                 is NeramError -> error
+                is ClientException -> from(error.toError())
                 is ConvexError ->
                     runCatching { NeramJson.decodeFromString(ServerError.serializer(), error.data) }
                         .map { Server(it) }

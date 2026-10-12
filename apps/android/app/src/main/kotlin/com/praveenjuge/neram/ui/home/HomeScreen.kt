@@ -12,33 +12,24 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.praveenjuge.neram.data.NeramClient
 import com.praveenjuge.neram.data.Queries
-import com.praveenjuge.neram.data.model.ProjectSummary
-import com.praveenjuge.neram.ui.common.Live
 import com.praveenjuge.neram.ui.common.LiveContent
+import com.praveenjuge.neram.ui.common.LiveQuery
 import com.praveenjuge.neram.ui.common.Message
 import com.praveenjuge.neram.ui.common.TopLevelScreen
-import com.praveenjuge.neram.ui.common.asLive
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.stateIn
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(client: NeramClient) : ViewModel() {
-    val projects: StateFlow<Live<List<ProjectSummary>>> =
-        client
-            .observe(Queries.projects)
-            .asLive()
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), Live.Loading)
+    val projects = LiveQuery(viewModelScope) { client.observe(Queries.projects) }
 }
 
 /** The dashboard: every active project, newest activity first. */
 @Composable
 fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
-    val projects by viewModel.projects.collectAsStateWithLifecycle()
+    val projects by viewModel.projects.state.collectAsStateWithLifecycle()
     TopLevelScreen("Projects") { padding ->
-        LiveContent(projects, padding) { list ->
+        LiveContent(projects, padding, viewModel.projects::retry) { list ->
             if (list.isEmpty()) {
                 Message(
                     padding,

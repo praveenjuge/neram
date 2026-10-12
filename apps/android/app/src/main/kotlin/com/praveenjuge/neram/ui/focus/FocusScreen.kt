@@ -12,34 +12,25 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.praveenjuge.neram.data.NeramClient
 import com.praveenjuge.neram.data.Queries
-import com.praveenjuge.neram.data.model.CurrentSprint
-import com.praveenjuge.neram.ui.common.Live
 import com.praveenjuge.neram.ui.common.LiveContent
+import com.praveenjuge.neram.ui.common.LiveQuery
 import com.praveenjuge.neram.ui.common.Message
 import com.praveenjuge.neram.ui.common.TopLevelScreen
-import com.praveenjuge.neram.ui.common.asLive
 import com.praveenjuge.neram.ui.tasks.TaskListItem
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.stateIn
 
 @HiltViewModel
 class FocusViewModel @Inject constructor(client: NeramClient) : ViewModel() {
-    val current: StateFlow<Live<CurrentSprint?>> =
-        client
-            .observe(Queries.currentSprint)
-            .asLive()
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), Live.Loading)
+    val current = LiveQuery(viewModelScope) { client.observe(Queries.currentSprint) }
 }
 
 /** The optional Sprint: one shared focus list across projects. */
 @Composable
 fun FocusScreen(viewModel: FocusViewModel = hiltViewModel()) {
-    val current by viewModel.current.collectAsStateWithLifecycle()
+    val current by viewModel.current.state.collectAsStateWithLifecycle()
     TopLevelScreen("Focus") { padding ->
-        LiveContent(current, padding) { sprint ->
+        LiveContent(current, padding, viewModel.current::retry) { sprint ->
             if (sprint == null) {
                 Message(
                     padding,

@@ -65,11 +65,12 @@ class ClerkConvexAuth(
     override fun extractIdToken(authResult: String): String = authResult
 
     private suspend fun start(onIdToken: (String?) -> Unit): Result<String> {
-        val token = runCatching {
-            token()
-        }
-            .getOrElse {
-                return Result.failure(it)
+        // Only NeramError becomes a failed login; cancellation must propagate.
+        val token =
+            try {
+                token()
+            } catch (error: NeramError) {
+                return Result.failure(error)
             }
         synchronized(lock) {
             refresh?.cancel()

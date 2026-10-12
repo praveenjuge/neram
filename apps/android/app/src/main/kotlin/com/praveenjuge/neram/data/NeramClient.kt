@@ -9,6 +9,7 @@ import dev.convex.android.WebSocketState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
@@ -28,39 +29,44 @@ class NeramClient(
 ) {
     val convex = ConvexClientWithAuth(deploymentUrl, ClerkConvexAuth())
 
-    @Volatile private var workspaceId: String? = null
+    /** The signed-in user's open workspace, as the cache folder for its saved results. */
+    @Volatile private var scope: String? = null
 
     /** False while showing saved data for a workspace that isn't open online yet. */
     @Volatile private var live = false
+
+    val isLive: Boolean
+        get() = live
 
     /**
      * Authenticates Convex for the active Clerk organization and projects it into Convex. Call
      * after sign-in and after every organization switch: `login()` fetches a token with the new
      * `org_id`, and `syncCurrent` makes sure the backend knows the workspace before any query runs.
      */
-    suspend fun activate(workspaceId: String) {
+    suspend fun activate(userId: String, workspaceId: String) {
         // Detach the previous workspace first so its subscriptions stop delivering (and caching)
         // results fetched with the new token.
-        this.workspaceId = null
+        scope = null
         live = false
         convex.login(context).getOrElse { throw NeramError.from(it) }
-        this.workspaceId = workspaceId
+        scope = cacheScope(userId, workspaceId)
         run(Calls.syncCurrentOrganization)
         live = true
     }
 
-    /** Whether [workspaceId] has saved data to show before it can be opened online. */
-    fun hasSavedData(workspaceId: String): Boolean = cache.has(workspaceId)
+    /** Whether the user has saved data for [workspaceId] to show before it opens online. */
+    fun hasSavedData(userId: String, workspaceId: String): Boolean =
+        cache.has(cacheScope(userId, workspaceId))
 
     /** Shows [workspaceId]'s saved data while it can't be opened yet (offline or slow network). */
-    fun useSavedData(workspaceId: String) {
+    fun useSavedData(userId: String, workspaceId: String) {
         live = false
-        this.workspaceId = workspaceId
+        scope = cacheScope(userId, workspaceId)
     }
 
     /** Drops Convex auth and every cached workspace snapshot. */
     suspend fun signOut() {
-        workspaceId = null
+        scope = null
         live = false
         convex.logout(context)
         cache.clear()
@@ -71,27 +77,39 @@ class NeramClient(
      * data, only that value is emitted: the screens subscribe again once the workspace is open.
      */
     fun <T> observe(query: Query<T>, cached: Boolean = true): Flow<T> = flow {
-        val scope = workspaceId
-        if (cached && scope != null) {
-            cache.read(query.key, scope)?.let { json ->
+        val current = scope
+        var showedSaved = false
+        if (cached && current != null) {
+            cache.read(query.key, current)?.let { json ->
                 runCatching { NeramJson.decodeFromString(query.serializer, json) }
-                    .onSuccess { emit(it) }
+                    .onSuccess {
+                        emit(it)
+                        showedSaved = true
+                    }
             }
         }
-        if (!live) awaitCancellation()
-        convex.subscribe<JsonElement>(query.name, query.args).collect { result ->
-            // A result from before a workspace switch belongs to neither workspace.
-            if (scope != workspaceId) throw CancellationException("Workspace changed")
-            val element = result.getOrElse { throw NeramError.from(it) }
-            val value = runCatching {
-                NeramJson.decodeFromJsonElement(query.serializer, element)
-            }
-                .getOrElse {
-                    throw NeramError.Unexpected("Couldn't read ${query.name}: ${it.message}")
+        if (!live) {
+            if (!showedSaved) throw NeramError.NotSaved
+            awaitCancellation()
+        }
+        convex
+            .subscribe<JsonElement>(query.name, query.args)
+            // Starting a subscription can throw the client's own errors (for example
+            // "channel closed" when the connection drops); surface them like any other failure.
+            .catch { throw NeramError.from(it) }
+            .collect { result ->
+                // A result from before a workspace switch belongs to neither workspace.
+                if (current != scope) throw CancellationException("Workspace changed")
+                val element = result.getOrElse { throw NeramError.from(it) }
+                val value = runCatching {
+                    NeramJson.decodeFromJsonElement(query.serializer, element)
                 }
-            emit(value)
-            if (cached && scope != null) cache.write(element.toString(), query.key, scope)
-        }
+                    .getOrElse {
+                        throw NeramError.Unexpected("Couldn't read ${query.name}: ${it.message}")
+                    }
+                emit(value)
+                if (cached && current != null) cache.write(element.toString(), query.key, current)
+            }
     }
 
     /** Runs a mutation or action. */
@@ -119,4 +137,10 @@ class NeramClient(
 
     val isOnline: Boolean
         get() = convex.webSocketStateFlow.value == WebSocketState.CONNECTED
+
+    /**
+     * Saved results are kept per user as well as per workspace: some results (such as activity
+     * notices) belong to one member, and another account can sign in on the same device.
+     */
+    private fun cacheScope(userId: String, workspaceId: String) = "${userId}__$workspaceId"
 }

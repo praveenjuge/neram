@@ -13,32 +13,24 @@ import androidx.lifecycle.viewModelScope
 import com.praveenjuge.neram.data.NeramClient
 import com.praveenjuge.neram.data.Queries
 import com.praveenjuge.neram.data.model.TaskItem
-import com.praveenjuge.neram.ui.common.Live
 import com.praveenjuge.neram.ui.common.LiveContent
+import com.praveenjuge.neram.ui.common.LiveQuery
 import com.praveenjuge.neram.ui.common.Message
 import com.praveenjuge.neram.ui.common.TopLevelScreen
-import com.praveenjuge.neram.ui.common.asLive
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.stateIn
 
 @HiltViewModel
 class MyTasksViewModel @Inject constructor(client: NeramClient) : ViewModel() {
-    val tasks: StateFlow<Live<List<TaskItem>>> =
-        client
-            .observe(Queries.allTasks(assignedToMe = true))
-            .asLive()
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), Live.Loading)
+    val tasks = LiveQuery(viewModelScope) { client.observe(Queries.allTasks(assignedToMe = true)) }
 }
 
 /** Tasks assigned to you across every project. */
 @Composable
 fun MyTasksScreen(viewModel: MyTasksViewModel = hiltViewModel()) {
-    val tasks by viewModel.tasks.collectAsStateWithLifecycle()
+    val tasks by viewModel.tasks.state.collectAsStateWithLifecycle()
     TopLevelScreen("My Tasks") { padding ->
-        LiveContent(tasks, padding) { list ->
+        LiveContent(tasks, padding, viewModel.tasks::retry) { list ->
             if (list.isEmpty()) {
                 Message(
                     padding,

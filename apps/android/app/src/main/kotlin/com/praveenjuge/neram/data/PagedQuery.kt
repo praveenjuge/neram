@@ -15,9 +15,9 @@ import kotlinx.coroutines.launch
  *
  * Each page is its own subscription. When a later page is requested, the page before it is
  * re-subscribed with `endCursor` pinned to where it ended, so inserts and deletes never shift items
- * between pages (no duplicates or gaps). A page the server asks to split is replaced by two pinned
- * halves. If a later page fails (for example a cursor became invalid), the list restarts from the
- * first page.
+ * between pages (no duplicates or gaps). A page the server asks to split keeps showing its rows
+ * while two pinned halves load, then the halves replace it together. If a later page fails (for
+ * example a cursor became invalid), the list restarts from the first page.
  *
  * All methods must be called from the coroutine running [run] (the main thread in the app).
  */
@@ -31,6 +31,8 @@ class PagedQuery<T>(
         LoadingFirstPage,
         LoadingMore,
         CanLoadMore,
+        /** Showing saved data: more pages load once the workspace is open online. */
+        SavedOnly,
         Exhausted,
     }
 
@@ -45,6 +47,13 @@ class PagedQuery<T>(
 
     private class Slot<T>(val id: Int, val request: PageRequest, var result: Page<T>? = null) {
         var job: Job? = null
+        /** Pinned halves loading to replace this slot after the server asked to split it. */
+        var halves: List<Slot<T>>? = null
+
+        fun cancel() {
+            job?.cancel()
+            halves?.forEach { it.job?.cancel() }
+        }
     }
 
     private val slots = mutableListOf<Slot<T>>()
@@ -76,7 +85,7 @@ class PagedQuery<T>(
         if (last.request.endCursor == null) {
             replace(
                 slots.lastIndex,
-                listOf(PageRequest(pageSize, last.request.cursor, result.continueCursor)),
+                PageRequest(pageSize, last.request.cursor, result.continueCursor),
                 keeping = result,
             )
         }
@@ -102,20 +111,19 @@ class PagedQuery<T>(
     }
 
     private fun append(request: PageRequest) {
-        slots.add(Slot(nextSlotId++, request))
-        subscribe(slots.last())
+        slots.add(newSlot(request))
     }
 
-    /**
-     * Swaps one slot for new ones. [keeping] shows the old result until the replacement delivers.
-     */
-    private fun replace(index: Int, requests: List<PageRequest>, keeping: Page<T>?) {
-        slots[index].job?.cancel()
-        val replacements = requests.map { Slot<T>(nextSlotId++, it) }
-        if (replacements.size == 1) replacements[0].result = keeping
-        slots.removeAt(index)
-        slots.addAll(index, replacements)
-        replacements.forEach(::subscribe)
+    /** Swaps one slot for a pinned one that shows [keeping] until it delivers. */
+    private fun replace(index: Int, request: PageRequest, keeping: Page<T>?) {
+        slots[index].cancel()
+        slots[index] = newSlot(request).also { it.result = keeping }
+    }
+
+    private fun newSlot(request: PageRequest): Slot<T> {
+        val slot = Slot<T>(nextSlotId++, request)
+        subscribe(slot)
+        return slot
     }
 
     private fun subscribe(slot: Slot<T>) {
@@ -134,40 +142,52 @@ class PagedQuery<T>(
 
     private fun receive(page: Page<T>, slotId: Int) {
         val index = slots.indexOfFirst { it.id == slotId }
-        if (index < 0) return
-        val request = slots[index].request
-        val split = page.splitCursor
-        if (split != null && page.pageStatus != null) {
-            val end = request.endCursor ?: page.continueCursor
-            replace(
-                index,
-                listOf(
-                    PageRequest(pageSize, request.cursor, split),
-                    PageRequest(pageSize, split, end),
-                ),
-                keeping = null,
-            )
+        if (index >= 0) {
+            val slot = slots[index]
+            slot.result = page
+            val split = page.splitCursor
+            if (split != null && page.pageStatus != null && slot.halves == null) {
+                val end = slot.request.endCursor ?: page.continueCursor
+                slot.halves =
+                    listOf(
+                        newSlot(PageRequest(pageSize, slot.request.cursor, split)),
+                        newSlot(PageRequest(pageSize, split, end)),
+                    )
+            }
+            _state.value = _state.value.copy(error = null)
             publish()
             return
         }
-        slots[index].result = page
-        _state.value = _state.value.copy(error = null)
-        publish()
+        // A half of a split: swap both in once both have loaded.
+        val parentIndex = slots.indexOfFirst { parent ->
+            parent.halves?.any { it.id == slotId } == true
+        }
+        if (parentIndex < 0) return
+        val parent = slots[parentIndex]
+        val halves = parent.halves ?: return
+        halves.first { it.id == slotId }.result = page
+        if (halves.all { it.result != null }) {
+            parent.job?.cancel()
+            slots.removeAt(parentIndex)
+            slots.addAll(parentIndex, halves)
+            publish()
+        }
     }
 
     private fun fail(error: NeramError, slotId: Int) {
         val index = slots.indexOfFirst { it.id == slotId }
-        if (index < 0) return
         if (index == 0) {
             _state.value = _state.value.copy(error = error)
             publish()
-        } else {
+        } else if (
+            index > 0 || slots.any { parent -> parent.halves?.any { it.id == slotId } == true }
+        ) {
             restart()
         }
     }
 
     private fun stopAll() {
-        slots.forEach { it.job?.cancel() }
+        slots.forEach { it.cancel() }
     }
 
     private fun publish() {
@@ -176,6 +196,7 @@ class PagedQuery<T>(
                 slots.firstOrNull()?.result == null -> Status.LoadingFirstPage
                 slots.any { it.result == null } -> Status.LoadingMore
                 slots.lastOrNull()?.result?.isDone == true -> Status.Exhausted
+                client?.isLive == false -> Status.SavedOnly
                 else -> Status.CanLoadMore
             }
         _state.value =

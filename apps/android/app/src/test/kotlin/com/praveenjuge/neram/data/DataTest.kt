@@ -1,5 +1,6 @@
 package com.praveenjuge.neram.data
 
+import dev.convex.android.ClientException
 import dev.convex.android.ConvexError
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -39,6 +40,11 @@ class DataTest {
         assertEquals("EDIT_CONFLICT", error.code)
         assertEquals("Changed.", error.message)
         assertTrue(NeramError.from(ConvexError("boom", "not json")) is NeramError.Unexpected)
+        // Raw client failures (e.g. a dropped connection) become ordinary errors, not crashes.
+        assertTrue(
+            NeramError.from(ClientException.InternalException("channel closed"))
+                is NeramError.Unexpected
+        )
     }
 
     @Test
