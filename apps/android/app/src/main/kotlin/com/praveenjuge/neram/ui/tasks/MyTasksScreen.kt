@@ -2,9 +2,12 @@ package com.praveenjuge.neram.ui.tasks
 
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
@@ -31,6 +34,7 @@ import com.praveenjuge.neram.data.NeramClient
 import com.praveenjuge.neram.data.Queries
 import com.praveenjuge.neram.data.model.DocumentId
 import com.praveenjuge.neram.data.model.TaskItem
+import com.praveenjuge.neram.ui.common.Live
 import com.praveenjuge.neram.ui.common.LiveContent
 import com.praveenjuge.neram.ui.common.LiveQuery
 import com.praveenjuge.neram.ui.common.LocalIsConnected
@@ -90,21 +94,35 @@ fun MyTasksScreen(
             }
         },
     ) { padding ->
-        LiveContent(live, padding, query::retry) { tasks ->
-            TaskBoard(
-                tasks,
-                viewModel.moves,
-                onOpenTask,
-                padding,
-                showsProject = true,
-                emptyText =
-                    if (viewModel.scope == TaskScope.Mine && tasks.isEmpty())
-                        "Nothing is assigned to you yet."
-                    else "Nothing here yet.",
-                filter = viewModel::filter,
-            ) {
-                Filters(viewModel, shownCount = viewModel.filter(viewModel.moves.apply(tasks)).size)
+        when (val state = live) {
+            is Live.Loaded -> {
+                val tasks = state.value
+                TaskBoard(
+                    tasks,
+                    viewModel.moves,
+                    onOpenTask,
+                    padding,
+                    showsProject = true,
+                    emptyText =
+                        if (viewModel.scope == TaskScope.Mine && tasks.isEmpty())
+                            "Nothing is assigned to you yet."
+                        else "Nothing here yet.",
+                    filter = viewModel::filter,
+                ) {
+                    Filters(viewModel, viewModel.filter(viewModel.moves.apply(tasks)).size)
+                }
             }
+            // Keep the filters while a scope loads or fails (say it was never saved offline), so
+            // switching back to one that works stays possible.
+            else ->
+                Column(Modifier.padding(padding)) {
+                    Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                        Filters(viewModel, shownCount = null)
+                    }
+                    Box(Modifier.weight(1f)) {
+                        LiveContent(state, PaddingValues(), query::retry) {}
+                    }
+                }
         }
     }
 
@@ -112,7 +130,7 @@ fun MyTasksScreen(
 }
 
 @Composable
-private fun Filters(viewModel: MyTasksViewModel, shownCount: Int) {
+private fun Filters(viewModel: MyTasksViewModel, shownCount: Int?) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         ChoiceButtons(
             TaskScope.entries,
@@ -142,7 +160,7 @@ private fun Filters(viewModel: MyTasksViewModel, shownCount: Int) {
         if (viewModel.due.isNotEmpty() || viewModel.scope != TaskScope.Mine) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    "$shownCount shown",
+                    shownCount?.let { "$it shown" } ?: "",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f),

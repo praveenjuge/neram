@@ -99,7 +99,7 @@ private val SprintDuration.choiceLabel: String
     get() = if (this == SprintDuration.Open) "No fixed end date" else label
 
 @Composable
-private fun DurationChoice(selected: SprintDuration, onSelect: (SprintDuration) -> Unit) {
+private fun DurationChoice(selected: SprintDuration?, onSelect: (SprintDuration) -> Unit) {
     Column(Modifier.selectableGroup()) {
         SprintDuration.entries.forEach { duration ->
             Row(
@@ -122,7 +122,8 @@ private fun DurationChoice(selected: SprintDuration, onSelect: (SprintDuration) 
 @Composable
 fun StartSprintSheet(
     viewModel: FocusViewModel,
-    defaultDuration: SprintDuration,
+    /** The workspace's saved duration, or null while it loads. */
+    defaultDuration: SprintDuration?,
     isConnected: Boolean,
     onDismiss: () -> Unit,
 ) {
@@ -139,7 +140,8 @@ fun StartSprintSheet(
                 onClick = {
                     val trimmed = goal.trim()
                     viewModel.run(
-                        Calls.startSprint(trimmed.ifEmpty { null }, duration ?: defaultDuration)
+                        // Without a pick, the server applies the workspace's saved duration.
+                        Calls.startSprint(trimmed.ifEmpty { null }, duration)
                     ) { started ->
                         if (started) close()
                     }
@@ -206,7 +208,8 @@ fun SprintDurationSheet(
     isConnected: Boolean,
     onDismiss: () -> Unit,
 ) {
-    var selection by rememberSaveable { mutableStateOf(current) }
+    // Only a change is kept, so the sheet always starts from the latest saved duration.
+    var selection by rememberSaveable { mutableStateOf<SprintDuration?>(null) }
     val running = viewModel.action.running
     SprintSheet(
         "Default Duration",
@@ -216,7 +219,7 @@ fun SprintDurationSheet(
             Button(
                 enabled = !running && isConnected,
                 onClick = {
-                    viewModel.run(Calls.updateSprintDuration(selection)) { saved ->
+                    viewModel.run(Calls.updateSprintDuration(selection ?: current)) { saved ->
                         if (saved) close()
                     }
                 },
@@ -225,7 +228,7 @@ fun SprintDurationSheet(
             }
         },
     ) {
-        DurationChoice(selection) { selection = it }
+        DurationChoice(selection ?: current) { selection = it }
         Text(
             "Applied when the next Sprint starts. The active Sprint does not change.",
             style = MaterialTheme.typography.bodySmall,

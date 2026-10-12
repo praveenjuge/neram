@@ -104,8 +104,12 @@ fun FocusScreen(
 ) {
     val current by viewModel.current.state.collectAsStateWithLifecycle()
     val workspace by viewModel.workspace.state.collectAsStateWithLifecycle()
+    // Null until the workspace loads, so nothing shows or saves a guessed duration. A workspace
+    // without settings uses the server's default, two weeks.
     val defaultDuration =
-        (workspace as? Live.Loaded)?.value?.settings?.sprintDuration ?: SprintDuration.TwoWeeks
+        (workspace as? Live.Loaded)?.value?.let {
+            it.settings?.sprintDuration ?: SprintDuration.TwoWeeks
+        }
     val sprint = (current as? Live.Loaded)?.value
     val isConnected = LocalIsConnected.current
     var sheet by remember { mutableStateOf<FocusSheet?>(null) }
@@ -131,6 +135,7 @@ fun FocusScreen(
                     DropdownMenuItem(
                         text = { Text("Default Duration") },
                         leadingIcon = { Icon(Icons.Outlined.CalendarMonth, null) },
+                        enabled = defaultDuration != null,
                         onClick = {
                             menu = false
                             sheet = FocusSheet.Duration
@@ -163,7 +168,9 @@ fun FocusScreen(
         FocusSheet.Goal ->
             SprintGoalSheet(viewModel, sprint?.sprint?.goal ?: "", isConnected) { sheet = null }
         FocusSheet.Duration ->
-            SprintDurationSheet(viewModel, defaultDuration, isConnected) { sheet = null }
+            defaultDuration?.let {
+                SprintDurationSheet(viewModel, it, isConnected) { sheet = null }
+            }
         FocusSheet.Backlog -> BacklogSheet(viewModel, isConnected) { sheet = null }
         FocusSheet.History -> SprintHistorySheet(viewModel, sprint) { sheet = null }
         FocusSheet.NewTask -> NewTaskSheet(null, isConnected, onDismiss = { sheet = null })
