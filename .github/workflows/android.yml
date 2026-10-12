@@ -1,0 +1,36 @@
+name: Android
+
+# Fast checks for Android changes: formatting and JVM unit tests (the data
+# layer, ordering, mentions, links, and the contract fixtures). Kept under
+# about two minutes; release builds and lint run locally and in the release
+# workflow instead.
+on:
+  pull_request:
+    paths:
+      - "apps/android/**"
+      - "packages/convex/fixtures/**"
+      - ".github/workflows/android.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: apps/android
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+      - name: Format and unit tests
+        run: ./gradlew ktfmtCheck :app:testDebugUnitTest

@@ -67,8 +67,12 @@ android {
                 "\"pk_live_Y2xlcmsubmVyYW0ucHJhdmVlbmp1Z2UuY29tJA\"",
             )
             buildConfigField("String", "CONVEX_URL", "\"https://impartial-clam-554.convex.cloud\"")
-            // A DSN only lets a client send events, so it's safe to ship in the app.
-            buildConfigField("String", "SENTRY_DSN", "\"\"")
+            // teakvault/neram-android. A DSN only lets a client send events, so it's safe to ship.
+            buildConfigField(
+                "String",
+                "SENTRY_DSN",
+                "\"https://4d2135705a6f4d1ea7482b915bfef795@o4509483678236672.ingest.us.sentry.io/4512242538905600\"",
+            )
         }
     }
 
