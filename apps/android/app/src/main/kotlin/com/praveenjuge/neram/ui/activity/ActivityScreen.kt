@@ -44,10 +44,7 @@ class ActivityViewModel @Inject constructor(client: NeramClient) : ViewModel() {
 
 /** Workspace history, newest first. */
 @Composable
-fun ActivityScreen(
-    workspaceId: String,
-    viewModel: ActivityViewModel = hiltViewModel(key = workspaceId),
-) {
+fun ActivityScreen(viewModel: ActivityViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     TopLevelScreen("Activity") { padding ->
         val error = state.error

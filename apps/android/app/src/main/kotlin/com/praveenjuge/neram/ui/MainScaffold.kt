@@ -1,9 +1,14 @@
 package com.praveenjuge.neram.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.List
 import androidx.compose.material.icons.outlined.CenterFocusStrong
@@ -35,7 +40,7 @@ private enum class Section(val label: String, val icon: ImageVector) {
 
 /** Bottom bar on phones, rail on tablets and unfolded foldables, drawer on wide screens. */
 @Composable
-fun MainScaffold(workspaceId: String, isConnected: Boolean) {
+fun MainScaffold(isConnected: Boolean) {
     var selected by rememberSaveable { mutableSection(Section.Home) }
     NavigationSuiteScaffold(
         navigationSuiteItems = {
@@ -58,14 +63,20 @@ fun MainScaffold(workspaceId: String, isConnected: Boolean) {
                     modifier =
                         Modifier.fillMaxWidth()
                             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                            .statusBarsPadding()
                             .padding(vertical = 6.dp),
                 )
             }
-            when (selected) {
-                Section.Home -> HomeScreen(workspaceId)
-                Section.Tasks -> MyTasksScreen(workspaceId)
-                Section.Focus -> FocusScreen(workspaceId)
-                Section.Activity -> ActivityScreen(workspaceId)
+            // The banner already sits below the status bar, so the screen mustn't pad for it again.
+            Box(
+                if (isConnected) Modifier else Modifier.consumeWindowInsets(WindowInsets.statusBars)
+            ) {
+                when (selected) {
+                    Section.Home -> HomeScreen()
+                    Section.Tasks -> MyTasksScreen()
+                    Section.Focus -> FocusScreen()
+                    Section.Activity -> ActivityScreen()
+                }
             }
         }
     }

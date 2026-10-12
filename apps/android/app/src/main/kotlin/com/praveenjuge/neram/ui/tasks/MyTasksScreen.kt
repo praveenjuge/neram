@@ -35,10 +35,7 @@ class MyTasksViewModel @Inject constructor(client: NeramClient) : ViewModel() {
 
 /** Tasks assigned to you across every project. */
 @Composable
-fun MyTasksScreen(
-    workspaceId: String,
-    viewModel: MyTasksViewModel = hiltViewModel(key = workspaceId),
-) {
+fun MyTasksScreen(viewModel: MyTasksViewModel = hiltViewModel()) {
     val tasks by viewModel.tasks.collectAsStateWithLifecycle()
     TopLevelScreen("My Tasks") { padding ->
         LiveContent(tasks, padding) { list ->

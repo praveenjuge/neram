@@ -24,6 +24,9 @@ class QueryCache(private val root: File) {
         }
     }
 
+    /** Whether anything is saved for [scope], so the app can open it offline. */
+    fun has(scope: String): Boolean = folder(scope).list()?.isNotEmpty() == true
+
     fun clear() {
         root.deleteRecursively()
     }
@@ -33,6 +36,9 @@ class QueryCache(private val root: File) {
             MessageDigest.getInstance("SHA-256").digest(key.toByteArray()).joinToString("") {
                 "%02x".format(it)
             }
-        return File(File(root, scope.filter { it.isLetterOrDigit() || it == '_' }), "$name.json")
+        return File(folder(scope), "$name.json")
     }
+
+    private fun folder(scope: String) =
+        File(root, scope.filter { it.isLetterOrDigit() || it == '_' })
 }

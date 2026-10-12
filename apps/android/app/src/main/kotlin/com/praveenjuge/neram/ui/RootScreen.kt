@@ -13,7 +13,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
@@ -24,6 +23,7 @@ import com.clerk.ui.auth.AuthView
 import com.clerk.ui.organizationlist.OrganizationListView
 import com.clerk.ui.organizationswitcher.OrganizationSwitcher
 import com.clerk.ui.userbutton.UserButton
+import com.praveenjuge.neram.ui.common.WorkspaceScope
 
 @Composable
 fun RootScreen(viewModel: RootViewModel = hiltViewModel()) {
@@ -43,9 +43,10 @@ fun RootScreen(viewModel: RootViewModel = hiltViewModel()) {
             RootViewModel.UiState.Opening -> Progress("Opening your workspace…")
             is RootViewModel.UiState.Failed ->
                 WorkspaceUnavailable(current.message, viewModel::retry)
-            // A new workspace gets a new scaffold, so every screen subscribes afresh.
+            // Each workspace, and the switch from saved to live data, gets fresh screens and view
+            // models, so every query subscribes again with the current workspace's auth.
             is RootViewModel.UiState.Ready ->
-                key(current.workspaceId) { MainScaffold(current.workspaceId, isConnected) }
+                WorkspaceScope(current.workspaceId to current.live) { MainScaffold(isConnected) }
         }
     }
 }

@@ -35,7 +35,7 @@ class HomeViewModel @Inject constructor(client: NeramClient) : ViewModel() {
 
 /** The dashboard: every active project, newest activity first. */
 @Composable
-fun HomeScreen(workspaceId: String, viewModel: HomeViewModel = hiltViewModel(key = workspaceId)) {
+fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
     val projects by viewModel.projects.collectAsStateWithLifecycle()
     TopLevelScreen("Projects") { padding ->
         LiveContent(projects, padding) { list ->

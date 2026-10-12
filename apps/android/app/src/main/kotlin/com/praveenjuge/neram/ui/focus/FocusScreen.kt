@@ -36,7 +36,7 @@ class FocusViewModel @Inject constructor(client: NeramClient) : ViewModel() {
 
 /** The optional Sprint: one shared focus list across projects. */
 @Composable
-fun FocusScreen(workspaceId: String, viewModel: FocusViewModel = hiltViewModel(key = workspaceId)) {
+fun FocusScreen(viewModel: FocusViewModel = hiltViewModel()) {
     val current by viewModel.current.collectAsStateWithLifecycle()
     TopLevelScreen("Focus") { padding ->
         LiveContent(current, padding) { sprint ->
