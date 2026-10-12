@@ -56,21 +56,27 @@ object MentionText {
     }
 
     /**
-     * Mention spans for the tokens (subject to label) inserted into [body], in order, like the web
-     * composer: each token's `@label` is matched after the previous one, and tokens whose text was
-     * deleted are dropped.
+     * Mention spans for the tokens (subject to label) inserted into [body], in text order. Each
+     * token takes the first `@label` not already taken, so mentions picked in any order (a name
+     * inserted before an earlier one) all count, and a name mentioned twice gets two spans. Tokens
+     * whose text was deleted are dropped.
      */
     fun mentions(body: String, tokens: List<Pair<String, String>>): List<Mention> {
+        val taken = mutableListOf<IntRange>()
         val mentions = mutableListOf<Mention>()
-        var searchFrom = 0
         for ((subject, label) in tokens) {
             val text = "@$label"
-            val start = body.indexOf(text, searchFrom)
+            var start = body.indexOf(text)
+            while (start >= 0) {
+                val span = start until start + text.length
+                if (taken.none { it.first <= span.last && span.first <= it.last }) break
+                start = body.indexOf(text, start + 1)
+            }
             if (start < 0) continue
+            taken += start until start + text.length
             mentions += Mention(start.toDouble(), text.length.toDouble(), subject, label)
-            searchFrom = start + text.length
         }
-        return mentions
+        return mentions.sortedBy { it.start }
     }
 
     /** Whether [index] falls between characters, not inside a surrogate pair. */

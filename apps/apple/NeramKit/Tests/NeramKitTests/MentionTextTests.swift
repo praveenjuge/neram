@@ -55,6 +55,17 @@ struct MentionTextTests {
     #expect(MentionText.segments(body: body, mentions: mentions).count == 6)
   }
 
+  @Test func mentionsPickedOutOfTextOrderAllCount() {
+    // @Bob was picked first, then @Al inserted before it.
+    let mentions = MentionText.mentions(
+      in: "@Al @Bob", tokens: [("user_bob", "Bob"), ("user_al", "Al")])
+    #expect(mentions.map(\.subject) == ["user_al", "user_bob"])
+    #expect(mentions.map { Int($0.start) } == [0, 4])
+    let twice = MentionText.mentions(
+      in: "@Bob and @Bob", tokens: [("user_bob", "Bob"), ("user_bob", "Bob")])
+    #expect(twice.map { Int($0.start) } == [0, 9])
+  }
+
   @Test func limitsCountUTF16UnitsAndKeepWholeCharacters() {
     #expect(String(repeating: "a", count: 90).prefix(utf16Limit: 80).count == 80)
     // 41 emoji are 82 UTF-16 units; only 40 fit in 80.

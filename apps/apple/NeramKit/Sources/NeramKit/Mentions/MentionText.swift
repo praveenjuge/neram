@@ -75,23 +75,34 @@ public enum MentionText {
     return nil
   }
 
-  /// Mention spans for the tokens inserted into `body`, in order, like the
-  /// web composer: each token's `@label` is matched after the previous one,
-  /// and tokens whose text was deleted are dropped. Offsets are UTF-16.
+  /// Mention spans for the tokens inserted into `body`, in text order. Each
+  /// token takes the first `@label` not already taken, so mentions picked in
+  /// any order (a name inserted before an earlier one) all count, and a name
+  /// mentioned twice gets two spans. Tokens whose text was deleted are
+  /// dropped. Offsets are UTF-16.
   public static func mentions(in body: String, tokens: [(subject: String, label: String)])
     -> [Mention]
   {
+    var taken: [Range<String.Index>] = []
     var mentions: [Mention] = []
-    var searchFrom = body.startIndex
     for token in tokens {
       let text = "@\(token.label)"
-      guard let range = body.range(of: text, range: searchFrom..<body.endIndex) else { continue }
+      var searchFrom = body.startIndex
+      var found: Range<String.Index>?
+      while let range = body.range(of: text, range: searchFrom..<body.endIndex) {
+        if !taken.contains(where: { $0.overlaps(range) }) {
+          found = range
+          break
+        }
+        searchFrom = body.index(after: range.lowerBound)
+      }
+      guard let range = found else { continue }
+      taken.append(range)
       let (start, length) = offsets(of: range, in: body)
       mentions.append(
         Mention(start: start, length: length, subject: token.subject, label: token.label))
-      searchFrom = range.upperBound
     }
-    return mentions
+    return mentions.sorted { $0.start < $1.start }
   }
 
   private static func substring(_ text: String, from start: Int, to end: Int) -> String? {

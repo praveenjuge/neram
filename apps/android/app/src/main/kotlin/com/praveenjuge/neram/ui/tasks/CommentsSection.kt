@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -344,8 +344,24 @@ private fun CommentReplies(parent: TaskComment, depth: Int, context: CommentCont
         when (replies.status) {
             PagedQuery.Status.CanLoadMore ->
                 TextButton(onClick = query::loadMore) { Text("Load more replies") }
-            PagedQuery.Status.LoadingMore -> CircularProgressIndicator(Modifier.width(20.dp))
-            else -> {}
+            // So a thread doesn't look empty on a slow connection while its replies load.
+            PagedQuery.Status.LoadingFirstPage,
+            PagedQuery.Status.LoadingMore ->
+                if (error == null) {
+                    CircularProgressIndicator(
+                        Modifier.padding(vertical = 4.dp).size(16.dp),
+                        strokeWidth = 2.dp,
+                    )
+                }
+            PagedQuery.Status.SavedOnly ->
+                if (replies.items.isNotEmpty()) {
+                    Text(
+                        "More replies load when you're back online.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            PagedQuery.Status.Exhausted -> {}
         }
     }
 }
@@ -424,14 +440,13 @@ fun CommentEditorSheet(
                         enabled,
                         running,
                         onSubmit = { body, mentions, done ->
-                            comments.reply(sheet.parent, body, mentions) { saved ->
-                                done(saved)
-                                if (saved) close()
-                            }
+                            comments.reply(sheet.parent, body, mentions, done)
                         },
                         placeholder = "Reply to ${sheet.parent.authorName}…",
                         autoFocus = true,
                         onCancel = close,
+                        // Stays open if more was typed while saving.
+                        onPosted = close,
                     )
                 }
                 is CommentSheet.Edit -> {
@@ -441,15 +456,13 @@ fun CommentEditorSheet(
                         enabled,
                         running,
                         onSubmit = { body, mentions, done ->
-                            comments.edit(sheet.comment, body, mentions) { saved ->
-                                done(saved)
-                                if (saved) close()
-                            }
+                            comments.edit(sheet.comment, body, mentions, done)
                         },
                         initialBody = sheet.comment.body,
                         initialMentions = sheet.comment.mentions,
                         autoFocus = true,
                         onCancel = close,
+                        onPosted = close,
                     )
                 }
             }
