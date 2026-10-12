@@ -5,10 +5,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.lifecycle.HasDefaultViewModelProviderFactory
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
+
+/**
+ * The workspace's own view model store. Tab roots keep their view models here, so switching tabs
+ * doesn't reload them; pushed screens use their back stack entry's store instead.
+ */
+val LocalWorkspaceViewModelStoreOwner =
+    staticCompositionLocalOf<ViewModelStoreOwner> { error("Outside a WorkspaceScope") }
 
 /**
  * Gives the screens inside it their own view models, cleared when [key] changes or the scope leaves
@@ -26,5 +34,9 @@ fun WorkspaceScope(key: Any, content: @Composable () -> Unit) {
             }
         }
     DisposableEffect(owner) { onDispose { owner.viewModelStore.clear() } }
-    CompositionLocalProvider(LocalViewModelStoreOwner provides owner, content = content)
+    CompositionLocalProvider(
+        LocalViewModelStoreOwner provides owner,
+        LocalWorkspaceViewModelStoreOwner provides owner,
+        content = content,
+    )
 }

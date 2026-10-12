@@ -67,4 +67,16 @@ class DataTest {
         val encoder = java.util.Base64.getUrlEncoder().withoutPadding()
         return "e30." + encoder.encodeToString(payload.toByteArray()) + ".sig"
     }
+
+    @Test
+    fun limitsCountUtf16UnitsAndKeepWholeCharacters() {
+        assertEquals(80, "a".repeat(90).prefixUtf16(80).length)
+        // 41 rockets are 82 UTF-16 units; only 40 whole ones fit in 80.
+        val rockets = "🚀".repeat(41)
+        assertEquals(80, rockets.prefixUtf16(80).length)
+        assertEquals("🚀".repeat(40), rockets.prefixUtf16(80))
+        // A family emoji is one character of 8 units, so it's kept whole or not at all.
+        assertEquals("ab", "ab👨‍👩‍👧".prefixUtf16(5))
+        assertEquals("ok", "ok".prefixUtf16(80))
+    }
 }

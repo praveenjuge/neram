@@ -15,6 +15,7 @@ import com.praveenjuge.neram.data.Queries
 import com.praveenjuge.neram.data.model.TaskItem
 import com.praveenjuge.neram.ui.common.LiveContent
 import com.praveenjuge.neram.ui.common.LiveQuery
+import com.praveenjuge.neram.ui.common.LocalWorkspaceViewModelStoreOwner
 import com.praveenjuge.neram.ui.common.Message
 import com.praveenjuge.neram.ui.common.TopLevelScreen
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -27,7 +28,9 @@ class MyTasksViewModel @Inject constructor(client: NeramClient) : ViewModel() {
 
 /** Tasks assigned to you across every project. */
 @Composable
-fun MyTasksScreen(viewModel: MyTasksViewModel = hiltViewModel()) {
+fun MyTasksScreen(
+    viewModel: MyTasksViewModel = hiltViewModel(LocalWorkspaceViewModelStoreOwner.current)
+) {
     val tasks by viewModel.tasks.state.collectAsStateWithLifecycle()
     TopLevelScreen("My Tasks") { padding ->
         LiveContent(tasks, padding, viewModel.tasks::retry) { list ->
