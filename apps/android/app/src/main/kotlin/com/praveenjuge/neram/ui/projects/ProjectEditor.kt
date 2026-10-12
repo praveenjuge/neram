@@ -26,10 +26,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -54,6 +52,8 @@ import com.praveenjuge.neram.ui.common.ActionState
 import com.praveenjuge.neram.ui.common.ConfirmDialog
 import com.praveenjuge.neram.ui.common.ProjectBadge
 import com.praveenjuge.neram.ui.common.ProjectStyle
+import com.praveenjuge.neram.ui.common.rememberHoldingSheetState
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 /** What the project editor is for. */
@@ -63,23 +63,37 @@ sealed interface EditorMode {
     data class Edit(val project: ProjectSummary) : EditorMode
 }
 
-/** Creates, updates, and archives projects for the editor. */
-class ProjectActions(private val client: NeramClient) {
+/**
+ * Creates, updates, and archives projects. Requests run in the owning view model's [scope], so
+ * closing a sheet or leaving the screen never drops a result; [onDone] runs only on success.
+ */
+class ProjectActions(private val client: NeramClient, private val scope: CoroutineScope) {
     val action = ActionState()
 
-    suspend fun create(name: String, icon: String, color: String): String? {
-        var id: String? = null
-        action.run { id = client.run(Calls.createProject(name, icon, color)) }
-        return id
+    fun create(name: String, icon: String, color: String, onDone: (String) -> Unit) {
+        scope.launch {
+            var id: String? = null
+            action.run { id = client.run(Calls.createProject(name, icon, color)) }
+            id?.let(onDone)
+        }
     }
 
-    suspend fun update(project: ProjectSummary, name: String, icon: String, color: String) =
-        action.run {
-            client.run(Calls.updateProject(project.id, name, icon, color))
+    fun update(
+        project: ProjectSummary,
+        name: String,
+        icon: String,
+        color: String,
+        onDone: () -> Unit,
+    ) {
+        scope.launch {
+            if (action.run { client.run(Calls.updateProject(project.id, name, icon, color)) }) {
+                onDone()
+            }
         }
+    }
 
-    suspend fun archive(project: ProjectSummary) = action.run {
-        client.run(Calls.archiveProject(project.id))
+    fun archive(project: ProjectSummary, onDone: () -> Unit = {}) {
+        scope.launch { if (action.run { client.run(Calls.archiveProject(project.id)) }) onDone() }
     }
 }
 
@@ -113,8 +127,7 @@ fun ProjectEditorSheet(
     var search by rememberSaveable { mutableStateOf("") }
     var confirmingArchive by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    val sheet =
-        rememberBottomSheetState(SheetValue.Hidden, setOf(SheetValue.Hidden, SheetValue.Expanded))
+    val sheet = rememberHoldingSheetState { actions.action.running }
     val trimmed = name.trim()
     val tint = ProjectStyle.color(color).color
 
@@ -129,7 +142,9 @@ fun ProjectEditorSheet(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onDismiss) { Text("Cancel") }
+                TextButton(onClick = onDismiss, enabled = !actions.action.running) {
+                    Text("Cancel")
+                }
                 Text(
                     if (editing == null) "New Project" else "Edit Project",
                     style = MaterialTheme.typography.titleMedium,
@@ -138,15 +153,13 @@ fun ProjectEditorSheet(
                 Button(
                     enabled = trimmed.isNotEmpty() && !actions.action.running && isConnected,
                     onClick = {
-                        scope.launch {
-                            if (editing == null) {
-                                actions.create(trimmed, icon, color)?.let {
-                                    close()
-                                    onCreated(it)
-                                }
-                            } else if (actions.update(editing, trimmed, icon, color)) {
+                        if (editing == null) {
+                            actions.create(trimmed, icon, color) {
                                 close()
+                                onCreated(it)
                             }
+                        } else {
+                            actions.update(editing, trimmed, icon, color) { close() }
                         }
                     },
                 ) {
@@ -283,7 +296,7 @@ fun ProjectEditorSheet(
             title = "Archive $trimmed?",
             message = "You can unarchive or permanently delete it later from Archived.",
             confirmLabel = "Archive",
-            onConfirm = { scope.launch { if (actions.archive(editing)) close() } },
+            onConfirm = { actions.archive(editing) { close() } },
             onDismiss = { confirmingArchive = false },
         )
     }

@@ -28,7 +28,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,6 +41,7 @@ import com.praveenjuge.neram.data.NeramClient
 import com.praveenjuge.neram.data.Queries
 import com.praveenjuge.neram.data.model.OrganizationRole
 import com.praveenjuge.neram.data.model.ProjectSummary
+import com.praveenjuge.neram.ui.common.ActionErrorDialog
 import com.praveenjuge.neram.ui.common.ConfirmDialog
 import com.praveenjuge.neram.ui.common.Live
 import com.praveenjuge.neram.ui.common.LiveContent
@@ -52,17 +52,18 @@ import com.praveenjuge.neram.ui.common.ProjectBadge
 import com.praveenjuge.neram.ui.common.TopLevelScreen
 import com.praveenjuge.neram.ui.projects.EditorMode
 import com.praveenjuge.neram.ui.projects.InviteSheet
+import com.praveenjuge.neram.ui.projects.Invites
 import com.praveenjuge.neram.ui.projects.ProjectActions
 import com.praveenjuge.neram.ui.projects.ProjectEditorSheet
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
-import kotlinx.coroutines.launch
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(val client: NeramClient) : ViewModel() {
     val projects = LiveQuery(viewModelScope) { client.observe(Queries.projects) }
     val workspace = LiveQuery(viewModelScope) { client.observe(Queries.currentOrganization) }
-    val actions = ProjectActions(client)
+    val actions = ProjectActions(client, viewModelScope)
+    val invites = Invites(client, viewModelScope)
 }
 
 /** The dashboard: every active project, newest activity first. */
@@ -79,7 +80,6 @@ fun HomeScreen(
     var editor by remember { mutableStateOf<EditorMode?>(null) }
     var inviting by remember { mutableStateOf(false) }
     var archiving by remember { mutableStateOf<ProjectSummary?>(null) }
-    val scope = rememberCoroutineScope()
 
     TopLevelScreen(
         "Projects",
@@ -136,7 +136,7 @@ fun HomeScreen(
         )
     }
     if (inviting) {
-        InviteSheet(viewModel.client, isConnected, onDismiss = { inviting = false })
+        InviteSheet(viewModel.invites, isConnected, onDismiss = { inviting = false })
     }
     archiving?.let { project ->
         ConfirmDialog(
@@ -145,10 +145,12 @@ fun HomeScreen(
                 "This hides the project and its tasks from your dashboard. You can unarchive or " +
                     "permanently delete it later from Archived.",
             confirmLabel = "Archive",
-            onConfirm = { scope.launch { viewModel.actions.archive(project) } },
+            onConfirm = { viewModel.actions.archive(project) },
             onDismiss = { archiving = null },
         )
     }
+    // The editor shows its own failures; archiving from the list shows them here.
+    if (editor == null) ActionErrorDialog(viewModel.actions.action, "Couldn't archive the project")
 }
 
 @Composable

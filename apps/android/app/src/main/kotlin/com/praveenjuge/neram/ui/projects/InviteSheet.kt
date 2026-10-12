@@ -12,15 +12,11 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -32,32 +28,38 @@ import com.praveenjuge.neram.data.NeramClient
 import com.praveenjuge.neram.data.prefixUtf16
 import com.praveenjuge.neram.ui.common.ActionErrorDialog
 import com.praveenjuge.neram.ui.common.ActionState
+import com.praveenjuge.neram.ui.common.rememberHoldingSheetState
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+
+/** Sends workspace invitations from the owning view model's [scope]. */
+class Invites(private val client: NeramClient, private val scope: CoroutineScope) {
+    val action = ActionState()
+
+    fun send(email: String, onSent: () -> Unit) {
+        scope.launch { if (action.run { client.run(Calls.invite(email)) }) onSent() }
+    }
+}
 
 /** Invite someone to the workspace through Neram's server-checked invite. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun InviteSheet(client: NeramClient, isConnected: Boolean, onDismiss: () -> Unit) {
+fun InviteSheet(invites: Invites, isConnected: Boolean, onDismiss: () -> Unit) {
     var email by rememberSaveable { mutableStateOf("") }
     var sentTo by rememberSaveable { mutableStateOf<String?>(null) }
-    val action = remember { ActionState() }
-    val scope = rememberCoroutineScope()
+    val action = invites.action
     val trimmed = email.trim()
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState =
-            rememberBottomSheetState(
-                SheetValue.Hidden,
-                setOf(SheetValue.Hidden, SheetValue.Expanded),
-            ),
+        sheetState = rememberHoldingSheetState { action.running },
     ) {
         Column(
             Modifier.fillMaxWidth().padding(horizontal = 20.dp).navigationBarsPadding(),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onDismiss) { Text("Done") }
+                TextButton(onClick = onDismiss, enabled = !action.running) { Text("Done") }
                 Text(
                     "Share Projects",
                     style = MaterialTheme.typography.titleMedium,
@@ -66,11 +68,9 @@ fun InviteSheet(client: NeramClient, isConnected: Boolean, onDismiss: () -> Unit
                 Button(
                     enabled = trimmed.isNotEmpty() && !action.running && isConnected,
                     onClick = {
-                        scope.launch {
-                            if (action.run { client.run(Calls.invite(trimmed)) }) {
-                                sentTo = trimmed
-                                email = ""
-                            }
+                        invites.send(trimmed) {
+                            sentTo = trimmed
+                            email = ""
                         }
                     },
                 ) {

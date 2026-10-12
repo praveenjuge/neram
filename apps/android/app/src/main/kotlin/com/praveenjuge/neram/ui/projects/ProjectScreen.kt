@@ -36,7 +36,7 @@ class ProjectViewModel
 constructor(@Assisted projectId: String, client: NeramClient) : ViewModel() {
     val project = LiveQuery(viewModelScope) { client.observe(Queries.project(projectId)) }
     val tasks = LiveQuery(viewModelScope) { client.observe(Queries.tasks(projectId)) }
-    val actions = ProjectActions(client)
+    val actions = ProjectActions(client, viewModelScope)
 
     @AssistedFactory
     interface Factory {
