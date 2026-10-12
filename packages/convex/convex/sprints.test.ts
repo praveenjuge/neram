@@ -242,3 +242,163 @@ test("Sprint planning preserves tenant isolation", async () => {
   ).rejects.toThrow()
 })
 
+test("moving Backlog work to Todo during a Sprint keeps it in Backlog", async () => {
+  const { alice } = await setup()
+  await alice.mutation(api.sprints.start, {})
+  const projectId = await alice.mutation(api.projects.create, {
+    name: "Product",
+  })
+  const taskId = await alice.mutation(api.tasks.create, {
+    projectId,
+    title: "Started last Sprint",
+  })
+  // Starting work joins the Sprint; ending it returns the task to Backlog,
+  // still In Progress.
+  await alice.mutation(api.tasks.move, { taskId, status: "inProgress" })
+  await finishClose(
+    alice,
+    await alice.mutation(api.sprints.end, { confirm: true })
+  )
+  await alice.mutation(api.sprints.start, {})
+
+  await alice.mutation(api.tasks.move, { taskId, status: "todo" })
+
+  expect((await alice.query(api.sprints.current, {}))?.tasks).toEqual([])
+  const backlogIds = (await alice.query(api.sprints.backlog, {})).map(
+    (task) => task._id
+  )
+  expect(backlogIds).toContain(taskId)
+})
+
+test("a task placed in the Sprint without an entry can still leave it", async () => {
+  const { alice } = await setup()
+  const sprintId = await alice.mutation(api.sprints.start, {})
+  const projectId = await alice.mutation(api.projects.create, {
+    name: "Product",
+  })
+  const taskId = await alice.mutation(api.tasks.create, {
+    projectId,
+    title: "Stranded",
+  })
+  // The state older code could leave behind: placed, but never entered.
+  await alice.run(async (ctx) => {
+    await ctx.db.patch(taskId, { currentSprintId: sprintId })
+  })
+
+  await alice.mutation(api.sprints.remove, { taskIds: [taskId] })
+
+  expect((await alice.query(api.sprints.current, {}))?.tasks).toEqual([])
+  expect(
+    (await alice.query(api.sprints.backlog, {})).map((task) => task._id)
+  ).toContain(taskId)
+})
+
+test("ending a Sprint returns tasks placed without an entry to Backlog", async () => {
+  const { alice } = await setup()
+  const sprintId = await alice.mutation(api.sprints.start, {})
+  const projectId = await alice.mutation(api.projects.create, {
+    name: "Product",
+  })
+  const taskId = await alice.mutation(api.tasks.create, {
+    projectId,
+    title: "Stranded",
+  })
+  await alice.run(async (ctx) => {
+    await ctx.db.patch(taskId, { currentSprintId: sprintId })
+  })
+
+  await finishClose(
+    alice,
+    await alice.mutation(api.sprints.end, { confirm: true })
+  )
+
+  expect(
+    (await alice.query(api.sprints.backlog, {})).map((task) => task._id)
+  ).toContain(taskId)
+  // It was never committed work, so it doesn't count toward the closed Sprint.
+  const history = await alice.query(api.sprints.history, page)
+  expect(history.page[0]).toMatchObject({ baselineCount: 0 })
+})
+
+test("planning re-links a task whose Sprint entry outlived its placement", async () => {
+  const { alice } = await setup()
+  await alice.mutation(api.sprints.start, {})
+  const projectId = await alice.mutation(api.projects.create, {
+    name: "Product",
+  })
+  const taskId = await alice.mutation(api.tasks.create, {
+    projectId,
+    title: "Unlinked",
+  })
+  await alice.mutation(api.sprints.plan, { taskIds: [taskId] })
+  await alice.run(async (ctx) => {
+    await ctx.db.patch(taskId, { currentSprintId: undefined })
+  })
+
+  await alice.mutation(api.sprints.plan, { taskIds: [taskId] })
+
+  expect(
+    (await alice.query(api.sprints.current, {}))?.tasks.map((task) => task._id)
+  ).toEqual([taskId])
+})
+
+test("ending a Sprint releases more stranded tasks than fit in one batch", async () => {
+  const { alice } = await setup()
+  const sprintId = await alice.mutation(api.sprints.start, {})
+  const projectId = await alice.mutation(api.projects.create, {
+    name: "Product",
+  })
+  // One more than a batch, so finalize has to run twice before it completes.
+  const taskIds: Array<Id<"tasks">> = []
+  for (let index = 0; index < 101; index += 1) {
+    taskIds.push(
+      await alice.mutation(api.tasks.create, {
+        projectId,
+        title: `Stranded ${index}`,
+      })
+    )
+  }
+  await alice.run(async (ctx) => {
+    for (const taskId of taskIds) {
+      await ctx.db.patch(taskId, { currentSprintId: sprintId })
+    }
+  })
+
+  await finishClose(
+    alice,
+    await alice.mutation(api.sprints.end, { confirm: true })
+  )
+
+  const stillPlaced = await alice.run(async (ctx) => {
+    let count = 0
+    for (const taskId of taskIds) {
+      if ((await ctx.db.get(taskId))?.currentSprintId !== undefined) count += 1
+    }
+    return count
+  })
+  expect(stillPlaced).toBe(0)
+  const history = await alice.query(api.sprints.history, page)
+  expect(history.page[0]).toMatchObject({ baselineCount: 0, completedCount: 0 })
+})
+
+test("re-linking an entered task waits while a Sprint closes", async () => {
+  const { alice } = await setup()
+  await alice.mutation(api.sprints.start, {})
+  const projectId = await alice.mutation(api.projects.create, {
+    name: "Product",
+  })
+  const taskId = await alice.mutation(api.tasks.create, {
+    projectId,
+    title: "Unlinked",
+  })
+  await alice.mutation(api.sprints.plan, { taskIds: [taskId] })
+  await alice.run(async (ctx) => {
+    await ctx.db.patch(taskId, { currentSprintId: undefined })
+  })
+  // Start closing without letting the close job run.
+  await alice.mutation(api.sprints.end, { confirm: true })
+
+  await expect(
+    alice.mutation(api.sprints.plan, { taskIds: [taskId] })
+  ).rejects.toThrow(/paused while it closes/)
+})

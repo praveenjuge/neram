@@ -115,7 +115,17 @@ export async function addTaskToSprint(
   ) {
     throw new ConvexError({ code: "NOT_FOUND", message: "Sprint not found." })
   }
-  if (await activeEntry(ctx, sprint._id, args.task._id)) return sprint
+  if (await activeEntry(ctx, sprint._id, args.task._id)) {
+    // Already entered: make sure the task points back at the Sprint too.
+    if (args.task.currentSprintId !== sprint._id) {
+      await assertWritable(ctx, sprint.organizationId)
+      await ctx.db.patch(args.task._id, {
+        currentSprintId: sprint._id,
+        updatedAt: args.now ?? Date.now(),
+      })
+    }
+    return sprint
+  }
   await assertWritable(ctx, sprint.organizationId)
   await assertCapacity(ctx, sprint._id)
   const now = args.now ?? Date.now()
@@ -150,19 +160,25 @@ export async function removeTaskFromSprint(
   }
 ) {
   const entry = await activeEntry(ctx, args.sprintId, args.task._id)
-  if (!entry) return
+  const placed = args.task.currentSprintId === args.sprintId
+  if (!entry && !placed) return
   await assertWritable(ctx, args.task.organizationId)
   const now = args.now ?? Date.now()
-  await ctx.db.patch(entry._id, {
-    removedAt: now,
-    removedByUserId: args.actor.userId,
-    removedByName: args.actor.name,
-    removalReason: args.reason,
-  })
-  await ctx.db.patch(args.task._id, {
-    currentSprintId: undefined,
-    updatedAt: now,
-  })
+  if (entry) {
+    await ctx.db.patch(entry._id, {
+      removedAt: now,
+      removedByUserId: args.actor.userId,
+      removedByName: args.actor.name,
+      removalReason: args.reason,
+    })
+  }
+  // Cleared even without an entry, so a task placed by older code can leave.
+  if (placed) {
+    await ctx.db.patch(args.task._id, {
+      currentSprintId: undefined,
+      updatedAt: now,
+    })
+  }
 }
 
 async function latestCreditedSprint(ctx: MutationCtx, task: Doc<"tasks">) {
@@ -219,10 +235,10 @@ export async function applyStatusSprintRules(
     return { completedAt: undefined, currentSprintId: sprintId }
   }
 
-  if (
+  const joins =
     (nextStatus === "inProgress" || nextStatus === "done") &&
     !task.currentSprintId
-  ) {
+  if (joins) {
     await addTaskToSprint(ctx, {
       task,
       project,
@@ -238,7 +254,10 @@ export async function applyStatusSprintRules(
     if (entry) await ctx.db.patch(entry._id, { creditedCompletionAt: now })
     return { completedAt: now, currentSprintId: sprintId }
   }
-  return task.currentSprintId ? {} : { currentSprintId: sprintId }
+  // Only starting or finishing work joins the Sprint. Moving Backlog work to
+  // Todo leaves it in Backlog; placing it here would skip its entry and strand
+  // it in the Sprint.
+  return joins ? { currentSprintId: sprintId } : {}
 }
 
 export async function markTaskEntriesRemoved(
