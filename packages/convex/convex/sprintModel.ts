@@ -118,6 +118,7 @@ export async function addTaskToSprint(
   if (await activeEntry(ctx, sprint._id, args.task._id)) {
     // Already entered: make sure the task points back at the Sprint too.
     if (args.task.currentSprintId !== sprint._id) {
+      await assertWritable(ctx, sprint.organizationId)
       await ctx.db.patch(args.task._id, {
         currentSprintId: sprint._id,
         updatedAt: args.now ?? Date.now(),

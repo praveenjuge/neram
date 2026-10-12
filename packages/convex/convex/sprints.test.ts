@@ -341,3 +341,64 @@ test("planning re-links a task whose Sprint entry outlived its placement", async
     (await alice.query(api.sprints.current, {}))?.tasks.map((task) => task._id)
   ).toEqual([taskId])
 })
+
+test("ending a Sprint releases more stranded tasks than fit in one batch", async () => {
+  const { alice } = await setup()
+  const sprintId = await alice.mutation(api.sprints.start, {})
+  const projectId = await alice.mutation(api.projects.create, {
+    name: "Product",
+  })
+  // One more than a batch, so finalize has to run twice before it completes.
+  const taskIds: Array<Id<"tasks">> = []
+  for (let index = 0; index < 101; index += 1) {
+    taskIds.push(
+      await alice.mutation(api.tasks.create, {
+        projectId,
+        title: `Stranded ${index}`,
+      })
+    )
+  }
+  await alice.run(async (ctx) => {
+    for (const taskId of taskIds) {
+      await ctx.db.patch(taskId, { currentSprintId: sprintId })
+    }
+  })
+
+  await finishClose(
+    alice,
+    await alice.mutation(api.sprints.end, { confirm: true })
+  )
+
+  const stillPlaced = await alice.run(async (ctx) => {
+    let count = 0
+    for (const taskId of taskIds) {
+      if ((await ctx.db.get(taskId))?.currentSprintId !== undefined) count += 1
+    }
+    return count
+  })
+  expect(stillPlaced).toBe(0)
+  const history = await alice.query(api.sprints.history, page)
+  expect(history.page[0]).toMatchObject({ baselineCount: 0, completedCount: 0 })
+})
+
+test("re-linking an entered task waits while a Sprint closes", async () => {
+  const { alice } = await setup()
+  await alice.mutation(api.sprints.start, {})
+  const projectId = await alice.mutation(api.projects.create, {
+    name: "Product",
+  })
+  const taskId = await alice.mutation(api.tasks.create, {
+    projectId,
+    title: "Unlinked",
+  })
+  await alice.mutation(api.sprints.plan, { taskIds: [taskId] })
+  await alice.run(async (ctx) => {
+    await ctx.db.patch(taskId, { currentSprintId: undefined })
+  })
+  // Start closing without letting the close job run.
+  await alice.mutation(api.sprints.end, { confirm: true })
+
+  await expect(
+    alice.mutation(api.sprints.plan, { taskIds: [taskId] })
+  ).rejects.toThrow(/paused while it closes/)
+})
