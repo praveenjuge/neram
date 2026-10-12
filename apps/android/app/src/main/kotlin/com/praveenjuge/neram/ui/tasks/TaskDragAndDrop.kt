@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draganddrop.DragAndDropEvent
 import androidx.compose.ui.draganddrop.DragAndDropTarget
 import androidx.compose.ui.draganddrop.toAndroidDragEvent
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.boundsInRoot
@@ -131,7 +132,10 @@ fun Modifier.taskDropTarget(
         object : DragAndDropTarget {
             override fun onEntered(event: DragAndDropEvent) = hover(event.taskId)
 
-            override fun onExited(event: DragAndDropEvent) = hover(null)
+            override fun onExited(event: DragAndDropEvent) {
+                hover(null)
+                scroller?.leave(event)
+            }
 
             override fun onMoved(event: DragAndDropEvent) {
                 scroller?.track(event)
@@ -173,6 +177,15 @@ class DragScroller internal constructor(private val edge: Float) {
                 y > area.bottom - edge -> 1f
                 else -> 0f
             }
+    }
+
+    /**
+     * Stops scrolling once the drag leaves this list. Each list has its own scroller, so the one
+     * the drag moves into can't stop this one. Moving between rows inside the list stays put.
+     */
+    internal fun leave(event: DragAndDropEvent) {
+        val drag = event.toAndroidDragEvent()
+        if (!area.contains(Offset(drag.x, drag.y))) stop()
     }
 
     internal fun stop() {

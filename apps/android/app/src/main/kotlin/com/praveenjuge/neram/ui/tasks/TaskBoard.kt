@@ -94,6 +94,8 @@ private class BoardModel(
 
     /** Moves the dragged task to [index] of [status]'s column. */
     fun drop(id: DocumentId, status: TaskStatus, index: Int) {
+        // Moves need a connection; a drag can outlast one.
+        if (!enabled) return
         val task = tasks.firstOrNull { it.id == id } ?: return
         val column = column(status)
         val from = column.indexOfFirst { it.id == id }
@@ -111,10 +113,18 @@ private class BoardModel(
         return if (from in 0 until index) Landing.After else Landing.Before
     }
 
-    fun moveTo(task: TaskItem, status: TaskStatus) = moves.move(task, status)
+    fun moveTo(task: TaskItem, status: TaskStatus) {
+        if (enabled) moves.move(task, status)
+    }
 
-    /** TalkBack actions: move to each other status, and up or down within the column. */
-    fun accessibilityActions(task: TaskItem, index: Int, count: Int) = buildList {
+    /**
+     * TalkBack actions: move to each other status, and up or down within the column. None while
+     * offline, like the status button and dragging.
+     */
+    fun accessibilityActions(task: TaskItem, index: Int, count: Int) =
+        if (!enabled) emptyList() else movesFor(task, index, count)
+
+    private fun movesFor(task: TaskItem, index: Int, count: Int) = buildList {
         statuses
             .filter { it != task.status }
             .forEach {

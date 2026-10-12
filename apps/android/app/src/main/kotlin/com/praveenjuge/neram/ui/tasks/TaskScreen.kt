@@ -1,5 +1,6 @@
 package com.praveenjuge.neram.ui.tasks
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -69,7 +70,9 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private const val TITLE_LIMIT = 120
 private const val DESCRIPTION_LIMIT = 2000
@@ -120,9 +123,23 @@ constructor(@Assisted private val taskId: String, private val client: NeramClien
 
     fun keepMine(field: EditableField) = field.keepMine(viewModelScope)
 
-    /** Runs a one-off change; failures show in [action]. Calls [then] with whether it worked. */
+    /**
+     * Runs a one-off change; failures show in [action]. Calls [then] with whether it worked. The
+     * request finishes even if the screen closes meanwhile.
+     */
     fun run(call: Call<*>, then: (Boolean) -> Unit = {}) {
-        viewModelScope.launch { then(action.run { client.run(call) }) }
+        viewModelScope.launch {
+            then(action.run { withContext(NonCancellable) { client.run(call) } })
+        }
+    }
+
+    val subtaskEdits = SubtaskEdits(taskId, ::run)
+
+    /** Saves every unfinished edit, for leaving the screen while a field still has focus. */
+    fun commitAll() {
+        commit(title)
+        commit(description)
+        (subtasks.state.value as? Live.Loaded)?.value?.let(subtaskEdits::commitAll)
     }
 
     @AssistedFactory
@@ -146,10 +163,16 @@ fun TaskScreen(
     var confirmingDelete by remember { mutableStateOf(false) }
     val current = (live as? Live.Loaded)?.value
     val enabled = LocalIsConnected.current
+    // Back would otherwise pop this screen, and its view model, before a focused field saves.
+    val leave = {
+        viewModel.commitAll()
+        onBack()
+    }
+    BackHandler(onBack = leave)
 
     DetailScreen(
         "Task",
-        onBack,
+        leave,
         actions = {
             if (current != null) {
                 Box {
@@ -274,7 +297,11 @@ private fun TaskForm(
                     )
                     StatusPicker(
                         selected = task.status,
-                        onSelect = { viewModel.moves.move(task, it) },
+                        onSelect = {
+                            // Moving to the same status would still send the task to the end
+                            // of its column.
+                            if (it != task.status) viewModel.moves.move(task, it)
+                        },
                         enabled = enabled,
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -318,7 +345,7 @@ private fun TaskForm(
                     )
                 }
             }
-            subtasksSection(task.id, subtasks, viewModel, enabled)
+            subtasksSection(subtasks, viewModel, enabled)
         }
     }
 }

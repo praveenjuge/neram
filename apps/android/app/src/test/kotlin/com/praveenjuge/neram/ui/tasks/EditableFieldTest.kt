@@ -98,4 +98,33 @@ class EditableFieldTest {
         testScheduler.advanceUntilIdle()
         assertEquals(listOf("One" to "", "Two" to "One"), sent)
     }
+
+    @Test
+    fun useLatestDropsAnEditTypedDuringTheConflictingSave() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val racing =
+            EditableField(action, allowsEmpty = true, normalize = { it }) { value, expected ->
+                sent += value to expected
+                gate.await()
+                throw NeramError.Server(
+                    ServerError("EDIT_CONFLICT", "Changed.", latestValue = "Theirs")
+                )
+            }
+        racing.change("Mine", live = "Old")
+        racing.commit(this)
+        testScheduler.advanceUntilIdle()
+        // Keep typing while the save is still in flight, then it conflicts.
+        racing.change("Mine, more", live = "Old")
+        gate.complete(Unit)
+        testScheduler.advanceUntilIdle()
+        assertEquals("Mine, more", racing.text(live = "Theirs"))
+
+        racing.useLatest()
+        assertNull(racing.conflict)
+        assertEquals("Theirs", racing.text(live = "Theirs"))
+        // Leaving the field afterwards sends nothing more.
+        racing.commit(this)
+        testScheduler.advanceUntilIdle()
+        assertEquals(listOf("Mine" to "Old"), sent)
+    }
 }

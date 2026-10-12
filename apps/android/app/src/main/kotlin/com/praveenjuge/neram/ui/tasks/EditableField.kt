@@ -7,7 +7,9 @@ import androidx.compose.runtime.setValue
 import com.praveenjuge.neram.data.NeramError
 import com.praveenjuge.neram.ui.common.ActionState
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * A task text field that saves when editing finishes, like the web's task dialog. Each save sends
@@ -67,8 +69,12 @@ class EditableField(
         if (live == value || saving == 0) saved = null
     }
 
+    /** Drops our edit, including anything typed since, and shows the server's value. */
     fun useLatest() {
         conflict = null
+        base = null
+        draft = ""
+        saved = null
     }
 
     fun keepMine(scope: CoroutineScope) {
@@ -82,7 +88,8 @@ class EditableField(
         saving += 1
         var keepsDraft = false
         try {
-            save(value, expected)
+            // Finishes even if the screen closes meanwhile, so leaving never drops an edit.
+            withContext(NonCancellable) { save(value, expected) }
             saved = value
             conflict = null
         } catch (error: NeramError) {

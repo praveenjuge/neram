@@ -25,7 +25,13 @@ import kotlinx.coroutines.launch
  */
 class TaskMoves(private val client: NeramClient, private val scope: CoroutineScope) {
     /** Compared by identity, so a newer move of the same task is never cleared by an older one. */
-    private class Pending(val status: TaskStatus, val position: Double?)
+    private class Pending(val status: TaskStatus, val position: Double?) {
+        /**
+         * Where to show the task meanwhile. Without a position the server appends at the current
+         * time in milliseconds (`tasks:move`), so show it there too.
+         */
+        val shownPosition = position ?: System.currentTimeMillis().toDouble()
+    }
 
     /** A Done move the server refused because subtasks are still open. */
     data class IncompleteMove(val task: TaskItem, val position: Double?, val unfinished: Int)
@@ -37,7 +43,7 @@ class TaskMoves(private val client: NeramClient, private val scope: CoroutineSco
     /** [tasks] with in-flight moves applied. */
     fun apply(tasks: List<TaskItem>): List<TaskItem> = tasks.map { task ->
         val move = pending[task.id] ?: return@map task
-        task.copy(status = move.status, position = move.position ?: task.position)
+        task.copy(status = move.status, position = move.shownPosition)
     }
 
     /** Drops moves the live query now reflects. Call when the tasks change. */
