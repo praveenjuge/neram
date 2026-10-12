@@ -123,12 +123,40 @@ async function closeTasks(ctx: MutationCtx, job: Doc<"sprintRolloverJobs">) {
   })
 }
 
+/**
+ * Returns tasks still placed in the closing Sprint to Backlog. Entries cover
+ * committed work; this catches any placed without one (by older code), which
+ * would otherwise point at a closed Sprint and vanish from both Focus and
+ * Backlog. Returns whether all of them are done.
+ */
+async function releaseStrandedTasks(
+  ctx: MutationCtx,
+  job: Doc<"sprintRolloverJobs">,
+  now: number
+) {
+  const stranded = await ctx.db
+    .query("tasks")
+    .withIndex("by_organization_and_current_sprint", (q) =>
+      q
+        .eq("organizationId", job.organizationId)
+        .eq("currentSprintId", job.closingSprintId)
+    )
+    .take(BATCH_SIZE)
+  for (const task of stranded) {
+    await ctx.db.patch(task._id, { currentSprintId: undefined, updatedAt: now })
+  }
+  return stranded.length < BATCH_SIZE
+}
+
 async function finalize(ctx: MutationCtx, job: Doc<"sprintRolloverJobs">) {
   const settings = await getSettings(ctx, job.organizationId)
   const sprint = await ctx.db.get(job.closingSprintId)
   if (!settings || !sprint)
     throw new Error("Sprint close references are missing")
   const now = Date.now()
+  // A full batch may have more behind it; the job stays running and `process`
+  // calls finalize again.
+  if (!(await releaseStrandedTasks(ctx, job, now))) return
   if (sprint.state !== "closed") {
     await ctx.db.patch(sprint._id, {
       state: "closed",
