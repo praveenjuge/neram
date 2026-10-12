@@ -5,6 +5,7 @@
   "scripts": {
     "build": "./gradlew :app:assembleDebug",
     "format": "./gradlew ktfmtFormat",
+    "internal": "bundle exec fastlane internal",
     "lint": "./gradlew ktfmtCheck :app:lintDebug",
     "test": "./gradlew :app:testDebugUnitTest"
   }

@@ -51,5 +51,10 @@ apps/android/build/
 apps/android/app/build/
 apps/android/local.properties
 apps/android/.idea/
+apps/android/fastlane/report.xml
+apps/android/fastlane/README.md
+apps/android/vendor/
 *.apk
 *.aab
+*.jks
+*.keystore

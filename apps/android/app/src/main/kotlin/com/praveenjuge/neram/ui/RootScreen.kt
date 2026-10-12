@@ -6,11 +6,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -29,6 +31,7 @@ import com.praveenjuge.neram.ui.common.WorkspaceScope
 fun RootScreen(viewModel: RootViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val isConnected by viewModel.isConnected.collectAsStateWithLifecycle()
+    val problem by viewModel.links.problem.collectAsStateWithLifecycle()
     Surface(Modifier.fillMaxSize()) {
         when (val current = state) {
             RootViewModel.UiState.Loading -> Progress()
@@ -44,10 +47,22 @@ fun RootScreen(viewModel: RootViewModel = hiltViewModel()) {
             is RootViewModel.UiState.Failed ->
                 WorkspaceUnavailable(current.message, viewModel::retry)
             // Each user and workspace, and the switch from saved to live data, gets fresh screens
-            // and view
-            // models, so every query subscribes again with the current workspace's auth.
-            is RootViewModel.UiState.Ready -> WorkspaceScope(current) { MainScaffold(isConnected) }
+            // and view models, so every query subscribes again with the current workspace's auth.
+            is RootViewModel.UiState.Ready ->
+                WorkspaceScope(current) {
+                    MainScaffold(isConnected, viewModel.links, current.workspaceId)
+                }
         }
+    }
+    problem?.let { message ->
+        AlertDialog(
+            onDismissRequest = viewModel.links::dismissProblem,
+            title = { Text("Couldn't open that link") },
+            text = { Text(message) },
+            confirmButton = {
+                TextButton(onClick = viewModel.links::dismissProblem) { Text("OK") }
+            },
+        )
     }
 }
 

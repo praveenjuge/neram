@@ -3,6 +3,7 @@ package com.praveenjuge.neram.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.clerk.api.Clerk
+import com.praveenjuge.neram.CrashReporting
 import com.praveenjuge.neram.data.AppSession
 import com.praveenjuge.neram.data.NeramClient
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -23,7 +24,9 @@ import kotlinx.coroutines.launch
  * be opened online yet).
  */
 @HiltViewModel
-class RootViewModel @Inject constructor(private val session: AppSession, client: NeramClient) :
+class RootViewModel
+@Inject
+constructor(private val session: AppSession, client: NeramClient, val links: DeepLinkRouter) :
     ViewModel() {
     sealed interface UiState {
         data object Loading : UiState
@@ -59,7 +62,22 @@ class RootViewModel @Inject constructor(private val session: AppSession, client:
         // A new identity cancels an opening still in progress (it may be waiting for the network).
         viewModelScope.launch {
             combine(identity.filter { it.loaded }, attempt) { identity, _ -> identity }
-                .collectLatest { session.update(it.userId, it.workspaceId) }
+                .collectLatest {
+                    CrashReporting.setUser(it.userId)
+                    session.update(it.userId, it.workspaceId)
+                }
+        }
+        // A link to another workspace switches to it once signed in; a newer link or identity
+        // cancels a switch in progress.
+        viewModelScope.launch {
+            combine(links.pending, identity.filter { it.loaded }) { link, identity ->
+                    link to identity
+                }
+                .collectLatest { (link, identity) ->
+                    if (link != null && identity.userId != null) {
+                        links.switchWorkspaceIfNeeded(link, identity.workspaceId)
+                    }
+                }
         }
     }
 
