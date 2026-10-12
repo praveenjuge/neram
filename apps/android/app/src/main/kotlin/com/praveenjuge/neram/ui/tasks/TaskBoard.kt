@@ -38,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
@@ -54,11 +55,14 @@ private enum class Landing {
     After,
 }
 
+/** An extra command on a board's task, shown in its status menu and to TalkBack. */
+data class RowAction(val label: String, val icon: ImageVector, val onClick: () -> Unit)
+
 /**
  * A task board. Narrow layouts show one status at a time; wider ones show kanban columns.
- * Long-press a task to drag it to another place, column, or status button; on phones, swipe right
- * to move it forward a status and left to move it back. Positions are per project, so boards that
- * mix projects (My Tasks, Focus) order each task among its own project's tasks, as on the web.
+ * Long-press a task to drag it to another place, column, or status button, or tap its status icon
+ * for a menu of moves plus any [rowActions]. Positions are per project, so boards that mix projects
+ * (My Tasks, Focus) order each task among its own project's tasks, as on the web.
  */
 @Composable
 fun TaskBoard(
@@ -69,10 +73,21 @@ fun TaskBoard(
     statuses: List<TaskStatus> = TaskStatus.entries,
     showsProject: Boolean = false,
     emptyText: String = "Nothing here yet.",
+    rowActions: (TaskItem) -> List<RowAction> = { emptyList() },
+    filter: (List<TaskItem>) -> List<TaskItem> = { it },
     header: @Composable () -> Unit = {},
 ) {
+    // Reconcile against the server's tasks; filters see them with pending moves applied, so a task
+    // moved to Done leaves a filter that hides done work right away.
     LaunchedEffect(tasks) { moves.reconcile(tasks) }
-    val board = BoardModel(moves.apply(tasks), moves, statuses, LocalIsConnected.current)
+    val board =
+        BoardModel(
+            filter(moves.apply(tasks)),
+            moves,
+            statuses,
+            LocalIsConnected.current,
+            rowActions,
+        )
     BoxWithConstraints(Modifier.fillMaxSize()) {
         if (maxWidth < 600.dp) {
             CompactBoard(board, onOpenTask, padding, showsProject, emptyText, header)
@@ -89,6 +104,7 @@ private class BoardModel(
     val moves: TaskMoves,
     val statuses: List<TaskStatus>,
     val enabled: Boolean,
+    val rowActions: (TaskItem) -> List<RowAction>,
 ) {
     fun column(status: TaskStatus) = TaskOrdering.column(tasks, status)
 
@@ -122,7 +138,15 @@ private class BoardModel(
      * offline, like the status button and dragging.
      */
     fun accessibilityActions(task: TaskItem, index: Int, count: Int) =
-        if (!enabled) emptyList() else movesFor(task, index, count)
+        if (!enabled) emptyList()
+        else
+            movesFor(task, index, count) +
+                rowActions(task).map { action ->
+                    CustomAccessibilityAction(action.label) {
+                        action.onClick()
+                        true
+                    }
+                }
 
     private fun movesFor(task: TaskItem, index: Int, count: Int) = buildList {
         statuses
@@ -246,6 +270,18 @@ private fun StatusMenu(board: BoardModel, task: TaskItem) {
                         },
                     )
                 }
+            val actions = board.rowActions(task)
+            if (actions.isNotEmpty()) HorizontalDivider()
+            actions.forEach { action ->
+                DropdownMenuItem(
+                    text = { Text(action.label) },
+                    leadingIcon = { Icon(action.icon, contentDescription = null) },
+                    onClick = {
+                        open = false
+                        action.onClick()
+                    },
+                )
+            }
         }
     }
 }

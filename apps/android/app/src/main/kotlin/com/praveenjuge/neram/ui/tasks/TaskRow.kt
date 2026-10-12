@@ -144,7 +144,6 @@ private fun RowScope.MetaLabel(icon: ImageVector, text: String, tint: Color = Co
  * Connected toggle buttons for picking a status, one per entry in [statuses]. [label] can add
  * counts; [itemModifier] lets a board make each button a drop target.
  */
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun StatusPicker(
     selected: TaskStatus,
@@ -154,25 +153,38 @@ fun StatusPicker(
     enabled: Boolean = true,
     label: (TaskStatus) -> String = { it.label },
     itemModifier: @Composable (TaskStatus) -> Modifier = { Modifier },
+) = ChoiceButtons(statuses, selected, onSelect, modifier, enabled, label, itemModifier)
+
+/** Connected toggle buttons for a single choice, the Expressive take on a segmented control. */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+fun <T> ChoiceButtons(
+    options: List<T>,
+    selected: T,
+    onSelect: (T) -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    label: (T) -> String,
+    itemModifier: @Composable (T) -> Modifier = { Modifier },
 ) {
     Row(
         modifier,
         horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
     ) {
-        statuses.forEachIndexed { index, status ->
+        options.forEachIndexed { index, option ->
             ToggleButton(
-                checked = status == selected,
-                onCheckedChange = { onSelect(status) },
+                checked = option == selected,
+                onCheckedChange = { onSelect(option) },
                 enabled = enabled,
-                modifier = itemModifier(status).weight(1f).semantics { role = Role.RadioButton },
+                modifier = itemModifier(option).weight(1f).semantics { role = Role.RadioButton },
                 shapes =
                     when (index) {
                         0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
-                        statuses.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
+                        options.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
                         else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
                     },
             ) {
-                Text(label(status), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(label(option), maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }
